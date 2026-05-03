@@ -6,7 +6,28 @@ import {
   createRepairQuote,
   getRepairQuotesByFriend,
 } from '@line-crm/db';
+import type { RepairQuote } from '@line-crm/db';
 import type { Env } from '../index.js';
+
+function serializeQuote(q: RepairQuote) {
+  return {
+    id: q.id,
+    friendId: q.friend_id,
+    productId: q.product_id,
+    modelId: q.model_id,
+    symptomId: q.symptom_id,
+    modelName: q.model_name,
+    year: q.year,
+    priceFrom: q.price_from,
+    priceTo: q.price_to,
+    deliveryDaysFrom: q.delivery_days_from,
+    deliveryDaysTo: q.delivery_days_to,
+    requestType: q.request_type,
+    status: q.status,
+    createdAt: q.created_at,
+    updatedAt: q.updated_at,
+  };
+}
 
 const repairRoutes = new Hono<Env>();
 
@@ -70,7 +91,7 @@ repairRoutes.get(
         },
       });
     } catch (err) {
-      console.error('GET price error:', err);
+      console.error('GET /api/repair/products/:productId/symptoms/:symptomId/price error:', err);
       return c.json({ success: false, error: 'Internal server error' }, 500);
     }
   },
@@ -78,20 +99,18 @@ repairRoutes.get(
 
 // POST /api/repair/quotes
 repairRoutes.post('/api/repair/quotes', async (c) => {
+  let body: { friendId?: string; productId?: string; symptomId?: string; modelName?: string; year?: number; requestType?: 'mail' | 'store' | 'consult' };
   try {
-    const body = await c.req.json<{
-      friendId: string;
-      productId?: string;
-      symptomId?: string;
-      modelName?: string;
-      year?: number;
-      requestType?: 'mail' | 'store' | 'consult';
-    }>();
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error: 'Invalid JSON body' }, 400);
+  }
 
-    if (!body.friendId) {
-      return c.json({ success: false, error: 'friendId is required' }, 400);
-    }
+  if (!body.friendId) {
+    return c.json({ success: false, error: 'friendId is required' }, 400);
+  }
 
+  try {
     const quote = await createRepairQuote(c.env.DB, {
       friendId: body.friendId,
       productId: body.productId ?? null,
@@ -100,8 +119,7 @@ repairRoutes.post('/api/repair/quotes', async (c) => {
       year: body.year ?? null,
       requestType: body.requestType ?? null,
     });
-
-    return c.json({ success: true, data: quote }, 201);
+    return c.json({ success: true, data: serializeQuote(quote) }, 201);
   } catch (err) {
     console.error('POST /api/repair/quotes error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
@@ -113,7 +131,7 @@ repairRoutes.get('/api/repair/quotes/:friendId', async (c) => {
   try {
     const friendId = c.req.param('friendId');
     const quotes = await getRepairQuotesByFriend(c.env.DB, friendId);
-    return c.json({ success: true, data: quotes });
+    return c.json({ success: true, data: quotes.map(serializeQuote) });
   } catch (err) {
     console.error('GET /api/repair/quotes/:friendId error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
