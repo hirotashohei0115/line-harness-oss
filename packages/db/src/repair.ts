@@ -145,7 +145,7 @@ export async function createRepairQuote(
       now,
     )
     .run();
-  return db.prepare(`SELECT * FROM repair_quotes WHERE id = ?`).bind(id).first<RepairQuote>() as Promise<RepairQuote>;
+  return (await db.prepare(`SELECT * FROM repair_quotes WHERE id = ?`).bind(id).first<RepairQuote>())!;
 }
 
 export async function updateRepairQuoteRequestType(
