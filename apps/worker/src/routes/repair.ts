@@ -111,6 +111,11 @@ repairRoutes.post('/api/repair/quotes', async (c) => {
   }
 
   try {
+    const price =
+      body.productId && body.symptomId
+        ? await getRepairPrice(c.env.DB, body.productId, body.symptomId)
+        : null;
+
     const quote = await createRepairQuote(c.env.DB, {
       friendId: body.friendId,
       productId: body.productId ?? null,
@@ -118,6 +123,10 @@ repairRoutes.post('/api/repair/quotes', async (c) => {
       modelName: body.modelName ?? null,
       year: body.year ?? null,
       requestType: body.requestType ?? null,
+      priceFrom: price?.price_from ?? null,
+      priceTo: price?.price_to ?? null,
+      deliveryDaysFrom: price?.delivery_days_from ?? null,
+      deliveryDaysTo: price?.delivery_days_to ?? null,
     });
     return c.json({ success: true, data: serializeQuote(quote) }, 201);
   } catch (err) {
