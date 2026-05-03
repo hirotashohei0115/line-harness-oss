@@ -564,7 +564,8 @@ CREATE TABLE IF NOT EXISTS repair_products (
   name       TEXT NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_active  INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
 );
 
 CREATE TABLE IF NOT EXISTS repair_models (
@@ -585,7 +586,8 @@ CREATE TABLE IF NOT EXISTS repair_symptoms (
   name       TEXT NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_active  INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_repair_symptoms_product ON repair_symptoms (product_id);
@@ -603,11 +605,12 @@ CREATE TABLE IF NOT EXISTS repair_prices (
   updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_repair_prices_product_symptom ON repair_prices (product_id, symptom_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repair_prices_product_symptom ON repair_prices (product_id, symptom_id);
 
 CREATE TABLE IF NOT EXISTS repair_quotes (
   id                 TEXT PRIMARY KEY,
   friend_id          TEXT NOT NULL REFERENCES friends (id) ON DELETE CASCADE,
+  -- NOTE: repair_products cascade-deletes repair_models/repair_symptoms first; SET NULL fires correctly.
   product_id         TEXT REFERENCES repair_products (id) ON DELETE SET NULL,
   model_id           TEXT REFERENCES repair_models (id) ON DELETE SET NULL,
   symptom_id         TEXT REFERENCES repair_symptoms (id) ON DELETE SET NULL,
@@ -623,7 +626,9 @@ CREATE TABLE IF NOT EXISTS repair_quotes (
   updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_repair_quotes_friend ON repair_quotes (friend_id);
+CREATE INDEX IF NOT EXISTS idx_repair_quotes_friend   ON repair_quotes (friend_id);
+CREATE INDEX IF NOT EXISTS idx_repair_quotes_product  ON repair_quotes (product_id);
+CREATE INDEX IF NOT EXISTS idx_repair_quotes_status   ON repair_quotes (status);
 
 CREATE TABLE IF NOT EXISTS friend_attributes (
   id         TEXT PRIMARY KEY,
