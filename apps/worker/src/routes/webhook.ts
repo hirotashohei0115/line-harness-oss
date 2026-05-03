@@ -13,6 +13,11 @@ import {
   upsertChatOnMessage,
   getLineAccounts,
   jstNow,
+  getRepairSymptomsByProduct,
+  getRepairPrice,
+  createRepairQuote,
+  setFriendAttribute,
+  getFriendAttribute,
 } from '@line-crm/db';
 import { fireEvent } from '../services/event-bus.js';
 import { buildMessage, expandVariables } from '../services/step-delivery.js';
@@ -78,6 +83,155 @@ webhook.post('/webhook', async (c) => {
   return c.json({ status: 'ok' }, 200);
 });
 
+// ---- Repair Flow Flex builders ----
+
+function buildProductSelectFlex(): string {
+  return JSON.stringify({
+    type: 'bubble',
+    body: {
+      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      contents: [
+        { type: 'text', text: '機種を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
+        { type: 'text', text: 'お手持ちのMacBookの種類をお選びください', size: 'sm', color: '#64748b', wrap: true, margin: 'md' },
+        { type: 'separator', margin: 'lg' },
+        {
+          type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
+          contents: [
+            { type: 'button', action: { type: 'postback', label: 'MacBook Air', data: 'action=select_product&product=air&name=MacBook%20Air' }, style: 'primary', color: '#00B900' },
+            { type: 'button', action: { type: 'postback', label: 'MacBook Pro', data: 'action=select_product&product=pro&name=MacBook%20Pro' }, style: 'primary', color: '#00B900', margin: 'sm' },
+            { type: 'button', action: { type: 'postback', label: 'その他', data: 'action=select_product&product=other&name=%E3%81%9D%E3%81%AE%E4%BB%96' }, style: 'secondary', margin: 'sm' },
+          ],
+        },
+      ],
+    },
+  });
+}
+
+function buildModelMethodFlex(productName: string): string {
+  return JSON.stringify({
+    type: 'bubble',
+    body: {
+      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      contents: [
+        { type: 'text', text: productName, weight: 'bold', size: 'lg', color: '#1e293b' },
+        { type: 'text', text: 'モデルの特定方法をお選びください', size: 'sm', color: '#64748b', wrap: true, margin: 'md' },
+        { type: 'separator', margin: 'lg' },
+        {
+          type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
+          contents: [
+            { type: 'button', action: { type: 'postback', label: '年式で選ぶ', data: 'action=choose_year_method' }, style: 'primary', color: '#00B900' },
+            { type: 'button', action: { type: 'postback', label: 'わからない', data: 'action=skip_model' }, style: 'secondary', margin: 'sm' },
+          ],
+        },
+      ],
+    },
+  });
+}
+
+function buildYearSelectFlex(): string {
+  const years = [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017];
+  return JSON.stringify({
+    type: 'bubble',
+    body: {
+      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      contents: [
+        { type: 'text', text: '年式を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
+        { type: 'separator', margin: 'lg' },
+        {
+          type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
+          contents: [
+            ...years.map((y) => ({
+              type: 'button',
+              action: { type: 'postback', label: `${y}年`, data: `action=select_year&year=${y}` },
+              style: 'primary',
+              color: '#00B900',
+            })),
+            { type: 'button', action: { type: 'postback', label: 'その他の年式', data: 'action=select_year&year=0' }, style: 'secondary' },
+          ],
+        },
+      ],
+    },
+  });
+}
+
+async function buildSymptomSelectFlex(db: D1Database, productId: string): Promise<string> {
+  const symptoms = await getRepairSymptomsByProduct(db, productId);
+  return JSON.stringify({
+    type: 'bubble',
+    body: {
+      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      contents: [
+        { type: 'text', text: '症状を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
+        { type: 'separator', margin: 'lg' },
+        {
+          type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
+          contents: symptoms.map((s) => ({
+            type: 'button',
+            action: { type: 'postback', label: s.name, data: `action=select_symptom&symptom_id=${s.id}&symptom_name=${encodeURIComponent(s.name)}` },
+            style: 'primary',
+            color: '#00B900',
+          })),
+        },
+      ],
+    },
+  });
+}
+
+function buildQuoteFlex(params: {
+  productName: string;
+  symptomName: string;
+  priceFrom: number;
+  priceTo: number | null;
+  deliveryFrom: number;
+  deliveryTo: number | null;
+  quoteId: string;
+}): string {
+  const priceStr = params.priceTo
+    ? `¥${params.priceFrom.toLocaleString()}〜¥${params.priceTo.toLocaleString()}`
+    : `¥${params.priceFrom.toLocaleString()}〜`;
+  const deliveryStr = params.deliveryTo
+    ? `${params.deliveryFrom}〜${params.deliveryTo}日`
+    : `${params.deliveryFrom}日〜`;
+  return JSON.stringify({
+    type: 'bubble',
+    header: {
+      type: 'box', layout: 'vertical', paddingAll: '20px', backgroundColor: '#00B900',
+      contents: [{ type: 'text', text: '修理見積り', color: '#ffffff', weight: 'bold', size: 'xl' }],
+    },
+    body: {
+      type: 'box', layout: 'vertical', paddingAll: '20px', spacing: 'md',
+      contents: [
+        { type: 'box', layout: 'horizontal', contents: [
+          { type: 'text', text: '機種', size: 'sm', color: '#64748b', flex: 2 },
+          { type: 'text', text: params.productName, size: 'sm', color: '#1e293b', weight: 'bold', flex: 3 },
+        ]},
+        { type: 'box', layout: 'horizontal', contents: [
+          { type: 'text', text: '症状', size: 'sm', color: '#64748b', flex: 2 },
+          { type: 'text', text: params.symptomName, size: 'sm', color: '#1e293b', weight: 'bold', flex: 3, wrap: true },
+        ]},
+        { type: 'separator', margin: 'md' },
+        { type: 'box', layout: 'horizontal', contents: [
+          { type: 'text', text: '修理費用', size: 'sm', color: '#64748b', flex: 2 },
+          { type: 'text', text: priceStr, size: 'sm', color: '#00B900', weight: 'bold', flex: 3 },
+        ], margin: 'md' },
+        { type: 'box', layout: 'horizontal', contents: [
+          { type: 'text', text: '納期目安', size: 'sm', color: '#64748b', flex: 2 },
+          { type: 'text', text: deliveryStr, size: 'sm', color: '#1e293b', weight: 'bold', flex: 3 },
+        ]},
+        { type: 'text', text: '※診断後に正式な費用をお伝えします', size: 'xs', color: '#94a3b8', wrap: true, margin: 'lg' },
+      ],
+    },
+    footer: {
+      type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'sm',
+      contents: [
+        { type: 'button', action: { type: 'postback', label: '郵送で依頼する', data: `action=request_type&type=mail&quote_id=${params.quoteId}` }, style: 'primary', color: '#00B900' },
+        { type: 'button', action: { type: 'postback', label: '店舗に持込む', data: `action=request_type&type=store&quote_id=${params.quoteId}` }, style: 'primary', color: '#00B900' },
+        { type: 'button', action: { type: 'postback', label: '質問・相談したい', data: `action=request_type&type=consult&quote_id=${params.quoteId}` }, style: 'secondary' },
+      ],
+    },
+  });
+}
+
 async function handleEvent(
   db: D1Database,
   lineClient: LineClient,
@@ -110,6 +264,16 @@ async function handleEvent(
     if (lineAccountId) {
       await db.prepare('UPDATE friends SET line_account_id = ? WHERE id = ? AND line_account_id IS NULL')
         .bind(lineAccountId, friend.id).run();
+    }
+
+    // ウェルカムメッセージ + 機種選択Flex
+    try {
+      await lineClient.replyMessage(event.replyToken, [
+        { type: 'text', text: 'お見積りを作成させて頂きますのでお客様の端末情報を下記選択肢よりお選び下さい💻\n\n※修理時にデータに触れる事はございません！\nデータそのままで修理可能です✨' },
+        buildMessage('flex', buildProductSelectFlex()),
+      ]);
+    } catch (err) {
+      console.error('Failed to send welcome message:', err);
     }
 
     // friend_add シナリオに登録（このアカウントのシナリオのみ）
@@ -357,6 +521,157 @@ async function handleEvent(
       friendId: friend.id,
       eventData: { text: incomingText, matched },
     }, lineAccessToken, lineAccountId);
+
+    return;
+  }
+
+  if (event.type === 'postback') {
+    const userId =
+      event.source.type === 'user' ? event.source.userId : undefined;
+    if (!userId) return;
+
+    const friend = await getFriendByLineUserId(db, userId);
+    if (!friend) return;
+
+    const params = new URLSearchParams(event.postback.data);
+    const action = params.get('action');
+
+    if (action === 'select_product') {
+      const productKey = params.get('product') ?? '';
+      const productName = decodeURIComponent(params.get('name') ?? '');
+      const productIdMap: Record<string, string> = {
+        air:   'prod-air-0001-0000-0000-000000000001',
+        pro:   'prod-pro-0001-0000-0000-000000000002',
+        other: 'prod-oth-0001-0000-0000-000000000003',
+      };
+      const productId = productIdMap[productKey] ?? productIdMap['other'];
+      await setFriendAttribute(db, friend.id, 'repair_product_id', productId);
+      await setFriendAttribute(db, friend.id, 'repair_product_name', productName);
+      try {
+        await lineClient.replyMessage(event.replyToken, [
+          buildMessage('flex', buildModelMethodFlex(productName)),
+        ]);
+      } catch (err) {
+        console.error('Failed to send model method flex:', err);
+      }
+      return;
+    }
+
+    if (action === 'choose_year_method') {
+      try {
+        await lineClient.replyMessage(event.replyToken, [
+          buildMessage('flex', buildYearSelectFlex()),
+        ]);
+      } catch (err) {
+        console.error('Failed to send year select flex:', err);
+      }
+      return;
+    }
+
+    if (action === 'skip_model') {
+      const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id'))
+        ?? 'prod-oth-0001-0000-0000-000000000003';
+      try {
+        const symptomFlex = await buildSymptomSelectFlex(db, productId);
+        await lineClient.replyMessage(event.replyToken, [
+          buildMessage('flex', symptomFlex),
+        ]);
+      } catch (err) {
+        console.error('Failed to send symptom flex:', err);
+      }
+      return;
+    }
+
+    if (action === 'select_year') {
+      const year = parseInt(params.get('year') ?? '0', 10);
+      if (year > 0) {
+        await setFriendAttribute(db, friend.id, 'repair_year', String(year));
+      }
+      const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id'))
+        ?? 'prod-oth-0001-0000-0000-000000000003';
+      try {
+        const symptomFlex = await buildSymptomSelectFlex(db, productId);
+        await lineClient.replyMessage(event.replyToken, [
+          buildMessage('flex', symptomFlex),
+        ]);
+      } catch (err) {
+        console.error('Failed to send symptom flex after year:', err);
+      }
+      return;
+    }
+
+    if (action === 'select_symptom') {
+      const symptomId = params.get('symptom_id') ?? '';
+      const symptomName = decodeURIComponent(params.get('symptom_name') ?? '');
+      const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id'))
+        ?? 'prod-oth-0001-0000-0000-000000000003';
+      const productName = (await getFriendAttribute(db, friend.id, 'repair_product_name')) ?? 'MacBook';
+      const yearStr = await getFriendAttribute(db, friend.id, 'repair_year');
+
+      await setFriendAttribute(db, friend.id, 'repair_symptom_id', symptomId);
+
+      const price = await getRepairPrice(db, productId, symptomId);
+      const quote = await createRepairQuote(db, {
+        friendId: friend.id,
+        productId,
+        symptomId,
+        modelName: productName,
+        year: yearStr ? parseInt(yearStr, 10) : null,
+        priceFrom: price?.price_from ?? null,
+        priceTo: price?.price_to ?? null,
+        deliveryDaysFrom: price?.delivery_days_from ?? null,
+        deliveryDaysTo: price?.delivery_days_to ?? null,
+      });
+      await setFriendAttribute(db, friend.id, 'repair_quote_id', quote.id);
+
+      try {
+        if (price) {
+          await lineClient.replyMessage(event.replyToken, [
+            buildMessage('flex', buildQuoteFlex({
+              productName,
+              symptomName,
+              priceFrom: price.price_from,
+              priceTo: price.price_to,
+              deliveryFrom: price.delivery_days_from,
+              deliveryTo: price.delivery_days_to,
+              quoteId: quote.id,
+            })),
+          ]);
+        } else {
+          await lineClient.replyMessage(event.replyToken, [
+            { type: 'text', text: `${symptomName}についてのお見積りを承りました。担当者より詳細をご連絡いたします。` },
+          ]);
+        }
+      } catch (err) {
+        console.error('Failed to send quote flex:', err);
+      }
+      return;
+    }
+
+    if (action === 'request_type') {
+      const type = params.get('type') as 'mail' | 'store' | 'consult' | null;
+      const quoteId = params.get('quote_id') ?? '';
+      if (type && quoteId) {
+        await db
+          .prepare(`UPDATE repair_quotes SET request_type = ?, updated_at = ? WHERE id = ?`)
+          .bind(type, jstNow(), quoteId)
+          .run();
+      }
+      const labelMap: Record<string, string> = {
+        mail:    '郵送での修理依頼',
+        store:   '店舗持込での修理依頼',
+        consult: 'ご質問・ご相談',
+      };
+      const label = type ? (labelMap[type] ?? 'お問い合わせ') : 'お問い合わせ';
+      try {
+        await lineClient.replyMessage(event.replyToken, [
+          { type: 'text', text: `${label}を承りました。担当者よりご連絡いたしますので、しばらくお待ちください。` },
+        ]);
+      } catch (err) {
+        console.error('Failed to reply for request_type:', err);
+      }
+      return;
+    }
 
     return;
   }
