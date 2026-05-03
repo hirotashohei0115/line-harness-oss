@@ -16,6 +16,7 @@ import {
   getRepairSymptomsByProduct,
   getRepairPrice,
   createRepairQuote,
+  updateRepairQuoteRequestType,
   setFriendAttribute,
   getFriendAttribute,
 } from '@line-crm/db';
@@ -129,8 +130,9 @@ function buildModelMethodFlex(productName: string): string {
 }
 
 function buildYearSelectFlex(): string {
-  const years = [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017];
-  return JSON.stringify({
+  const recentYears = [2025, 2024, 2023, 2022, 2021];
+  const olderYears = [2020, 2019, 2018, 2017];
+  const makeBubble = (years: number[], includeOther: boolean) => ({
     type: 'bubble',
     body: {
       type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
@@ -146,11 +148,15 @@ function buildYearSelectFlex(): string {
               style: 'primary',
               color: '#00B900',
             })),
-            { type: 'button', action: { type: 'postback', label: 'その他の年式', data: 'action=select_year&year=0' }, style: 'secondary' },
+            ...(includeOther ? [{ type: 'button', action: { type: 'postback', label: 'その他の年式', data: 'action=select_year&year=0' }, style: 'secondary' }] : []),
           ],
         },
       ],
     },
+  });
+  return JSON.stringify({
+    type: 'carousel',
+    contents: [makeBubble(recentYears, false), makeBubble(olderYears, true)],
   });
 }
 
@@ -538,7 +544,7 @@ async function handleEvent(
 
     if (action === 'select_product') {
       const productKey = params.get('product') ?? '';
-      const productName = decodeURIComponent(params.get('name') ?? '');
+      const productName = params.get('name') ?? '';
       const productIdMap: Record<string, string> = {
         air:   'prod-air-0001-0000-0000-000000000001',
         pro:   'prod-pro-0001-0000-0000-000000000002',
@@ -602,7 +608,7 @@ async function handleEvent(
 
     if (action === 'select_symptom') {
       const symptomId = params.get('symptom_id') ?? '';
-      const symptomName = decodeURIComponent(params.get('symptom_name') ?? '');
+      const symptomName = params.get('symptom_name') ?? '';
       const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id'))
         ?? 'prod-oth-0001-0000-0000-000000000003';
       const productName = (await getFriendAttribute(db, friend.id, 'repair_product_name')) ?? 'MacBook';
@@ -611,21 +617,21 @@ async function handleEvent(
       await setFriendAttribute(db, friend.id, 'repair_symptom_id', symptomId);
 
       const price = await getRepairPrice(db, productId, symptomId);
-      const quote = await createRepairQuote(db, {
-        friendId: friend.id,
-        productId,
-        symptomId,
-        modelName: productName,
-        year: yearStr ? parseInt(yearStr, 10) : null,
-        priceFrom: price?.price_from ?? null,
-        priceTo: price?.price_to ?? null,
-        deliveryDaysFrom: price?.delivery_days_from ?? null,
-        deliveryDaysTo: price?.delivery_days_to ?? null,
-      });
-      await setFriendAttribute(db, friend.id, 'repair_quote_id', quote.id);
 
       try {
         if (price) {
+          const quote = await createRepairQuote(db, {
+            friendId: friend.id,
+            productId,
+            symptomId,
+            modelName: productName,
+            year: yearStr ? parseInt(yearStr, 10) : null,
+            priceFrom: price.price_from,
+            priceTo: price.price_to,
+            deliveryDaysFrom: price.delivery_days_from,
+            deliveryDaysTo: price.delivery_days_to,
+          });
+          await setFriendAttribute(db, friend.id, 'repair_quote_id', quote.id);
           await lineClient.replyMessage(event.replyToken, [
             buildMessage('flex', buildQuoteFlex({
               productName,
@@ -652,10 +658,7 @@ async function handleEvent(
       const type = params.get('type') as 'mail' | 'store' | 'consult' | null;
       const quoteId = params.get('quote_id') ?? '';
       if (type && quoteId) {
-        await db
-          .prepare(`UPDATE repair_quotes SET request_type = ?, updated_at = ? WHERE id = ?`)
-          .bind(type, jstNow(), quoteId)
-          .run();
+        await updateRepairQuoteRequestType(db, quoteId, type);
       }
       const labelMap: Record<string, string> = {
         mail:    '郵送での修理依頼',
