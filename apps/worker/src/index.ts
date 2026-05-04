@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { LineClient } from '@line-crm/line-sdk';
-import { getLineAccounts } from '@line-crm/db';
+import { getLineAccounts, getUnsentFollowUpQuotes, markFollowSent } from '@line-crm/db';
 import { processStepDeliveries } from './services/step-delivery.js';
 import { processScheduledBroadcasts } from './services/broadcast.js';
 import { processReminderDeliveries } from './services/reminder-delivery.js';
@@ -133,6 +133,91 @@ h1{font-size:28px;font-weight:800;margin-bottom:8px}
 // 404 fallback
 app.notFound((c) => c.json({ success: false, error: 'Not found' }, 404));
 
+function buildFollowUpFlex() {
+  return {
+    type: 'flex' as const,
+    altText: '【限定】修理料金 1,500円OFFのご案内',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#FF6B35',
+        contents: [
+          { type: 'text', text: '期間限定オファー', color: '#FFFFFF', size: 'sm', weight: 'bold' },
+          { type: 'text', text: '1,500円OFF', color: '#FFFFFF', size: 'xxl', weight: 'bold' },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'md',
+        contents: [
+          {
+            type: 'text',
+            text: '昨日はお見積りいただきありがとうございました！',
+            wrap: true,
+            size: 'sm',
+            color: '#555555',
+          },
+          {
+            type: 'text',
+            text: '今だけの特別クーポンをご用意しました🎉\n修理料金から1,500円OFFでご対応いたします。',
+            wrap: true,
+            size: 'sm',
+            color: '#333333',
+          },
+          {
+            type: 'text',
+            text: '※本日中にご依頼の方が対象となります',
+            wrap: true,
+            size: 'xs',
+            color: '#AAAAAA',
+          },
+        ],
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'button',
+            style: 'primary',
+            color: '#FF6B35',
+            action: {
+              type: 'postback',
+              label: '今すぐ修理を依頼する',
+              data: 'action=start_repair',
+              displayText: '修理を依頼する',
+            },
+          },
+        ],
+      },
+    },
+  };
+}
+
+async function processRepairFollowUps(db: D1Database, defaultToken: string): Promise<void> {
+  const nowUtc = Date.now();
+  const jstNowMs = nowUtc + 9 * 60 * 60 * 1000;
+  const jstToday = new Date(jstNowMs).toISOString().slice(0, 10);
+  const jstYesterdayMs = jstNowMs - 24 * 60 * 60 * 1000;
+  const jstYesterday = new Date(jstYesterdayMs).toISOString().slice(0, 10);
+
+  const quotes = await getUnsentFollowUpQuotes(db, `${jstYesterday}T00:00:00`, `${jstToday}T00:00:00`);
+  const lineClient = new LineClient(defaultToken);
+  const flexMsg = buildFollowUpFlex();
+
+  for (const quote of quotes) {
+    try {
+      await lineClient.pushMessage(quote.line_user_id, [flexMsg]);
+      await markFollowSent(db, quote.id);
+    } catch (err) {
+      console.error(`Follow-up send error for quote ${quote.id}:`, err);
+    }
+  }
+}
+
 // Scheduled handler for cron triggers — runs for all active LINE accounts
 async function scheduled(
   _event: ScheduledEvent,
@@ -164,6 +249,12 @@ async function scheduled(
     );
   }
   jobs.push(checkAccountHealth(env.DB));
+
+  // Follow-up message: 毎日 JST 10:00 (UTC 01:00) に前日見積りユーザーへ 1,500円OFF を送信
+  const utcHour = new Date().getUTCHours();
+  if (utcHour === 1) {
+    jobs.push(processRepairFollowUps(env.DB, env.LINE_CHANNEL_ACCESS_TOKEN));
+  }
 
   await Promise.allSettled(jobs);
 }

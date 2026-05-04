@@ -48,6 +48,7 @@ export interface RepairQuote {
   delivery_days_to: number | null;
   request_type: 'mail' | 'store' | 'consult' | null;
   status: 'quoted' | 'ordered' | 'cancelled';
+  follow_sent: number;
   created_at: string;
   updated_at: string;
 }
@@ -191,6 +192,41 @@ export async function setFriendAttribute(
        ON CONFLICT (friend_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
     )
     .bind(id, friendId, key, value, now)
+    .run();
+}
+
+export interface FollowUpQuoteRow {
+  id: string;
+  friend_id: string;
+  line_user_id: string;
+  price_from: number | null;
+  price_to: number | null;
+}
+
+export async function getUnsentFollowUpQuotes(
+  db: D1Database,
+  from: string,
+  to: string,
+): Promise<FollowUpQuoteRow[]> {
+  const result = await db
+    .prepare(
+      `SELECT rq.id, rq.friend_id, f.line_user_id, rq.price_from, rq.price_to
+       FROM repair_quotes rq
+       JOIN friends f ON f.id = rq.friend_id
+       WHERE rq.status = 'quoted'
+         AND rq.follow_sent = 0
+         AND rq.created_at >= ?
+         AND rq.created_at < ?`,
+    )
+    .bind(from, to)
+    .all<FollowUpQuoteRow>();
+  return result.results;
+}
+
+export async function markFollowSent(db: D1Database, quoteId: string): Promise<void> {
+  await db
+    .prepare(`UPDATE repair_quotes SET follow_sent = 1, updated_at = ? WHERE id = ?`)
+    .bind(jstNow(), quoteId)
     .run();
 }
 

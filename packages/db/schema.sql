@@ -622,6 +622,7 @@ CREATE TABLE IF NOT EXISTS repair_quotes (
   delivery_days_to   INTEGER,
   request_type       TEXT CHECK (request_type IN ('mail', 'store', 'consult')),
   status             TEXT NOT NULL DEFAULT 'quoted' CHECK (status IN ('quoted', 'ordered', 'cancelled')),
+  follow_sent        INTEGER NOT NULL DEFAULT 0,
   created_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
   updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
 );
