@@ -15,6 +15,8 @@ import {
   jstNow,
   getRepairSymptomsByProduct,
   getRepairPrice,
+  getRepairModelPrice,
+  getRepairPriceByYearInch,
   createRepairQuote,
   updateRepairQuoteRequestType,
   setFriendAttribute,
@@ -539,19 +541,23 @@ async function buildSymptomSelectFlex(db: D1Database, productId: string): Promis
 function buildQuoteFlex(params: {
   productName: string;
   symptomName: string;
-  priceFrom: number;
+  priceFrom: number | null;
   priceTo: number | null;
-  deliveryFrom: number;
+  deliveryFrom: number | null;
   deliveryTo: number | null;
   quoteId: string;
   modelName?: string | null;
   year?: number | null;
   inchSize?: string | null;
 }): string {
-  const priceStr = params.priceTo
+  const priceStr = params.priceFrom == null
+    ? 'お問い合わせください'
+    : params.priceTo
     ? `¥${params.priceFrom.toLocaleString()}〜¥${params.priceTo.toLocaleString()}`
     : `¥${params.priceFrom.toLocaleString()}〜`;
-  const deliveryStr = params.deliveryTo
+  const deliveryStr = params.deliveryFrom == null
+    ? 'お問い合わせください'
+    : params.deliveryTo
     ? `${params.deliveryFrom}〜${params.deliveryTo}日`
     : `${params.deliveryFrom}日〜`;
 
@@ -1035,41 +1041,63 @@ async function handleEvent(
 
       await setFriendAttribute(db, friend.id, 'repair_symptom_id', symptomId);
 
-      const price = await getRepairPrice(db, productId, symptomId);
+      let priceFrom: number | null = null;
+      let priceTo: number | null = null;
+      let deliveryFrom: number | null = null;
+      let deliveryTo: number | null = null;
+      let resolvedModelName: string | null = modelName ?? null;
+
+      if (modelName) {
+        // Model number flow: look up by model_number + symptom name
+        priceFrom = await getRepairModelPrice(db, modelName, symptomName);
+      } else if (yearStr && inchSize) {
+        // Year+inch flow: look up by product_type + year + inch + symptom name
+        const productType = productName.toLowerCase().includes('air') ? 'air'
+          : productName.toLowerCase().includes('pro') ? 'pro' : 'other';
+        const inchFloat = parseFloat(inchSize);
+        const row = await getRepairPriceByYearInch(db, productType, parseInt(yearStr, 10), inchFloat, symptomName);
+        if (row) {
+          priceFrom = row.price;
+          resolvedModelName = row.modelNumber;
+        }
+      } else {
+        // Fallback: use generic repair_prices table
+        const price = await getRepairPrice(db, productId, symptomId);
+        if (price) {
+          priceFrom = price.price_from;
+          priceTo = price.price_to;
+          deliveryFrom = price.delivery_days_from;
+          deliveryTo = price.delivery_days_to;
+        }
+      }
 
       try {
-        if (price) {
-          const quote = await createRepairQuote(db, {
-            friendId: friend.id,
-            productId,
-            symptomId,
-            modelName: modelName ?? productName,
+        const quote = await createRepairQuote(db, {
+          friendId: friend.id,
+          productId,
+          symptomId,
+          modelName: resolvedModelName ?? productName,
+          year: yearStr ? parseInt(yearStr, 10) : null,
+          priceFrom,
+          priceTo,
+          deliveryDaysFrom: deliveryFrom,
+          deliveryDaysTo: deliveryTo,
+        });
+        await setFriendAttribute(db, friend.id, 'repair_quote_id', quote.id);
+        await lineClient.replyMessage(event.replyToken, [
+          buildMessage('flex', buildQuoteFlex({
+            productName,
+            symptomName,
+            priceFrom,
+            priceTo,
+            deliveryFrom,
+            deliveryTo,
+            quoteId: quote.id,
+            modelName: resolvedModelName,
             year: yearStr ? parseInt(yearStr, 10) : null,
-            priceFrom: price.price_from,
-            priceTo: price.price_to,
-            deliveryDaysFrom: price.delivery_days_from,
-            deliveryDaysTo: price.delivery_days_to,
-          });
-          await setFriendAttribute(db, friend.id, 'repair_quote_id', quote.id);
-          await lineClient.replyMessage(event.replyToken, [
-            buildMessage('flex', buildQuoteFlex({
-              productName,
-              symptomName,
-              priceFrom: price.price_from,
-              priceTo: price.price_to,
-              deliveryFrom: price.delivery_days_from,
-              deliveryTo: price.delivery_days_to,
-              quoteId: quote.id,
-              modelName,
-              year: yearStr ? parseInt(yearStr, 10) : null,
-              inchSize,
-            })),
-          ]);
-        } else {
-          await lineClient.replyMessage(event.replyToken, [
-            { type: 'text', text: `${symptomName}についてのお見積りを承りました。担当者より詳細をご連絡いたします。` },
-          ]);
-        }
+            inchSize,
+          })),
+        ]);
       } catch (err) {
         console.error('Failed to send quote flex:', err);
       }

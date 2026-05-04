@@ -241,3 +241,35 @@ export async function getFriendAttribute(
     .first<{ value: string }>();
   return row?.value ?? null;
 }
+
+// ---- Repair Model Prices ----
+
+export async function getRepairModelPrice(
+  db: D1Database,
+  modelNumber: string,
+  symptom: string,
+): Promise<number | null> {
+  const row = await db
+    .prepare(`SELECT price FROM repair_model_prices WHERE model_number = ? AND symptom = ? LIMIT 1`)
+    .bind(modelNumber, symptom)
+    .first<{ price: number | null }>();
+  return row?.price ?? null;
+}
+
+export async function getRepairPriceByYearInch(
+  db: D1Database,
+  productType: string,
+  year: number,
+  inchSize: number,
+  symptom: string,
+): Promise<{ price: number | null; modelNumber: string } | null> {
+  const row = await db
+    .prepare(
+      `SELECT price, model_number FROM repair_model_prices
+       WHERE product_type = ? AND year = ? AND inch_size = ? AND symptom = ?
+       LIMIT 1`,
+    )
+    .bind(productType, year, inchSize, symptom)
+    .first<{ price: number | null; modelNumber: string }>();
+  return row ?? null;
+}
