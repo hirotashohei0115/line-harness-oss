@@ -208,6 +208,32 @@ function buildYearSelectFlex(): string {
   });
 }
 
+function buildInchSelectFlex(): string {
+  const sizes = ['13インチ', '14インチ', '15インチ', '16インチ'];
+  return JSON.stringify({
+    type: 'bubble',
+    body: {
+      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      contents: [
+        { type: 'text', text: 'インチ数を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
+        { type: 'separator', margin: 'lg' },
+        {
+          type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
+          contents: [
+            ...sizes.map((s) => ({
+              type: 'button',
+              action: { type: 'postback', label: s, data: `action=select_inch&inch=${encodeURIComponent(s)}` },
+              style: 'primary',
+              color: '#00B900',
+            })),
+            { type: 'button', action: { type: 'postback', label: 'その他・分からない', data: 'action=select_inch&inch=%E3%81%9D%E3%81%AE%E4%BB%96' }, style: 'secondary' },
+          ],
+        },
+      ],
+    },
+  });
+}
+
 async function buildSymptomSelectFlex(db: D1Database, productId: string): Promise<string> {
   const symptoms = await getRepairSymptomsByProduct(db, productId);
   return JSON.stringify({
@@ -673,6 +699,21 @@ async function handleEvent(
       if (year > 0) {
         await setFriendAttribute(db, friend.id, 'repair_year', String(year));
       }
+      try {
+        await lineClient.replyMessage(event.replyToken, [
+          buildMessage('flex', buildInchSelectFlex()),
+        ]);
+      } catch (err) {
+        console.error('Failed to send inch select flex:', err);
+      }
+      return;
+    }
+
+    if (action === 'select_inch') {
+      const inch = params.get('inch') ?? '';
+      if (inch) {
+        await setFriendAttribute(db, friend.id, 'repair_inch_size', inch);
+      }
       const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id'))
         ?? 'prod-oth-0001-0000-0000-000000000003';
       try {
@@ -681,7 +722,7 @@ async function handleEvent(
           buildMessage('flex', symptomFlex),
         ]);
       } catch (err) {
-        console.error('Failed to send symptom flex after year:', err);
+        console.error('Failed to send symptom flex after inch:', err);
       }
       return;
     }
