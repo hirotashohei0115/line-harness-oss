@@ -654,6 +654,7 @@ async function handleEvent(
     // ウェルカムメッセージ + 機種選択Flex
     try {
       await lineClient.replyMessage(event.replyToken, [
+        { type: 'image', originalContentUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb', previewImageUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb' },
         { type: 'text', text: 'お見積りを作成させて頂きますのでお客様の端末情報を下記選択肢よりお選び下さい💻\n\n※修理時にデータに触れる事はございません！\nデータそのままで修理可能です✨' },
         buildMessage('flex', buildProductSelectFlex()),
       ]);
