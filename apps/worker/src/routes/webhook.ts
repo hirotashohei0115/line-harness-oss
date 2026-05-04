@@ -544,6 +544,9 @@ function buildQuoteFlex(params: {
   deliveryFrom: number;
   deliveryTo: number | null;
   quoteId: string;
+  modelName?: string | null;
+  year?: number | null;
+  inchSize?: string | null;
 }): string {
   const priceStr = params.priceTo
     ? `¥${params.priceFrom.toLocaleString()}〜¥${params.priceTo.toLocaleString()}`
@@ -551,6 +554,19 @@ function buildQuoteFlex(params: {
   const deliveryStr = params.deliveryTo
     ? `${params.deliveryFrom}〜${params.deliveryTo}日`
     : `${params.deliveryFrom}日〜`;
+
+  const modelRow = params.modelName
+    ? [{ type: 'box', layout: 'horizontal', contents: [
+        { type: 'text', text: 'モデル番号', size: 'sm', color: '#64748b', flex: 2 },
+        { type: 'text', text: params.modelName, size: 'sm', color: '#1e293b', weight: 'bold', flex: 3, wrap: true },
+      ]}]
+    : params.year
+    ? [{ type: 'box', layout: 'horizontal', contents: [
+        { type: 'text', text: '年式', size: 'sm', color: '#64748b', flex: 2 },
+        { type: 'text', text: `${params.year}年　${params.inchSize ?? ''}`.trim(), size: 'sm', color: '#1e293b', weight: 'bold', flex: 3 },
+      ]}]
+    : [];
+
   return JSON.stringify({
     type: 'bubble',
     header: {
@@ -564,6 +580,7 @@ function buildQuoteFlex(params: {
           { type: 'text', text: '機種', size: 'sm', color: '#64748b', flex: 2 },
           { type: 'text', text: params.productName, size: 'sm', color: '#1e293b', weight: 'bold', flex: 3 },
         ]},
+        ...modelRow,
         { type: 'box', layout: 'horizontal', contents: [
           { type: 'text', text: '症状', size: 'sm', color: '#64748b', flex: 2 },
           { type: 'text', text: params.symptomName, size: 'sm', color: '#1e293b', weight: 'bold', flex: 3, wrap: true },
@@ -1014,6 +1031,7 @@ async function handleEvent(
       const productName = (await getFriendAttribute(db, friend.id, 'repair_product_name')) ?? 'MacBook';
       const modelName = await getFriendAttribute(db, friend.id, 'repair_model_name');
       const yearStr = await getFriendAttribute(db, friend.id, 'repair_year');
+      const inchSize = await getFriendAttribute(db, friend.id, 'repair_inch_size');
 
       await setFriendAttribute(db, friend.id, 'repair_symptom_id', symptomId);
 
@@ -1042,6 +1060,9 @@ async function handleEvent(
               deliveryFrom: price.delivery_days_from,
               deliveryTo: price.delivery_days_to,
               quoteId: quote.id,
+              modelName,
+              year: yearStr ? parseInt(yearStr, 10) : null,
+              inchSize,
             })),
           ]);
         } else {
