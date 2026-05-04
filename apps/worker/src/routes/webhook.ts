@@ -288,9 +288,9 @@ function buildProductSelectFlex(): string {
         {
           type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
           contents: [
-            { type: 'button', action: { type: 'postback', label: 'MacBook Air', data: 'action=select_product&product=air&name=MacBook%20Air' }, style: 'primary', height: 'sm', color: '#00B900' },
-            { type: 'button', action: { type: 'postback', label: 'MacBook Pro', data: 'action=select_product&product=pro&name=MacBook%20Pro' }, style: 'primary', height: 'sm', color: '#00B900', margin: 'sm' },
-            { type: 'button', action: { type: 'postback', label: 'その他', data: 'action=select_product&product=other&name=%E3%81%9D%E3%81%AE%E4%BB%96' }, style: 'secondary', height: 'sm', margin: 'sm' },
+            { type: 'button', action: { type: 'message', label: 'MacBook Air', text: 'MacBook Air' }, style: 'primary', height: 'sm', color: '#00B900' },
+            { type: 'button', action: { type: 'message', label: 'MacBook Pro', text: 'MacBook Pro' }, style: 'primary', height: 'sm', color: '#00B900', margin: 'sm' },
+            { type: 'button', action: { type: 'message', label: 'その他', text: 'その他' }, style: 'secondary', height: 'sm', margin: 'sm' },
           ],
         },
       ],
@@ -310,9 +310,9 @@ function buildModelMethodFlex(productName: string, productKey: string): string {
         {
           type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
           contents: [
-            { type: 'button', action: { type: 'postback', label: 'モデル名で選ぶ', data: `action=choose_model_method&product_key=${productKey}` }, style: 'primary', height: 'sm', color: '#00B900' },
-            { type: 'button', action: { type: 'postback', label: '年式で選ぶ', data: 'action=choose_year_method' }, style: 'primary', height: 'sm', color: '#00B900', margin: 'sm' },
-            { type: 'button', action: { type: 'postback', label: 'わからない', data: 'action=skip_model' }, style: 'secondary', height: 'sm', margin: 'sm' },
+            { type: 'button', action: { type: 'message', label: 'モデル名で選ぶ', text: 'モデル名で選ぶ' }, style: 'primary', height: 'sm', color: '#00B900' },
+            { type: 'button', action: { type: 'message', label: '年式で選ぶ', text: '年式で選ぶ' }, style: 'primary', height: 'sm', color: '#00B900', margin: 'sm' },
+            { type: 'button', action: { type: 'message', label: 'わからない', text: 'わからない' }, style: 'secondary', height: 'sm', margin: 'sm' },
           ],
         },
       ],
@@ -328,7 +328,7 @@ function buildModelSelectFlex(productKey: string): string {
   const models = modelsByProduct[productKey] ?? [];
   const otherButton = {
     type: 'button',
-    action: { type: 'postback', label: 'その他・分からない', data: 'action=select_model&model_name=%E3%81%9D%E3%81%AE%E4%BB%96' },
+    action: { type: 'message', label: 'その他・分からない', text: 'その他・分からない' },
     style: 'secondary',
     height: 'sm',
   };
@@ -353,7 +353,7 @@ function buildModelSelectFlex(productKey: string): string {
             contents: [
               ...chunk.map((m) => ({
                 type: 'button',
-                action: { type: 'postback', label: m, data: `action=select_model&model_name=${encodeURIComponent(m)}` },
+                action: { type: 'message', label: m, text: m },
                 style: 'primary',
                 height: 'sm',
                 color: '#00B900',
@@ -384,12 +384,12 @@ function buildYearSelectFlex(): string {
           contents: [
             ...years.map((y) => ({
               type: 'button',
-              action: { type: 'postback', label: `${y}年`, data: `action=select_year&year=${y}` },
+              action: { type: 'message', label: `${y}年`, text: `${y}年` },
               style: 'primary',
               height: 'sm',
               color: '#00B900',
             })),
-            ...(includeOther ? [{ type: 'button', action: { type: 'postback', label: 'その他の年式', data: 'action=select_year&year=0' }, style: 'secondary', height: 'sm' }] : []),
+            ...(includeOther ? [{ type: 'button', action: { type: 'message', label: 'その他の年式', text: 'その他の年式' }, style: 'secondary', height: 'sm' }] : []),
           ],
         },
       ],
@@ -415,12 +415,12 @@ function buildInchSelectFlex(): string {
           contents: [
             ...sizes.map((s) => ({
               type: 'button',
-              action: { type: 'postback', label: s, data: `action=select_inch&inch=${encodeURIComponent(s)}` },
+              action: { type: 'message', label: s, text: s },
               style: 'primary',
               height: 'sm',
               color: '#00B900',
             })),
-            { type: 'button', action: { type: 'postback', label: 'その他・分からない', data: 'action=select_inch&inch=%E3%81%9D%E3%81%AE%E4%BB%96' }, style: 'secondary', height: 'sm' },
+            { type: 'button', action: { type: 'message', label: 'その他・分からない', text: 'その他・分からない' }, style: 'secondary', height: 'sm' },
           ],
         },
       ],
@@ -446,14 +446,14 @@ function buildStoreSelectFlex(): string {
             contents: [
               ...chunk.map((s) => ({
                 type: 'button',
-                action: { type: 'postback', label: s.shortName, data: `action=select_store&store_key=${s.key}` },
+                action: { type: 'message', label: s.shortName, text: s.shortName },
                 style: 'primary',
                 height: 'sm',
                 color: '#00B900',
               })),
               ...(isLast ? [{
                 type: 'button',
-                action: { type: 'postback', label: '該当店舗なし', data: 'action=select_store&store_key=none' },
+                action: { type: 'message', label: '該当店舗なし', text: '該当店舗なし' },
                 style: 'secondary',
                 height: 'sm',
               }] : []),
@@ -478,11 +478,11 @@ function buildConsultCategoryFlex(): string {
         {
           type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
           contents: [
-            { type: 'button', action: { type: 'postback', label: '郵送修理に関する質問', data: 'action=consult_category&category=mail' }, style: 'secondary', height: 'sm' },
-            { type: 'button', action: { type: 'postback', label: '店頭修理に関する質問', data: 'action=consult_category&category=store' }, style: 'secondary', height: 'sm' },
-            { type: 'button', action: { type: 'postback', label: '修理端末に関する質問', data: 'action=consult_category&category=device' }, style: 'secondary', height: 'sm' },
-            { type: 'button', action: { type: 'postback', label: 'その他の質問', data: 'action=consult_category&category=other' }, style: 'secondary', height: 'sm' },
-            { type: 'button', action: { type: 'postback', label: '電話/チャットで相談する', data: 'action=consult_phone' }, style: 'primary', height: 'sm', color: '#00B900' },
+            { type: 'button', action: { type: 'message', label: '郵送修理に関する質問', text: '郵送修理に関する質問' }, style: 'secondary', height: 'sm' },
+            { type: 'button', action: { type: 'message', label: '店頭修理に関する質問', text: '店頭修理に関する質問' }, style: 'secondary', height: 'sm' },
+            { type: 'button', action: { type: 'message', label: '修理端末に関する質問', text: '修理端末に関する質問' }, style: 'secondary', height: 'sm' },
+            { type: 'button', action: { type: 'message', label: 'その他の質問', text: 'その他の質問' }, style: 'secondary', height: 'sm' },
+            { type: 'button', action: { type: 'message', label: '電話/チャットで相談する', text: '電話/チャットで相談する' }, style: 'primary', height: 'sm', color: '#00B900' },
           ],
         },
       ],
@@ -504,7 +504,7 @@ function buildFaqListFlex(category: string): string {
           type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
           contents: cat.questions.map((faq, idx) => ({
             type: 'button',
-            action: { type: 'postback', label: faq.q, data: `action=faq_question&category=${category}&idx=${idx}` },
+            action: { type: 'message', label: faq.q, text: faq.q },
             style: 'secondary',
             height: 'sm',
           })),
@@ -527,7 +527,7 @@ async function buildSymptomSelectFlex(db: D1Database, productId: string): Promis
           type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
           contents: symptoms.map((s) => ({
             type: 'button',
-            action: { type: 'postback', label: s.name, data: `action=select_symptom&symptom_id=${s.id}&symptom_name=${encodeURIComponent(s.name)}` },
+            action: { type: 'message', label: s.name, text: s.name },
             style: 'primary',
             height: 'sm',
             color: '#00B900',
@@ -622,9 +622,9 @@ function buildQuoteFlex(params: {
     footer: {
       type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'sm',
       contents: [
-        { type: 'button', action: { type: 'postback', label: '郵送で依頼する', data: `action=request_type&type=mail&quote_id=${params.quoteId}` }, style: 'primary', height: 'sm', color: '#00B900' },
-        { type: 'button', action: { type: 'postback', label: '店舗に持込む', data: `action=request_type&type=store&quote_id=${params.quoteId}` }, style: 'primary', height: 'sm', color: '#00B900' },
-        { type: 'button', action: { type: 'postback', label: '質問・相談したい', data: `action=request_type&type=consult&quote_id=${params.quoteId}` }, style: 'secondary', height: 'sm' },
+        { type: 'button', action: { type: 'message', label: '郵送で依頼する', text: '郵送で依頼する' }, style: 'primary', height: 'sm', color: '#00B900' },
+        { type: 'button', action: { type: 'message', label: '店舗に持込む', text: '店舗に持込む' }, style: 'primary', height: 'sm', color: '#00B900' },
+        { type: 'button', action: { type: 'message', label: '質問・相談したい', text: '質問・相談したい' }, style: 'secondary', height: 'sm' },
       ],
     },
   });
@@ -771,14 +771,10 @@ async function handleEvent(
       .bind(logId, friend.id, incomingText, now)
       .run();
 
-    // チャットを作成/更新（ユーザーの自発的メッセージのみ unread にする）
-    // ボタンタップ等の自動応答キーワードは除外
+    // チャットを作成/更新: ボタンタップや自動応答キーワードは除外（repair flow後に判定）
     const autoKeywords = ['料金', '機能', 'API', 'フォーム', 'ヘルプ', 'UUID', 'UUID連携について教えて', 'UUID連携を確認', '配信時間', '導入支援を希望します', 'アカウント連携を見る', '体験を完了する', 'BAN対策を見る', '連携確認'];
     const isAutoKeyword = autoKeywords.some(k => incomingText === k);
     const isTimeCommand = /(?:配信時間|配信|届けて|通知)[はを]?\s*\d{1,2}\s*時/.test(incomingText);
-    if (!isAutoKeyword && !isTimeCommand) {
-      await upsertChatOnMessage(db, friend.id);
-    }
 
     // 配信時間設定: 「配信時間は○時」「○時に届けて」等のパターンを検出
     const timeMatch = incomingText.match(/(?:配信時間|配信|届けて|通知)[はを]?\s*(\d{1,2})\s*時/);
@@ -865,6 +861,224 @@ async function handleEvent(
       } catch (err) {
         console.error('Cross-account trigger error:', err);
       }
+    }
+
+    // ===== Repair flow: message button text matching =====
+    const MODEL_NUMBERS = new Set(['A2991','A2780','A2485','A2141','A3241','A3114','A2941','A1990','A1707','A3434','A3401','A3112','A3185','A2779','A2992','A2918','A2442','A3240','A3113','A2681','A2338','A2289','A2251','A2337','A2179','A2159','A1708','A1932','A1989','A1706','A1502','A2369']);
+    const INCH_SIZES = new Set(['13インチ','14インチ','15インチ','16インチ']);
+    const CONSULT_CATEGORY_MAP: Record<string, string> = { '郵送修理に関する質問':'mail','店頭修理に関する質問':'store','修理端末に関する質問':'device','その他の質問':'other' };
+
+    // 機種選択
+    if (incomingText === 'MacBook Air' || incomingText === 'MacBook Pro' || incomingText === 'その他') {
+      const productMap: Record<string, { key: string; id: string }> = {
+        'MacBook Air': { key: 'air', id: 'prod-air-0001-0000-0000-000000000001' },
+        'MacBook Pro': { key: 'pro', id: 'prod-pro-0001-0000-0000-000000000002' },
+        'その他':      { key: 'other', id: 'prod-oth-0001-0000-0000-000000000003' },
+      };
+      const p = productMap[incomingText];
+      await setFriendAttribute(db, friend.id, 'repair_product_id', p.id);
+      await setFriendAttribute(db, friend.id, 'repair_product_name', incomingText);
+      await setFriendAttribute(db, friend.id, 'repair_product_key', p.key);
+      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildModelMethodFlex(incomingText, p.key))]); } catch (err) { console.error('repair msg select_product:', err); }
+      return;
+    }
+
+    // モデル特定方法
+    if (incomingText === 'モデル名で選ぶ') {
+      const productKey = (await getFriendAttribute(db, friend.id, 'repair_product_key')) ?? 'other';
+      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildModelSelectFlex(productKey))]); } catch (err) { console.error('repair msg choose_model_method:', err); }
+      return;
+    }
+    if (incomingText === '年式で選ぶ') {
+      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildYearSelectFlex())]); } catch (err) { console.error('repair msg choose_year_method:', err); }
+      return;
+    }
+    if (incomingText === 'わからない') {
+      const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
+      try { const sf = await buildSymptomSelectFlex(db, productId); await lineClient.replyMessage(event.replyToken, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg skip_model:', err); }
+      return;
+    }
+
+    // モデル番号選択
+    if (MODEL_NUMBERS.has(incomingText)) {
+      await setFriendAttribute(db, friend.id, 'repair_model_name', incomingText);
+      const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
+      try { const sf = await buildSymptomSelectFlex(db, productId); await lineClient.replyMessage(event.replyToken, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg select_model:', err); }
+      return;
+    }
+
+    // 年式選択
+    {
+      const yearTextMatch = incomingText.match(/^(\d{4})年$/);
+      if (yearTextMatch) {
+        await setFriendAttribute(db, friend.id, 'repair_year', yearTextMatch[1]);
+        try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildInchSelectFlex())]); } catch (err) { console.error('repair msg select_year:', err); }
+        return;
+      }
+    }
+    if (incomingText === 'その他の年式') {
+      await setFriendAttribute(db, friend.id, 'repair_year', '0');
+      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildInchSelectFlex())]); } catch (err) { console.error('repair msg select_year_other:', err); }
+      return;
+    }
+
+    // インチ選択
+    if (INCH_SIZES.has(incomingText)) {
+      await setFriendAttribute(db, friend.id, 'repair_inch_size', incomingText);
+      const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
+      try { const sf = await buildSymptomSelectFlex(db, productId); await lineClient.replyMessage(event.replyToken, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg select_inch:', err); }
+      return;
+    }
+
+    // 「その他・分からない」: yearが設定済み → インチ不明, そうでなければ → モデル不明
+    if (incomingText === 'その他・分からない') {
+      const yearStr = await getFriendAttribute(db, friend.id, 'repair_year');
+      const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
+      if (yearStr) {
+        await setFriendAttribute(db, friend.id, 'repair_inch_size', 'その他・分からない');
+      } else {
+        await setFriendAttribute(db, friend.id, 'repair_model_name', 'その他・分からない');
+      }
+      try { const sf = await buildSymptomSelectFlex(db, productId); await lineClient.replyMessage(event.replyToken, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg other unknown:', err); }
+      return;
+    }
+
+    // 症状選択 (DB symptom name lookup)
+    {
+      const symptomRow = await db.prepare('SELECT id, name FROM repair_symptoms WHERE name = ? LIMIT 1').bind(incomingText).first<{ id: string; name: string }>();
+      if (symptomRow) {
+        const symptomId = symptomRow.id;
+        const symptomName = symptomRow.name;
+        const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
+        const productName = (await getFriendAttribute(db, friend.id, 'repair_product_name')) ?? 'MacBook';
+        const modelName = await getFriendAttribute(db, friend.id, 'repair_model_name');
+        const yearStr = await getFriendAttribute(db, friend.id, 'repair_year');
+        const inchSize = await getFriendAttribute(db, friend.id, 'repair_inch_size');
+        await setFriendAttribute(db, friend.id, 'repair_symptom_id', symptomId);
+
+        let priceFrom: number | null = null;
+        let priceTo: number | null = null;
+        let deliveryFrom: number | null = null;
+        let deliveryTo: number | null = null;
+        let deliveryDays: string | null = null;
+        let resolvedModelName: string | null = modelName ?? null;
+
+        if (modelName && modelName !== 'その他・分からない') {
+          const row = await getRepairModelPrice(db, modelName, symptomName);
+          if (row) { priceFrom = row.price; deliveryDays = row.delivery_days; }
+        } else if (yearStr && inchSize && inchSize !== 'その他・分からない') {
+          const productType = productName.toLowerCase().includes('air') ? 'air' : productName.toLowerCase().includes('pro') ? 'pro' : 'other';
+          const row = await getRepairPriceByYearInch(db, productType, parseInt(yearStr, 10), parseFloat(inchSize), symptomName);
+          if (row) { priceFrom = row.price; deliveryDays = row.delivery_days; resolvedModelName = row.model_number; }
+        } else {
+          const price = await getRepairPrice(db, productId, symptomId);
+          if (price) { priceFrom = price.price_from; priceTo = price.price_to; deliveryFrom = price.delivery_days_from; deliveryTo = price.delivery_days_to; }
+        }
+
+        try {
+          const quote = await createRepairQuote(db, { friendId: friend.id, productId, symptomId, modelName: resolvedModelName ?? productName, year: yearStr ? parseInt(yearStr, 10) : null, priceFrom, priceTo, deliveryDaysFrom: deliveryFrom, deliveryDaysTo: deliveryTo });
+          await setFriendAttribute(db, friend.id, 'repair_quote_id', quote.id);
+          const symptomImageUrl = getSymptomImageUrl(symptomName);
+          await lineClient.replyMessage(event.replyToken, [
+            { type: 'image', originalContentUrl: symptomImageUrl, previewImageUrl: symptomImageUrl },
+            buildMessage('flex', buildQuoteFlex({ productName, symptomName, priceFrom, priceTo, deliveryFrom, deliveryTo, deliveryDays, quoteId: quote.id, modelName: resolvedModelName, year: yearStr ? parseInt(yearStr, 10) : null, inchSize })),
+          ]);
+        } catch (err) { console.error('repair msg select_symptom:', err); }
+        return;
+      }
+    }
+
+    // 依頼方法
+    if (incomingText === '郵送で依頼する' || incomingText === '店舗に持込む' || incomingText === '質問・相談したい') {
+      const quoteId = (await getFriendAttribute(db, friend.id, 'repair_quote_id')) ?? '';
+      const typeMap: Record<string, 'mail' | 'store' | 'consult'> = { '郵送で依頼する': 'mail', '店舗に持込む': 'store', '質問・相談したい': 'consult' };
+      const type = typeMap[incomingText];
+      if (quoteId) await updateRepairQuoteRequestType(db, quoteId, type);
+      try {
+        if (type === 'mail') {
+          await lineClient.replyMessage(event.replyToken, [
+            { type: 'text', text: '下記ボタンよりお申し込みをよろしくお願い申し上げます！' },
+            buildMessage('flex', JSON.stringify({ type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'button', action: { type: 'uri', label: '郵送修理ご依頼フォーム', uri: MAIL_REPAIR_FORM_URL }, style: 'primary', height: 'sm', color: '#00B900' }] } })),
+          ]);
+        } else if (type === 'store') {
+          await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildStoreSelectFlex())]);
+        } else {
+          await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildConsultCategoryFlex())]);
+        }
+      } catch (err) { console.error('repair msg request_type:', err); }
+      return;
+    }
+
+    // 店舗選択
+    {
+      const store = (STORES as readonly { key: string; shortName: string; name: string; zip: string; address: string; tel: string; hours: string; reservationUrl: string }[]).find(s => s.shortName === incomingText);
+      if (store) {
+        await setFriendAttribute(db, friend.id, 'repair_store', store.shortName);
+        const storeInfoText = `${store.shortName}での店頭修理をご希望ですね！✨\n下記店舗情報となります🙇‍♂️\n\n${store.name}\n住所：\n${store.zip}\n${store.address}\n電話番号：${store.tel}\n営業時間：${store.hours}\n\nご来店のご予約は下記のボタンからお進みください！`;
+        try {
+          await lineClient.replyMessage(event.replyToken, [
+            { type: 'text', text: storeInfoText },
+            buildMessage('flex', JSON.stringify({ type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'button', action: { type: 'uri', label: '来店予約する', uri: store.reservationUrl }, style: 'primary', height: 'sm', color: '#00B900' }] } })),
+          ]);
+        } catch (err) { console.error('repair msg select_store:', err); }
+        return;
+      }
+      if (incomingText === '該当店舗なし') {
+        try { await lineClient.replyMessage(event.replyToken, [{ type: 'text', text: 'ご希望の店舗が見つからない場合は、お気軽にご相談ください。' }]); } catch (err) { console.error('repair msg no store:', err); }
+        return;
+      }
+    }
+
+    // 質問カテゴリ
+    if (CONSULT_CATEGORY_MAP[incomingText]) {
+      const category = CONSULT_CATEGORY_MAP[incomingText];
+      await setFriendAttribute(db, friend.id, 'repair_faq_category', category);
+      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildFaqListFlex(category))]); } catch (err) { console.error('repair msg consult_category:', err); }
+      return;
+    }
+    if (incomingText === '電話/チャットで相談する') {
+      try { await lineClient.replyMessage(event.replyToken, [{ type: 'text', text: CONSULT_PHONE_TEXT }]); } catch (err) { console.error('repair msg consult_phone:', err); }
+      return;
+    }
+
+    // FAQ質問 (現在のカテゴリ優先で検索)
+    {
+      const faqCategory = (await getFriendAttribute(db, friend.id, 'repair_faq_category')) ?? '';
+      const categoriesToSearch = faqCategory
+        ? [faqCategory, ...Object.keys(CONSULT_FAQS).filter(k => k !== faqCategory)]
+        : Object.keys(CONSULT_FAQS);
+      let matchedFaq: FaqEntry | null = null;
+      for (const cat of categoriesToSearch) {
+        const entry = CONSULT_FAQS[cat]?.questions.find(faq => faq.q === incomingText);
+        if (entry) { matchedFaq = entry; break; }
+      }
+      if (matchedFaq) {
+        try {
+          if (matchedFaq.special === 'store_select') {
+            await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildStoreSelectFlex())]);
+          } else if (matchedFaq.special === 'phone') {
+            await lineClient.replyMessage(event.replyToken, [{ type: 'text', text: CONSULT_PHONE_TEXT }]);
+          } else {
+            const footerContents: unknown[] = [];
+            if (matchedFaq.special === 'reservation_button') footerContents.push({ type: 'button', action: { type: 'uri', label: '来店予約する', uri: STORE_RESERVATION_URL_GENERAL }, style: 'primary', height: 'sm', color: '#00B900' });
+            else if (matchedFaq.special === 'privacy_policy') footerContents.push({ type: 'button', action: { type: 'uri', label: '利用規約・プライバシーポリシー', uri: PRIVACY_POLICY_URL }, style: 'primary', height: 'sm', color: '#00B900' });
+            const bubble: Record<string, unknown> = {
+              type: 'bubble',
+              header: { type: 'box', layout: 'vertical', paddingAll: '16px', backgroundColor: '#1e3a5f', contents: [{ type: 'text', text: matchedFaq.q, color: '#ffffff', weight: 'bold', size: 'sm', wrap: true }] },
+              body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'text', text: matchedFaq.a, size: 'sm', color: '#333333', wrap: true }] },
+            };
+            if (footerContents.length > 0) bubble.footer = { type: 'box', layout: 'vertical', paddingAll: '16px', contents: footerContents };
+            await lineClient.replyMessage(event.replyToken, [buildMessage('flex', JSON.stringify(bubble))]);
+          }
+        } catch (err) { console.error('repair msg faq_question:', err); }
+        return;
+      }
+    }
+    // ===== End repair flow =====
+
+    // チャットを作成/更新（ボタンタップでない実際のユーザーメッセージのみ）
+    if (!isAutoKeyword && !isTimeCommand) {
+      await upsertChatOnMessage(db, friend.id);
     }
 
     // 自動返信チェック（このアカウントのルール + グローバルルールのみ）
