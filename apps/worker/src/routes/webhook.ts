@@ -84,6 +84,115 @@ webhook.post('/webhook', async (c) => {
   return c.json({ status: 'ok' }, 200);
 });
 
+// ---- Repair Flow Constants ----
+
+const MAIL_REPAIR_FORM_URL = 'https://forms.gle/XXXXXXXXXXXXXXXX';
+
+const STORES = [
+  {
+    key: 'gotanda',
+    shortName: '五反田店',
+    name: 'リペアマスター五反田店',
+    zip: '〒141-0031',
+    address: '東京都品川区西五反田1丁目33-10 西五反田サインタワー9F',
+    tel: '0120-025-088',
+    hours: '10:00~20:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+  {
+    key: 'kinshicho',
+    shortName: '錦糸町店',
+    name: 'リペアマスター錦糸町店',
+    zip: '〒130-0013',
+    address: '東京都墨田区錦糸3丁目3-3 錦糸ビル内3階',
+    tel: '03-5637-8797',
+    hours: '10:00~19:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+  {
+    key: 'narita',
+    shortName: '成田店',
+    name: 'リペアマスター成田店',
+    zip: '〒286-0029',
+    address: '千葉県成田市ウイング土屋24 イオンモール成田店内1F',
+    tel: '070-1595-6404',
+    hours: '10:00~20:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+  {
+    key: 'makuhari',
+    shortName: '幕張店',
+    name: 'リペアマスター幕張店',
+    zip: '〒262-0032',
+    address: '千葉県千葉市花見川区幕張町4丁目417-25 イトーヨーカドー幕張店内1F',
+    tel: '070-3209-9235',
+    hours: '10:00~19:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+  {
+    key: 'shobu',
+    shortName: '菖蒲店',
+    name: 'リペアマスター菖蒲店',
+    zip: '〒346-0106',
+    address: '埼玉県久喜市菖蒲町菖蒲6005-1 モラージュ菖蒲内1F',
+    tel: '070-1271-7186',
+    hours: '10:00~19:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+  {
+    key: 'gifu',
+    shortName: '岐阜店',
+    name: 'リペアマスター岐阜店',
+    zip: '〒501-0497',
+    address: '岐阜県本巣市三橋1100 モレラ岐阜2F',
+    tel: '070-3131-6181',
+    hours: '10:00~19:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+  {
+    key: 'utsunomiya',
+    shortName: '宇都宮店',
+    name: 'リペアマスターベルモール宇都宮店',
+    zip: '〒321-8555',
+    address: '栃木県宇都宮市陽東6丁目2-1 ベルモール内2F ダイワンテレコム内',
+    tel: '070-1307-5363',
+    hours: '10:00~19:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+  {
+    key: 'aomori',
+    shortName: '青森店',
+    name: 'リペアマスター青森店',
+    zip: '〒030-0845',
+    address: '青森県青森市緑3丁目9-2 サンロード青森内2F',
+    tel: '070-3209-7849',
+    hours: '10:00~19:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+  {
+    key: 'morioka',
+    shortName: '盛岡店',
+    name: 'リペアマスター盛岡店',
+    zip: '〒020-0034',
+    address: '岩手県盛岡市盛岡駅前通1-44 フェザン本館内1F',
+    tel: '080-3918-7346',
+    hours: '10:00~19:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+  {
+    key: 'oita',
+    shortName: '大分店',
+    name: 'リペアマスター大分店',
+    zip: '〒870-1155',
+    address: '大分県大分市玉沢楠本755-1 トキハわさだタウン3街区1階',
+    tel: '070-1261-6924',
+    hours: '10:00~18:30',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+] as const;
+
+type Store = typeof STORES[number];
+
 // ---- Repair Flow Flex builders ----
 
 function buildProductSelectFlex(): string {
@@ -232,6 +341,42 @@ function buildInchSelectFlex(): string {
       ],
     },
   });
+}
+
+function buildStoreSelectFlex(): string {
+  const chunkSize = 5;
+  const bubbles = [];
+  for (let i = 0; i < STORES.length; i += chunkSize) {
+    const chunk = STORES.slice(i, i + chunkSize);
+    const isLast = i + chunkSize >= STORES.length;
+    bubbles.push({
+      type: 'bubble',
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+        contents: [
+          { type: 'text', text: '店舗を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
+          { type: 'separator', margin: 'lg' },
+          {
+            type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
+            contents: [
+              ...chunk.map((s) => ({
+                type: 'button',
+                action: { type: 'postback', label: s.shortName, data: `action=select_store&store_key=${s.key}` },
+                style: 'primary',
+                color: '#00B900',
+              })),
+              ...(isLast ? [{
+                type: 'button',
+                action: { type: 'postback', label: '該当店舗なし', data: 'action=select_store&store_key=none' },
+                style: 'secondary',
+              }] : []),
+            ],
+          },
+        ],
+      },
+    });
+  }
+  return JSON.stringify({ type: 'carousel', contents: bubbles });
 }
 
 async function buildSymptomSelectFlex(db: D1Database, productId: string): Promise<string> {
@@ -782,18 +927,79 @@ async function handleEvent(
       if (type && quoteId) {
         await updateRepairQuoteRequestType(db, quoteId, type);
       }
-      const labelMap: Record<string, string> = {
-        mail:    '郵送での修理依頼',
-        store:   '店舗持込での修理依頼',
-        consult: 'ご質問・ご相談',
-      };
-      const label = type ? (labelMap[type] ?? 'お問い合わせ') : 'お問い合わせ';
+
       try {
-        await lineClient.replyMessage(event.replyToken, [
-          { type: 'text', text: `${label}を承りました。担当者よりご連絡いたしますので、しばらくお待ちください。` },
-        ]);
+        if (type === 'mail') {
+          await lineClient.replyMessage(event.replyToken, [
+            { type: 'text', text: '下記ボタンよりお申し込みをよろしくお願い申し上げます！' },
+            buildMessage('flex', JSON.stringify({
+              type: 'bubble',
+              body: {
+                type: 'box', layout: 'vertical', paddingAll: '20px',
+                contents: [
+                  { type: 'button', action: { type: 'uri', label: '郵送修理ご依頼フォーム', uri: MAIL_REPAIR_FORM_URL }, style: 'primary', color: '#00B900' },
+                ],
+              },
+            })),
+          ]);
+        } else if (type === 'store') {
+          await lineClient.replyMessage(event.replyToken, [
+            buildMessage('flex', buildStoreSelectFlex()),
+          ]);
+        } else {
+          await lineClient.replyMessage(event.replyToken, [
+            { type: 'text', text: 'ご質問・ご相談を承りました。担当者よりご連絡いたしますので、しばらくお待ちください。' },
+          ]);
+        }
       } catch (err) {
         console.error('Failed to reply for request_type:', err);
+      }
+      return;
+    }
+
+    if (action === 'select_store') {
+      const storeKey = params.get('store_key') ?? '';
+
+      if (storeKey === 'none') {
+        try {
+          await lineClient.replyMessage(event.replyToken, [
+            { type: 'text', text: 'ご希望の店舗が見つからない場合は、お気軽にご相談ください。' },
+          ]);
+        } catch (err) {
+          console.error('Failed to reply for no store:', err);
+        }
+        return;
+      }
+
+      const store = STORES.find((s) => s.key === storeKey);
+      if (!store) return;
+
+      await setFriendAttribute(db, friend.id, 'repair_store', store.shortName);
+
+      const storeInfoText =
+        `${store.shortName}での店頭修理をご希望ですね！✨\n` +
+        `下記店舗情報となります🙇‍♂️\n\n` +
+        `${store.name}\n` +
+        `住所：\n${store.zip}\n${store.address}\n` +
+        `電話番号：${store.tel}\n` +
+        `営業時間：${store.hours}\n\n` +
+        `ご来店のご予約は下記のボタンからお進みください！`;
+
+      try {
+        await lineClient.replyMessage(event.replyToken, [
+          { type: 'text', text: storeInfoText },
+          buildMessage('flex', JSON.stringify({
+            type: 'bubble',
+            body: {
+              type: 'box', layout: 'vertical', paddingAll: '20px',
+              contents: [
+                { type: 'button', action: { type: 'uri', label: '来店予約する', uri: store.reservationUrl }, style: 'primary', color: '#00B900' },
+              ],
+            },
+          })),
+        ]);
+      } catch (err) {
+        console.error('Failed to reply for store selection:', err);
       }
       return;
     }
