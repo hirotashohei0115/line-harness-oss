@@ -189,6 +189,26 @@ const STORES = [
     hours: '10:00~18:30',
     reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
   },
+  {
+    key: 'kizugawa',
+    shortName: '木津川店',
+    name: 'リペアマスター木津川店',
+    zip: '〒619-0216',
+    address: '京都府木津川市州見台1丁目1-1-1 ガーデンモール木津川1階',
+    tel: '070-6922-8143',
+    hours: '10:00~20:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
+  {
+    key: 'nagaoka',
+    shortName: '長岡店',
+    name: 'リペアマスター長岡リバーサイド千秋店',
+    zip: '〒940-2108',
+    address: '新潟県長岡市千秋2丁目278 リバーサイド千秋2階',
+    tel: '070-3229-5869',
+    hours: '10:00~20:00',
+    reservationUrl: 'https://forms.gle/XXXXXXXXXXXXXXXX',
+  },
 ] as const;
 
 type Store = typeof STORES[number];
