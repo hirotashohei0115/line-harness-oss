@@ -538,6 +538,19 @@ async function buildSymptomSelectFlex(db: D1Database, productId: string): Promis
   });
 }
 
+function getSymptomImageUrl(symptom: string): string {
+  if (symptom.includes('画面割れ') || symptom.includes('液晶')) {
+    return 'https://drive.google.com/uc?export=view&id=19hYbtHjdQs1gGyaRg48hsP7aouSJ6-aF';
+  }
+  if (symptom.includes('バッテリー') || symptom.includes('充電')) {
+    return 'https://drive.google.com/uc?export=view&id=1uBpEGDAGu3TmEC4IEiqhTJYmhqt-fCiU';
+  }
+  if (symptom.includes('電源')) {
+    return 'https://drive.google.com/uc?export=view&id=1KAM3V-r3dYHg6JyK-ZD9rjpgiMJmd1Pg';
+  }
+  return 'https://drive.google.com/uc?export=view&id=1o0qKfvHDWWGoKSv2e95XX-ccPhfXBLX2';
+}
+
 function buildQuoteFlex(params: {
   productName: string;
   symptomName: string;
@@ -1094,7 +1107,9 @@ async function handleEvent(
           deliveryDaysTo: deliveryTo,
         });
         await setFriendAttribute(db, friend.id, 'repair_quote_id', quote.id);
+        const symptomImageUrl = getSymptomImageUrl(symptomName);
         await lineClient.replyMessage(event.replyToken, [
+          { type: 'image', originalContentUrl: symptomImageUrl, previewImageUrl: symptomImageUrl },
           buildMessage('flex', buildQuoteFlex({
             productName,
             symptomName,
