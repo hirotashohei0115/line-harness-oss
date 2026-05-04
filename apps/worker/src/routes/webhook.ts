@@ -278,7 +278,7 @@ function buildProductSelectFlex(): string {
   return JSON.stringify({
     type: 'bubble',
     body: {
-      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px',
       contents: [
         { type: 'text', text: '機種を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
         { type: 'text', text: 'お手持ちのMacBookの種類をお選びください', size: 'sm', color: '#64748b', wrap: true, margin: 'md' },
@@ -286,9 +286,9 @@ function buildProductSelectFlex(): string {
         {
           type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
           contents: [
-            { type: 'button', action: { type: 'postback', label: 'MacBook Air', data: 'action=select_product&product=air&name=MacBook%20Air' }, style: 'primary', color: '#00B900' },
-            { type: 'button', action: { type: 'postback', label: 'MacBook Pro', data: 'action=select_product&product=pro&name=MacBook%20Pro' }, style: 'primary', color: '#00B900', margin: 'sm' },
-            { type: 'button', action: { type: 'postback', label: 'その他', data: 'action=select_product&product=other&name=%E3%81%9D%E3%81%AE%E4%BB%96' }, style: 'secondary', margin: 'sm' },
+            { type: 'button', action: { type: 'postback', label: 'MacBook Air', data: 'action=select_product&product=air&name=MacBook%20Air' }, style: 'primary', height: 'sm', color: '#00B900' },
+            { type: 'button', action: { type: 'postback', label: 'MacBook Pro', data: 'action=select_product&product=pro&name=MacBook%20Pro' }, style: 'primary', height: 'sm', color: '#00B900', margin: 'sm' },
+            { type: 'button', action: { type: 'postback', label: 'その他', data: 'action=select_product&product=other&name=%E3%81%9D%E3%81%AE%E4%BB%96' }, style: 'secondary', height: 'sm', margin: 'sm' },
           ],
         },
       ],
@@ -300,7 +300,7 @@ function buildModelMethodFlex(productName: string, productKey: string): string {
   return JSON.stringify({
     type: 'bubble',
     body: {
-      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px',
       contents: [
         { type: 'text', text: productName, weight: 'bold', size: 'lg', color: '#1e293b' },
         { type: 'text', text: 'モデルの特定方法をお選びください', size: 'sm', color: '#64748b', wrap: true, margin: 'md' },
@@ -308,9 +308,9 @@ function buildModelMethodFlex(productName: string, productKey: string): string {
         {
           type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
           contents: [
-            { type: 'button', action: { type: 'postback', label: 'モデル名で選ぶ', data: `action=choose_model_method&product_key=${productKey}` }, style: 'primary', color: '#00B900' },
-            { type: 'button', action: { type: 'postback', label: '年式で選ぶ', data: 'action=choose_year_method' }, style: 'primary', color: '#00B900', margin: 'sm' },
-            { type: 'button', action: { type: 'postback', label: 'わからない', data: 'action=skip_model' }, style: 'secondary', margin: 'sm' },
+            { type: 'button', action: { type: 'postback', label: 'モデル名で選ぶ', data: `action=choose_model_method&product_key=${productKey}` }, style: 'primary', height: 'sm', color: '#00B900' },
+            { type: 'button', action: { type: 'postback', label: '年式で選ぶ', data: 'action=choose_year_method' }, style: 'primary', height: 'sm', color: '#00B900', margin: 'sm' },
+            { type: 'button', action: { type: 'postback', label: 'わからない', data: 'action=skip_model' }, style: 'secondary', height: 'sm', margin: 'sm' },
           ],
         },
       ],
@@ -328,6 +328,7 @@ function buildModelSelectFlex(productKey: string): string {
     type: 'button',
     action: { type: 'postback', label: 'その他・分からない', data: 'action=select_model&model_name=%E3%81%9D%E3%81%AE%E4%BB%96' },
     style: 'secondary',
+    height: 'sm',
   };
 
   // Split into bubbles of 4 buttons each to stay within LINE's rendering limit
@@ -341,7 +342,7 @@ function buildModelSelectFlex(productKey: string): string {
     return {
       type: 'bubble',
       body: {
-        type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px',
         contents: [
           { type: 'text', text: 'モデル番号を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
           { type: 'separator', margin: 'lg' },
@@ -352,6 +353,7 @@ function buildModelSelectFlex(productKey: string): string {
                 type: 'button',
                 action: { type: 'postback', label: m, data: `action=select_model&model_name=${encodeURIComponent(m)}` },
                 style: 'primary',
+                height: 'sm',
                 color: '#00B900',
               })),
               ...(isLast ? [otherButton] : []),
@@ -371,7 +373,7 @@ function buildYearSelectFlex(): string {
   const makeBubble = (years: number[], includeOther: boolean) => ({
     type: 'bubble',
     body: {
-      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px',
       contents: [
         { type: 'text', text: '年式を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
         { type: 'separator', margin: 'lg' },
@@ -382,9 +384,10 @@ function buildYearSelectFlex(): string {
               type: 'button',
               action: { type: 'postback', label: `${y}年`, data: `action=select_year&year=${y}` },
               style: 'primary',
+              height: 'sm',
               color: '#00B900',
             })),
-            ...(includeOther ? [{ type: 'button', action: { type: 'postback', label: 'その他の年式', data: 'action=select_year&year=0' }, style: 'secondary' }] : []),
+            ...(includeOther ? [{ type: 'button', action: { type: 'postback', label: 'その他の年式', data: 'action=select_year&year=0' }, style: 'secondary', height: 'sm' }] : []),
           ],
         },
       ],
@@ -401,7 +404,7 @@ function buildInchSelectFlex(): string {
   return JSON.stringify({
     type: 'bubble',
     body: {
-      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px',
       contents: [
         { type: 'text', text: 'インチ数を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
         { type: 'separator', margin: 'lg' },
@@ -412,9 +415,10 @@ function buildInchSelectFlex(): string {
               type: 'button',
               action: { type: 'postback', label: s, data: `action=select_inch&inch=${encodeURIComponent(s)}` },
               style: 'primary',
+              height: 'sm',
               color: '#00B900',
             })),
-            { type: 'button', action: { type: 'postback', label: 'その他・分からない', data: 'action=select_inch&inch=%E3%81%9D%E3%81%AE%E4%BB%96' }, style: 'secondary' },
+            { type: 'button', action: { type: 'postback', label: 'その他・分からない', data: 'action=select_inch&inch=%E3%81%9D%E3%81%AE%E4%BB%96' }, style: 'secondary', height: 'sm' },
           ],
         },
       ],
@@ -431,7 +435,7 @@ function buildStoreSelectFlex(): string {
     bubbles.push({
       type: 'bubble',
       body: {
-        type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px',
         contents: [
           { type: 'text', text: '店舗を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
           { type: 'separator', margin: 'lg' },
@@ -442,12 +446,14 @@ function buildStoreSelectFlex(): string {
                 type: 'button',
                 action: { type: 'postback', label: s.shortName, data: `action=select_store&store_key=${s.key}` },
                 style: 'primary',
+                height: 'sm',
                 color: '#00B900',
               })),
               ...(isLast ? [{
                 type: 'button',
                 action: { type: 'postback', label: '該当店舗なし', data: 'action=select_store&store_key=none' },
                 style: 'secondary',
+                height: 'sm',
               }] : []),
             ],
           },
@@ -462,7 +468,7 @@ function buildConsultCategoryFlex(): string {
   return JSON.stringify({
     type: 'bubble',
     body: {
-      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px',
       contents: [
         { type: 'text', text: 'ご質問・ご相談', weight: 'bold', size: 'lg', color: '#1e293b' },
         { type: 'text', text: 'カテゴリをお選びください', size: 'sm', color: '#64748b', margin: 'md' },
@@ -470,11 +476,11 @@ function buildConsultCategoryFlex(): string {
         {
           type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
           contents: [
-            { type: 'button', action: { type: 'postback', label: '郵送修理に関する質問', data: 'action=consult_category&category=mail' }, style: 'secondary' },
-            { type: 'button', action: { type: 'postback', label: '店頭修理に関する質問', data: 'action=consult_category&category=store' }, style: 'secondary' },
-            { type: 'button', action: { type: 'postback', label: '修理端末に関する質問', data: 'action=consult_category&category=device' }, style: 'secondary' },
-            { type: 'button', action: { type: 'postback', label: 'その他の質問', data: 'action=consult_category&category=other' }, style: 'secondary' },
-            { type: 'button', action: { type: 'postback', label: '電話/チャットで相談する', data: 'action=consult_phone' }, style: 'primary', color: '#00B900' },
+            { type: 'button', action: { type: 'postback', label: '郵送修理に関する質問', data: 'action=consult_category&category=mail' }, style: 'secondary', height: 'sm' },
+            { type: 'button', action: { type: 'postback', label: '店頭修理に関する質問', data: 'action=consult_category&category=store' }, style: 'secondary', height: 'sm' },
+            { type: 'button', action: { type: 'postback', label: '修理端末に関する質問', data: 'action=consult_category&category=device' }, style: 'secondary', height: 'sm' },
+            { type: 'button', action: { type: 'postback', label: 'その他の質問', data: 'action=consult_category&category=other' }, style: 'secondary', height: 'sm' },
+            { type: 'button', action: { type: 'postback', label: '電話/チャットで相談する', data: 'action=consult_phone' }, style: 'primary', height: 'sm', color: '#00B900' },
           ],
         },
       ],
@@ -488,7 +494,7 @@ function buildFaqListFlex(category: string): string {
   return JSON.stringify({
     type: 'bubble',
     body: {
-      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px',
       contents: [
         { type: 'text', text: cat.label, weight: 'bold', size: 'lg', color: '#1e293b', wrap: true },
         { type: 'separator', margin: 'lg' },
@@ -498,6 +504,7 @@ function buildFaqListFlex(category: string): string {
             type: 'button',
             action: { type: 'postback', label: faq.q, data: `action=faq_question&category=${category}&idx=${idx}` },
             style: 'secondary',
+            height: 'sm',
           })),
         },
       ],
@@ -510,7 +517,7 @@ async function buildSymptomSelectFlex(db: D1Database, productId: string): Promis
   return JSON.stringify({
     type: 'bubble',
     body: {
-      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px',
       contents: [
         { type: 'text', text: '症状を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
         { type: 'separator', margin: 'lg' },
@@ -520,6 +527,7 @@ async function buildSymptomSelectFlex(db: D1Database, productId: string): Promis
             type: 'button',
             action: { type: 'postback', label: s.name, data: `action=select_symptom&symptom_id=${s.id}&symptom_name=${encodeURIComponent(s.name)}` },
             style: 'primary',
+            height: 'sm',
             color: '#00B900',
           })),
         },
@@ -550,7 +558,7 @@ function buildQuoteFlex(params: {
       contents: [{ type: 'text', text: '修理見積り', color: '#ffffff', weight: 'bold', size: 'xl' }],
     },
     body: {
-      type: 'box', layout: 'vertical', paddingAll: '20px', spacing: 'md',
+      type: 'box', layout: 'vertical', paddingAll: '20px', spacing: 'sm',
       contents: [
         { type: 'box', layout: 'horizontal', contents: [
           { type: 'text', text: '機種', size: 'sm', color: '#64748b', flex: 2 },
@@ -575,9 +583,9 @@ function buildQuoteFlex(params: {
     footer: {
       type: 'box', layout: 'vertical', paddingAll: '16px', spacing: 'sm',
       contents: [
-        { type: 'button', action: { type: 'postback', label: '郵送で依頼する', data: `action=request_type&type=mail&quote_id=${params.quoteId}` }, style: 'primary', color: '#00B900' },
-        { type: 'button', action: { type: 'postback', label: '店舗に持込む', data: `action=request_type&type=store&quote_id=${params.quoteId}` }, style: 'primary', color: '#00B900' },
-        { type: 'button', action: { type: 'postback', label: '質問・相談したい', data: `action=request_type&type=consult&quote_id=${params.quoteId}` }, style: 'secondary' },
+        { type: 'button', action: { type: 'postback', label: '郵送で依頼する', data: `action=request_type&type=mail&quote_id=${params.quoteId}` }, style: 'primary', height: 'sm', color: '#00B900' },
+        { type: 'button', action: { type: 'postback', label: '店舗に持込む', data: `action=request_type&type=store&quote_id=${params.quoteId}` }, style: 'primary', height: 'sm', color: '#00B900' },
+        { type: 'button', action: { type: 'postback', label: '質問・相談したい', data: `action=request_type&type=consult&quote_id=${params.quoteId}` }, style: 'secondary', height: 'sm' },
       ],
     },
   });
@@ -795,8 +803,8 @@ async function handleEvent(
               },
               footer: { type: 'box', layout: 'vertical', paddingAll: '16px',
                 contents: [
-                  { type: 'button', action: { type: 'message', label: '導入について相談する', text: '導入支援を希望します' }, style: 'primary', color: '#06C755' },
-                  ...(c.env.LIFF_URL ? [{ type: 'button', action: { type: 'uri', label: 'フィードバックを送る', uri: `${c.env.LIFF_URL}?page=form` }, style: 'secondary', margin: 'sm' }] : []),
+                  { type: 'button', action: { type: 'message', label: '導入について相談する', text: '導入支援を希望します' }, style: 'primary', height: 'sm', color: '#06C755' },
+                  ...(c.env.LIFF_URL ? [{ type: 'button', action: { type: 'uri', label: 'フィードバックを送る', uri: `${c.env.LIFF_URL}?page=form` }, style: 'secondary', height: 'sm', margin: 'sm' }] : []),
                 ],
               },
             }))]);
@@ -1063,7 +1071,7 @@ async function handleEvent(
               body: {
                 type: 'box', layout: 'vertical', paddingAll: '20px',
                 contents: [
-                  { type: 'button', action: { type: 'uri', label: '郵送修理ご依頼フォーム', uri: MAIL_REPAIR_FORM_URL }, style: 'primary', color: '#00B900' },
+                  { type: 'button', action: { type: 'uri', label: '郵送修理ご依頼フォーム', uri: MAIL_REPAIR_FORM_URL }, style: 'primary', height: 'sm', color: '#00B900' },
                 ],
               },
             })),
@@ -1119,7 +1127,7 @@ async function handleEvent(
             body: {
               type: 'box', layout: 'vertical', paddingAll: '20px',
               contents: [
-                { type: 'button', action: { type: 'uri', label: '来店予約する', uri: store.reservationUrl }, style: 'primary', color: '#00B900' },
+                { type: 'button', action: { type: 'uri', label: '来店予約する', uri: store.reservationUrl }, style: 'primary', height: 'sm', color: '#00B900' },
               ],
             },
           })),
@@ -1186,13 +1194,13 @@ async function handleEvent(
             footerContents.push({
               type: 'button',
               action: { type: 'uri', label: '来店予約する', uri: STORE_RESERVATION_URL_GENERAL },
-              style: 'primary', color: '#00B900',
+              style: 'primary', height: 'sm', color: '#00B900',
             });
           } else if (faq.special === 'privacy_policy') {
             footerContents.push({
               type: 'button',
               action: { type: 'uri', label: '利用規約・プライバシーポリシー', uri: PRIVACY_POLICY_URL },
-              style: 'primary', color: '#00B900',
+              style: 'primary', height: 'sm', color: '#00B900',
             });
           }
           const bubble: Record<string, unknown> = {
