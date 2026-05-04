@@ -231,3 +231,44 @@ INSERT OR IGNORE INTO repair_model_prices (id, model_number, product_type, year,
   ((lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-'||substr('89ab',abs(random())%4+1,1)||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6)))), 'A1932', 'air', 2019, 13.0, '異音がする', 26500),
   ((lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-'||substr('89ab',abs(random())%4+1,1)||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6)))), 'A1989', 'pro', 2018, 13.0, '異音がする', 26500),
   ((lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-'||substr('89ab',abs(random())%4+1,1)||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6)))), 'A1706', 'pro', 2017, 13.0, '異音がする', 26500);
+
+-- ============================================================
+-- delivery_days を各レコードに設定
+-- ============================================================
+
+-- 画面割れ・液晶不良
+UPDATE repair_model_prices SET delivery_days = '2週間'
+  WHERE symptom = '画面割れ・液晶不良' AND inch_size IN (16.0, 15.0);
+
+UPDATE repair_model_prices SET delivery_days = '1週間'
+  WHERE symptom = '画面割れ・液晶不良' AND inch_size = 14.0;
+
+UPDATE repair_model_prices SET delivery_days = '1週間'
+  WHERE symptom = '画面割れ・液晶不良' AND inch_size = 13.0 AND year >= 2020;
+
+UPDATE repair_model_prices SET delivery_days = '2週間'
+  WHERE symptom = '画面割れ・液晶不良' AND inch_size = 13.0 AND year < 2020;
+
+-- バッテリー劣化（NULLのものはNULL=デフォルト値のまま）
+UPDATE repair_model_prices SET delivery_days = '3〜7日'
+  WHERE symptom = 'バッテリー劣化' AND price IS NOT NULL;
+
+-- 充電できない（NULLのものはNULL）
+UPDATE repair_model_prices SET delivery_days = '3〜7日'
+  WHERE symptom = '充電できない' AND price IS NOT NULL;
+
+-- キーボード故障（NULLのものはNULL）
+UPDATE repair_model_prices SET delivery_days = '1週間'
+  WHERE symptom = 'キーボード故障' AND price IS NOT NULL;
+
+-- 電源がつかない（全モデル）
+UPDATE repair_model_prices SET delivery_days = '1〜2週間'
+  WHERE symptom = '電源がつかない';
+
+-- 水没・飲み物こぼした（全モデル）
+UPDATE repair_model_prices SET delivery_days = '1〜2週間'
+  WHERE symptom = '水没・飲み物こぼした';
+
+-- 異音がする（全モデル）
+UPDATE repair_model_prices SET delivery_days = '1週間'
+  WHERE symptom = '異音がする';

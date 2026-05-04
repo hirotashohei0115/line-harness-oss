@@ -244,16 +244,22 @@ export async function getFriendAttribute(
 
 // ---- Repair Model Prices ----
 
+export interface RepairModelPriceRow {
+  price: number | null;
+  delivery_days: string | null;
+  model_number: string;
+}
+
 export async function getRepairModelPrice(
   db: D1Database,
   modelNumber: string,
   symptom: string,
-): Promise<number | null> {
+): Promise<RepairModelPriceRow | null> {
   const row = await db
-    .prepare(`SELECT price FROM repair_model_prices WHERE model_number = ? AND symptom = ? LIMIT 1`)
+    .prepare(`SELECT price, delivery_days, model_number FROM repair_model_prices WHERE model_number = ? AND symptom = ? LIMIT 1`)
     .bind(modelNumber, symptom)
-    .first<{ price: number | null }>();
-  return row?.price ?? null;
+    .first<RepairModelPriceRow>();
+  return row ?? null;
 }
 
 export async function getRepairPriceByYearInch(
@@ -262,14 +268,14 @@ export async function getRepairPriceByYearInch(
   year: number,
   inchSize: number,
   symptom: string,
-): Promise<{ price: number | null; modelNumber: string } | null> {
+): Promise<RepairModelPriceRow | null> {
   const row = await db
     .prepare(
-      `SELECT price, model_number FROM repair_model_prices
+      `SELECT price, delivery_days, model_number FROM repair_model_prices
        WHERE product_type = ? AND year = ? AND inch_size = ? AND symptom = ?
        LIMIT 1`,
     )
     .bind(productType, year, inchSize, symptom)
-    .first<{ price: number | null; modelNumber: string }>();
+    .first<RepairModelPriceRow>();
   return row ?? null;
 }

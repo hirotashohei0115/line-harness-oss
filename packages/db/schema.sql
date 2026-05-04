@@ -651,12 +651,16 @@ CREATE TABLE IF NOT EXISTS repair_model_prices (
   product_type TEXT NOT NULL CHECK (product_type IN ('air', 'pro', 'other')),
   year         INTEGER NOT NULL,
   inch_size    REAL NOT NULL,
-  symptom      TEXT NOT NULL,
-  price        INTEGER,
-  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+  symptom       TEXT NOT NULL,
+  price         INTEGER,
+  delivery_days TEXT,
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_repair_model_prices_model ON repair_model_prices (model_number);
 CREATE INDEX IF NOT EXISTS idx_repair_model_prices_symptom ON repair_model_prices (symptom);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_repair_model_prices_unique ON repair_model_prices (model_number, symptom);
+
+-- Migration: add delivery_days to existing repair_model_prices tables
+ALTER TABLE repair_model_prices ADD COLUMN delivery_days TEXT;

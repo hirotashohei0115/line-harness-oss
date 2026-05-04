@@ -545,6 +545,7 @@ function buildQuoteFlex(params: {
   priceTo: number | null;
   deliveryFrom: number | null;
   deliveryTo: number | null;
+  deliveryDays?: string | null;
   quoteId: string;
   modelName?: string | null;
   year?: number | null;
@@ -555,7 +556,9 @@ function buildQuoteFlex(params: {
     : params.priceTo
     ? `¥${params.priceFrom.toLocaleString()}〜¥${params.priceTo.toLocaleString()}`
     : `¥${params.priceFrom.toLocaleString()}〜`;
-  const deliveryStr = params.deliveryFrom == null
+  const deliveryStr = params.deliveryDays != null
+    ? params.deliveryDays
+    : params.deliveryFrom == null
     ? 'お問い合わせください'
     : params.deliveryTo
     ? `${params.deliveryFrom}〜${params.deliveryTo}日`
@@ -1045,11 +1048,16 @@ async function handleEvent(
       let priceTo: number | null = null;
       let deliveryFrom: number | null = null;
       let deliveryTo: number | null = null;
+      let deliveryDays: string | null = null;
       let resolvedModelName: string | null = modelName ?? null;
 
       if (modelName) {
         // Model number flow: look up by model_number + symptom name
-        priceFrom = await getRepairModelPrice(db, modelName, symptomName);
+        const row = await getRepairModelPrice(db, modelName, symptomName);
+        if (row) {
+          priceFrom = row.price;
+          deliveryDays = row.delivery_days;
+        }
       } else if (yearStr && inchSize) {
         // Year+inch flow: look up by product_type + year + inch + symptom name
         const productType = productName.toLowerCase().includes('air') ? 'air'
@@ -1058,7 +1066,8 @@ async function handleEvent(
         const row = await getRepairPriceByYearInch(db, productType, parseInt(yearStr, 10), inchFloat, symptomName);
         if (row) {
           priceFrom = row.price;
-          resolvedModelName = row.modelNumber;
+          deliveryDays = row.delivery_days;
+          resolvedModelName = row.model_number;
         }
       } else {
         // Fallback: use generic repair_prices table
@@ -1092,6 +1101,7 @@ async function handleEvent(
             priceTo,
             deliveryFrom,
             deliveryTo,
+            deliveryDays,
             quoteId: quote.id,
             modelName: resolvedModelName,
             year: yearStr ? parseInt(yearStr, 10) : null,
