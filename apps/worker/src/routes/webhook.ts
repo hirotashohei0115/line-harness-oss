@@ -87,6 +87,10 @@ webhook.post('/webhook', async (c) => {
 // ---- Repair Flow Constants ----
 
 const MAIL_REPAIR_FORM_URL = 'https://forms.gle/XXXXXXXXXXXXXXXX';
+const STORE_RESERVATION_URL_GENERAL = 'https://forms.gle/XXXXXXXXXXXXXXXX';
+const PRIVACY_POLICY_URL = 'https://forms.gle/XXXXXXXXXXXXXXXX';
+const CONSULT_PHONE_TEXT =
+  '【電話・LINE相談のご案内】\nお問い合わせありがとうございます！\n\nお急ぎの方は下記電話番号までご連絡ください\n👉070-1391-9861\n（受付時間：10時〜20時）\n\nLINEでのご相談をご希望の場合は\nこのままご質問・ご相談内容をご記入のうえご返信ください😆';
 
 const STORES = [
   {
@@ -212,6 +216,61 @@ const STORES = [
 ] as const;
 
 type Store = typeof STORES[number];
+
+// ---- FAQ Data ----
+
+type FaqSpecial = 'store_select' | 'phone' | 'reservation_button' | 'privacy_policy';
+interface FaqEntry { q: string; a: string; special?: FaqSpecial }
+interface FaqCategory { label: string; questions: FaqEntry[] }
+
+const CONSULT_FAQS: Record<string, FaqCategory> = {
+  mail: {
+    label: '郵送修理に関する質問',
+    questions: [
+      { q: '郵送修理の流れは？', a: '①LINEで仮見積もり＆お申込み\nLINEで機種や状態を送るとその場で仮見積もりが可能です！仮見積もりにご納得頂けましたら、そのまま修理依頼に進めます。\n②端末を発送\n端末を梱包して発送お願い致します。送料無料ですので着払いにてお送り下さい。\n③本見積もり\n端末の状態を確認させて頂き、本見積もりを出させて頂きます。料金にご納得頂けない場合はキャンセルも可能です。\n④修理＆ご返却\n本見積もりでご了承いただけた場合は修理致します！振込、WEBクレジットにてお支払い頂いた後にご返却となります。' },
+      { q: '郵送修理にかかる日数は？', a: '最短即日〜3日ほどで完了いたします。部品取り寄せが必要な場合は1週間前後かかることもございます。' },
+      { q: '梱包方法は？', a: '端末本体を緩衝材（ぷちぷち）などで包んで頂き、段ボールに入れて梱包をお願い致します。梱包した際に中身が動かないように隙間を埋めて頂けると安全に発送が可能です。' },
+      { q: '配送業者の指定はある？', a: '特に指定はございません。送料は弊社が負担致しますので着払いにてご発送をお願い致します。' },
+      { q: '送料はかかる？', a: '送料は弊社が負担致します。ご発送頂く際は着払いで、返送の際は元払いにて発送させて頂きます。' },
+      { q: 'データは消去される？', a: '基本的にはデータが消去される事はございません。データ消去が必要な際は必ずお客様にご了承を頂いてから作業を行いますのでご安心下さいませ。' },
+      { q: '支払い方法は？', a: '支払い方法は銀行振込とWEBクレジット決済の2つからお選び頂けます！郵送修理の場合はクレジットでの分割払いも可能です✨修理完了のご連絡と合わせてお支払い方法のご連絡を差し上げております。' },
+    ],
+  },
+  store: {
+    label: '店頭修理に関する質問',
+    questions: [
+      { q: '予約は必要？', a: '基本的にはご予約がなくても修理対応は可能でございます。ただし、LINEの仮見積もり料金は指定店舗でしか使用できませんので事前にご予約が必要となります。下記ボタンより来店予約をお願い致します。', special: 'reservation_button' },
+      { q: '修理にかかる日数は？', a: '最短即日〜3日ほどで完了いたします。部品取り寄せが必要な場合は1週間前後かかることもございます。' },
+      { q: '当日中に受け取り可能？', a: '修理内容によって異なりますが当日中の受け取りも可能でございます。事前にパーツの取り寄せを行い、パーツ到着次第お持ち頂ければその日のうちに修理してご返却できる物もございます。詳しくはチャットにてお気軽にご質問頂ければと思います。' },
+      { q: '支払い方法は？', a: '店舗によって支払い方法が異なります。お持ち込み希望の店舗に直接お問い合わせ頂けますと幸いです。' },
+      { q: '店舗の場所は？', a: '', special: 'store_select' },
+      { q: '代替機の貸し出しはある？', a: '基本的にはご用意しておりません。事前に修理パーツの取り寄せを行えば、即日修理も可能ですのでご希望の店舗にご相談下さい。' },
+      { q: '修理後の保証はある？', a: '修理後は90日間の保証がついております。修理後に何か不具合が生じた場合は再修理可能ですのでご安心下さい。' },
+    ],
+  },
+  device: {
+    label: '修理端末に関する質問',
+    questions: [
+      { q: '修理できる機種は？', a: 'Macbook全般をメインで取り扱っております。年代問わず対応可能ですのでお気軽にご相談下さいませ。その他にもiMac、Macmini、Windowsパソコンも対応可能でございます。お持ちの機器でお困りの事がございましたらお気軽にご相談頂ければと思います。' },
+      { q: '起動不良も修理できる？', a: 'まったく起動できない端末でも修理対応可能でございます。本体を使用できる状態にする事やデータ復旧のみなどお客様のご要望に沿った内容でご案内が可能です。' },
+      { q: '修理歴ありでも対応可能？', a: '修理歴のある端末でも対応可能でございます。ただし非純正パーツが使用されている場合は機能回復ができない場合もございますのでご相談下さい。' },
+      { q: '水没した端末も対応できる？', a: '水没した端末も修理可能でございます。水没したかも？と思った場合は電源を入れないようにお願い致します。水分に電気が通ってしまう事が故障の原因となります。' },
+      { q: 'データは消去される？', a: '基本的にはデータが消去される事はございません。データ消去が必要な際は必ずお客様にご了承を頂いてから作業を行いますのでご安心下さいませ。' },
+      { q: '修理後の保証はある？', a: '修理後は90日間の保証がついております。修理後に何か不具合が生じた場合は再修理可能ですのでご安心下さい。' },
+    ],
+  },
+  other: {
+    label: 'その他の質問',
+    questions: [
+      { q: '修理見積りは無料でできる？', a: 'LINEにて無料で仮見積もりが可能でございます。最初の選択肢を進んで頂くか、画面下のメニュー画面からお見積りにお進みください。' },
+      { q: '大量修理は対応できる？', a: '法人や学校などの大量依頼も承っております。お気軽にご相談下さいませ。' },
+      { q: '修理のキャンセルはできる？', a: '部品発注前であればキャンセル可能です。発注後は部品代のみご負担いただく場合があります。' },
+      { q: '修理料金はいつ確定する？', a: '店舗で検証を行い、本見積もりの際に料金が確定致します。LINEでの仮見積もりは概算費用となりますのでご了承お願い致します。' },
+      { q: '個人情報の管理は安全？', a: '下記ボタンより利用規約・プライバシーポリシーをご確認お願い致します。', special: 'privacy_policy' },
+      { q: '電話/チャットで相談したい', a: '', special: 'phone' },
+    ],
+  },
+};
 
 // ---- Repair Flow Flex builders ----
 
@@ -397,6 +456,53 @@ function buildStoreSelectFlex(): string {
     });
   }
   return JSON.stringify({ type: 'carousel', contents: bubbles });
+}
+
+function buildConsultCategoryFlex(): string {
+  return JSON.stringify({
+    type: 'bubble',
+    body: {
+      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      contents: [
+        { type: 'text', text: 'ご質問・ご相談', weight: 'bold', size: 'lg', color: '#1e293b' },
+        { type: 'text', text: 'カテゴリをお選びください', size: 'sm', color: '#64748b', margin: 'md' },
+        { type: 'separator', margin: 'lg' },
+        {
+          type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
+          contents: [
+            { type: 'button', action: { type: 'postback', label: '郵送修理に関する質問', data: 'action=consult_category&category=mail' }, style: 'secondary' },
+            { type: 'button', action: { type: 'postback', label: '店頭修理に関する質問', data: 'action=consult_category&category=store' }, style: 'secondary' },
+            { type: 'button', action: { type: 'postback', label: '修理端末に関する質問', data: 'action=consult_category&category=device' }, style: 'secondary' },
+            { type: 'button', action: { type: 'postback', label: 'その他の質問', data: 'action=consult_category&category=other' }, style: 'secondary' },
+            { type: 'button', action: { type: 'postback', label: '電話/チャットで相談する', data: 'action=consult_phone' }, style: 'primary', color: '#00B900' },
+          ],
+        },
+      ],
+    },
+  });
+}
+
+function buildFaqListFlex(category: string): string {
+  const cat = CONSULT_FAQS[category];
+  if (!cat) return buildConsultCategoryFlex();
+  return JSON.stringify({
+    type: 'bubble',
+    body: {
+      type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+      contents: [
+        { type: 'text', text: cat.label, weight: 'bold', size: 'lg', color: '#1e293b', wrap: true },
+        { type: 'separator', margin: 'lg' },
+        {
+          type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
+          contents: cat.questions.map((faq, idx) => ({
+            type: 'button',
+            action: { type: 'postback', label: faq.q, data: `action=faq_question&category=${category}&idx=${idx}` },
+            style: 'secondary',
+          })),
+        },
+      ],
+    },
+  });
 }
 
 async function buildSymptomSelectFlex(db: D1Database, productId: string): Promise<string> {
@@ -968,7 +1074,7 @@ async function handleEvent(
           ]);
         } else {
           await lineClient.replyMessage(event.replyToken, [
-            { type: 'text', text: 'ご質問・ご相談を承りました。担当者よりご連絡いたしますので、しばらくお待ちください。' },
+            buildMessage('flex', buildConsultCategoryFlex()),
           ]);
         }
       } catch (err) {
@@ -1020,6 +1126,95 @@ async function handleEvent(
         ]);
       } catch (err) {
         console.error('Failed to reply for store selection:', err);
+      }
+      return;
+    }
+
+    if (action === 'start_repair') {
+      try {
+        await lineClient.replyMessage(event.replyToken, [
+          buildMessage('flex', buildProductSelectFlex()),
+        ]);
+      } catch (err) {
+        console.error('Failed to send product select flex for start_repair:', err);
+      }
+      return;
+    }
+
+    if (action === 'consult_category') {
+      const category = params.get('category') ?? '';
+      try {
+        await lineClient.replyMessage(event.replyToken, [
+          buildMessage('flex', buildFaqListFlex(category)),
+        ]);
+      } catch (err) {
+        console.error('Failed to send FAQ list flex:', err);
+      }
+      return;
+    }
+
+    if (action === 'consult_phone') {
+      try {
+        await lineClient.replyMessage(event.replyToken, [
+          { type: 'text', text: CONSULT_PHONE_TEXT },
+        ]);
+      } catch (err) {
+        console.error('Failed to send consult phone text:', err);
+      }
+      return;
+    }
+
+    if (action === 'faq_question') {
+      const category = params.get('category') ?? '';
+      const idx = parseInt(params.get('idx') ?? '0', 10);
+      const cat = CONSULT_FAQS[category];
+      const faq = cat?.questions[idx];
+      if (!faq) return;
+
+      try {
+        if (faq.special === 'store_select') {
+          await lineClient.replyMessage(event.replyToken, [
+            buildMessage('flex', buildStoreSelectFlex()),
+          ]);
+        } else if (faq.special === 'phone') {
+          await lineClient.replyMessage(event.replyToken, [
+            { type: 'text', text: CONSULT_PHONE_TEXT },
+          ]);
+        } else {
+          const footerContents: unknown[] = [];
+          if (faq.special === 'reservation_button') {
+            footerContents.push({
+              type: 'button',
+              action: { type: 'uri', label: '来店予約する', uri: STORE_RESERVATION_URL_GENERAL },
+              style: 'primary', color: '#00B900',
+            });
+          } else if (faq.special === 'privacy_policy') {
+            footerContents.push({
+              type: 'button',
+              action: { type: 'uri', label: '利用規約・プライバシーポリシー', uri: PRIVACY_POLICY_URL },
+              style: 'primary', color: '#00B900',
+            });
+          }
+          const bubble: Record<string, unknown> = {
+            type: 'bubble',
+            header: {
+              type: 'box', layout: 'vertical', paddingAll: '16px', backgroundColor: '#1e3a5f',
+              contents: [{ type: 'text', text: faq.q, color: '#ffffff', weight: 'bold', size: 'sm', wrap: true }],
+            },
+            body: {
+              type: 'box', layout: 'vertical', paddingAll: '20px',
+              contents: [{ type: 'text', text: faq.a, size: 'sm', color: '#333333', wrap: true }],
+            },
+          };
+          if (footerContents.length > 0) {
+            bubble.footer = { type: 'box', layout: 'vertical', paddingAll: '16px', contents: footerContents };
+          }
+          await lineClient.replyMessage(event.replyToken, [
+            buildMessage('flex', JSON.stringify(bubble)),
+          ]);
+        }
+      } catch (err) {
+        console.error('Failed to send FAQ answer flex:', err);
       }
       return;
     }
