@@ -108,7 +108,7 @@ function buildProductSelectFlex(): string {
   });
 }
 
-function buildModelMethodFlex(productName: string): string {
+function buildModelMethodFlex(productName: string, productKey: string): string {
   return JSON.stringify({
     type: 'bubble',
     body: {
@@ -120,13 +120,61 @@ function buildModelMethodFlex(productName: string): string {
         {
           type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
           contents: [
-            { type: 'button', action: { type: 'postback', label: '年式で選ぶ', data: 'action=choose_year_method' }, style: 'primary', color: '#00B900' },
+            { type: 'button', action: { type: 'postback', label: 'モデル名で選ぶ', data: `action=choose_model_method&product_key=${productKey}` }, style: 'primary', color: '#00B900' },
+            { type: 'button', action: { type: 'postback', label: '年式で選ぶ', data: 'action=choose_year_method' }, style: 'primary', color: '#00B900', margin: 'sm' },
             { type: 'button', action: { type: 'postback', label: 'わからない', data: 'action=skip_model' }, style: 'secondary', margin: 'sm' },
           ],
         },
       ],
     },
   });
+}
+
+function buildModelSelectFlex(productKey: string): string {
+  const modelsByProduct: Record<string, string[]> = {
+    air: ['A2941', 'A2681', 'A2337', 'A2179', 'A1932', 'A1466', 'A1369'],
+    pro: ['A2338', 'A2141', 'A1990', 'A1989', 'A1708', 'A1707', 'A1502'],
+  };
+  const models = modelsByProduct[productKey] ?? [];
+  const otherButton = {
+    type: 'button',
+    action: { type: 'postback', label: 'その他・分からない', data: 'action=select_model&model_name=%E3%81%9D%E3%81%AE%E4%BB%96' },
+    style: 'secondary',
+  };
+
+  // Split into bubbles of 4 buttons each to stay within LINE's rendering limit
+  const chunks: string[][] = [];
+  for (let i = 0; i < models.length; i += 4) {
+    chunks.push(models.slice(i, i + 4));
+  }
+
+  const bubbles = chunks.map((chunk, idx) => {
+    const isLast = idx === chunks.length - 1;
+    return {
+      type: 'bubble',
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'md', paddingAll: '20px',
+        contents: [
+          { type: 'text', text: 'モデル番号を選択してください', weight: 'bold', size: 'lg', color: '#1e293b' },
+          { type: 'separator', margin: 'lg' },
+          {
+            type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg',
+            contents: [
+              ...chunk.map((m) => ({
+                type: 'button',
+                action: { type: 'postback', label: m, data: `action=select_model&model_name=${encodeURIComponent(m)}` },
+                style: 'primary',
+                color: '#00B900',
+              })),
+              ...(isLast ? [otherButton] : []),
+            ],
+          },
+        ],
+      },
+    };
+  });
+
+  return JSON.stringify({ type: 'carousel', contents: bubbles });
 }
 
 function buildYearSelectFlex(): string {
@@ -552,12 +600,45 @@ async function handleEvent(
       const productId = productIdMap[productKey] ?? productIdMap['other'];
       await setFriendAttribute(db, friend.id, 'repair_product_id', productId);
       await setFriendAttribute(db, friend.id, 'repair_product_name', productName);
+      await setFriendAttribute(db, friend.id, 'repair_product_key', productKey);
       try {
         await lineClient.replyMessage(event.replyToken, [
-          buildMessage('flex', buildModelMethodFlex(productName)),
+          buildMessage('flex', buildModelMethodFlex(productName, productKey)),
         ]);
       } catch (err) {
         console.error('Failed to send model method flex:', err);
+      }
+      return;
+    }
+
+    if (action === 'choose_model_method') {
+      const productKey = params.get('product_key')
+        ?? (await getFriendAttribute(db, friend.id, 'repair_product_key'))
+        ?? 'other';
+      try {
+        await lineClient.replyMessage(event.replyToken, [
+          buildMessage('flex', buildModelSelectFlex(productKey)),
+        ]);
+      } catch (err) {
+        console.error('Failed to send model select flex:', err);
+      }
+      return;
+    }
+
+    if (action === 'select_model') {
+      const modelName = params.get('model_name') ?? '';
+      if (modelName) {
+        await setFriendAttribute(db, friend.id, 'repair_model_name', modelName);
+      }
+      const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id'))
+        ?? 'prod-oth-0001-0000-0000-000000000003';
+      try {
+        const symptomFlex = await buildSymptomSelectFlex(db, productId);
+        await lineClient.replyMessage(event.replyToken, [
+          buildMessage('flex', symptomFlex),
+        ]);
+      } catch (err) {
+        console.error('Failed to send symptom flex after model select:', err);
       }
       return;
     }
@@ -611,6 +692,7 @@ async function handleEvent(
       const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id'))
         ?? 'prod-oth-0001-0000-0000-000000000003';
       const productName = (await getFriendAttribute(db, friend.id, 'repair_product_name')) ?? 'MacBook';
+      const modelName = await getFriendAttribute(db, friend.id, 'repair_model_name');
       const yearStr = await getFriendAttribute(db, friend.id, 'repair_year');
 
       await setFriendAttribute(db, friend.id, 'repair_symptom_id', symptomId);
@@ -623,7 +705,7 @@ async function handleEvent(
             friendId: friend.id,
             productId,
             symptomId,
-            modelName: productName,
+            modelName: modelName ?? productName,
             year: yearStr ? parseInt(yearStr, 10) : null,
             priceFrom: price.price_from,
             priceTo: price.price_to,
