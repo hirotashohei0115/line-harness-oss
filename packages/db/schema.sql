@@ -662,5 +662,3 @@ CREATE INDEX IF NOT EXISTS idx_repair_model_prices_model ON repair_model_prices 
 CREATE INDEX IF NOT EXISTS idx_repair_model_prices_symptom ON repair_model_prices (symptom);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_repair_model_prices_unique ON repair_model_prices (model_number, symptom);
 
--- Migration: add delivery_days to existing repair_model_prices tables
-ALTER TABLE repair_model_prices ADD COLUMN delivery_days TEXT;
