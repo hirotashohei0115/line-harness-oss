@@ -868,6 +868,53 @@ async function handleEvent(
     const INCH_SIZES = new Set(['13インチ','14インチ','15インチ','16インチ']);
     const CONSULT_CATEGORY_MAP: Record<string, string> = { '郵送修理に関する質問':'mail','店頭修理に関する質問':'store','修理端末に関する質問':'device','その他の質問':'other' };
 
+    // リッチメニュー: 見積もりを始める
+    if (incomingText === '見積もりを始める') {
+      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildProductSelectFlex())]); } catch (err) { console.error('richmenu 見積もりを始める:', err); }
+      return;
+    }
+
+    // リッチメニュー: ご依頼の流れを教えて
+    if (incomingText === 'ご依頼の流れを教えて') {
+      const flowFlex = JSON.stringify({
+        type: 'bubble',
+        header: {
+          type: 'box', layout: 'vertical', paddingAll: '20px', backgroundColor: '#00B900',
+          contents: [{ type: 'text', text: 'ご依頼の流れ', color: '#ffffff', weight: 'bold', size: 'xl' }],
+        },
+        body: {
+          type: 'box', layout: 'vertical', paddingAll: '20px', spacing: 'md',
+          contents: [
+            { type: 'text', text: '①LINEで仮見積もり＆お申込み', weight: 'bold', size: 'sm', color: '#1e293b' },
+            { type: 'text', text: 'LINEで機種や状態を送るとその場で仮見積もりが可能です！\n仮見積もりにご納得頂けましたら、そのまま修理依頼に進めます。', size: 'sm', color: '#64748b', wrap: true },
+            { type: 'separator', margin: 'md' },
+            { type: 'text', text: '②発送or来店', weight: 'bold', size: 'sm', color: '#1e293b', margin: 'md' },
+            { type: 'text', text: '郵送修理の場合は梱包して発送！\n送料無料ですので着払いでお送り下さい。\n店頭持込の場合は店舗までご来店下さい。', size: 'sm', color: '#64748b', wrap: true },
+            { type: 'separator', margin: 'md' },
+            { type: 'text', text: '③本見積もり', weight: 'bold', size: 'sm', color: '#1e293b', margin: 'md' },
+            { type: 'text', text: '端末の状態を確認させて頂き、本見積もりを出させて頂きます。\n料金にご納得頂けない場合はキャンセルも可能です。', size: 'sm', color: '#64748b', wrap: true },
+            { type: 'separator', margin: 'md' },
+            { type: 'text', text: '④修理＆ご返却', weight: 'bold', size: 'sm', color: '#1e293b', margin: 'md' },
+            { type: 'text', text: '本見積もりでご了承いただけた場合は修理致します！\nお支払い後ご返却となります。', size: 'sm', color: '#64748b', wrap: true },
+          ],
+        },
+      });
+      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', flowFlex)]); } catch (err) { console.error('richmenu ご依頼の流れ:', err); }
+      return;
+    }
+
+    // リッチメニュー: よくある質問
+    if (incomingText === 'よくある質問') {
+      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildConsultCategoryFlex())]); } catch (err) { console.error('richmenu よくある質問:', err); }
+      return;
+    }
+
+    // リッチメニュー: 店舗の場所は？ → 店舗選択Flex（既存 store select_store ハンドラーへ転送）
+    if (incomingText === '店舗の場所は？') {
+      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildStoreSelectFlex())]); } catch (err) { console.error('richmenu 店舗の場所は？:', err); }
+      return;
+    }
+
     // 機種選択
     if (incomingText === 'MacBook Air' || incomingText === 'MacBook Pro' || incomingText === 'その他') {
       const productMap: Record<string, { key: string; id: string }> = {
