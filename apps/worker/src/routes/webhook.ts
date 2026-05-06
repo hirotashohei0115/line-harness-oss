@@ -74,7 +74,7 @@ webhook.post('/webhook', async (c) => {
   const processingPromise = (async () => {
     for (const event of body.events) {
       try {
-        await handleEvent(db, lineClient, event, channelAccessToken, matchedAccountId, c.env.WORKER_URL || new URL(c.req.url).origin);
+        await handleEvent(db, lineClient, event, channelAccessToken, matchedAccountId, c.env.WORKER_URL || new URL(c.req.url).origin, c.env.LIFF_URL);
       } catch (err) {
         console.error('Error handling webhook event:', err);
       }
@@ -630,6 +630,54 @@ function buildQuoteFlex(params: {
   });
 }
 
+// ---- Logging helpers ----
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type LineMessage = any;
+
+function extractLogContent(msg: LineMessage): { type: string; content: string } {
+  if (msg.type === 'flex') return { type: 'flex', content: JSON.stringify(msg.contents ?? {}) };
+  if (msg.type === 'image') return { type: 'image', content: (msg.originalContentUrl as string) || '' };
+  return { type: 'text', content: (msg.text as string) || '' };
+}
+
+async function replyAndLog(
+  db: D1Database,
+  lineClient: LineClient,
+  replyToken: string,
+  friendId: string,
+  messages: LineMessage[],
+): Promise<void> {
+  await lineClient.replyMessage(replyToken, messages);
+  const now = jstNow();
+  for (const msg of messages) {
+    const { type, content } = extractLogContent(msg);
+    await db.prepare(
+      `INSERT INTO messages_log (id, friend_id, direction, message_type, content, delivery_type, created_at)
+       VALUES (?, ?, 'outgoing', ?, ?, 'reply', ?)`,
+    ).bind(crypto.randomUUID(), friendId, type, content, now).run();
+  }
+}
+
+async function pushAndLog(
+  db: D1Database,
+  lineClient: LineClient,
+  lineUserId: string,
+  friendId: string | null,
+  messages: LineMessage[],
+): Promise<void> {
+  await lineClient.pushMessage(lineUserId, messages);
+  if (!friendId) return;
+  const now = jstNow();
+  for (const msg of messages) {
+    const { type, content } = extractLogContent(msg);
+    await db.prepare(
+      `INSERT INTO messages_log (id, friend_id, direction, message_type, content, delivery_type, created_at)
+       VALUES (?, ?, 'outgoing', ?, ?, 'push', ?)`,
+    ).bind(crypto.randomUUID(), friendId, type, content, now).run();
+  }
+}
+
 async function handleEvent(
   db: D1Database,
   lineClient: LineClient,
@@ -637,6 +685,7 @@ async function handleEvent(
   lineAccessToken: string,
   lineAccountId: string | null = null,
   workerUrl?: string,
+  liffUrl?: string,
 ): Promise<void> {
   if (event.type === 'follow') {
     const userId =
@@ -666,7 +715,7 @@ async function handleEvent(
 
     // ウェルカムメッセージ + 機種選択Flex
     try {
-      await lineClient.replyMessage(event.replyToken, [
+      await replyAndLog(db, lineClient, event.replyToken, friend.id, [
         { type: 'image', originalContentUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb', previewImageUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb' },
         { type: 'text', text: 'お見積りを作成させて頂きますのでお客様の端末情報を下記選択肢よりお選び下さい💻\n\n※修理時にデータに触れる事はございません！\nデータそのままで修理可能です✨' },
         buildMessage('flex', buildProductSelectFlex()),
@@ -696,18 +745,8 @@ async function handleEvent(
               try {
                 const expandedContent = expandVariables(firstStep.message_content, friend as { id: string; display_name: string | null; user_id: string | null });
                 const message = buildMessage(firstStep.message_type, expandedContent);
-                await lineClient.replyMessage(event.replyToken, [message]);
+                await replyAndLog(db, lineClient, event.replyToken, friend.id, [message]);
                 console.log(`Immediate delivery: sent step ${firstStep.id} to ${userId}`);
-
-                // Log outgoing message (replyMessage = 無料)
-                const logId = crypto.randomUUID();
-                await db
-                  .prepare(
-                    `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, delivery_type, created_at)
-                     VALUES (?, ?, 'outgoing', ?, ?, NULL, ?, 'reply', ?)`,
-                  )
-                  .bind(logId, friend.id, firstStep.message_type, firstStep.message_content, firstStep.id, jstNow())
-                  .run();
 
                 // Advance or complete the friend_scenario
                 const secondStep = steps[1] ?? null;
@@ -792,7 +831,7 @@ async function handleEvent(
         try {
           const period = hour < 12 ? '午前' : '午後';
           const displayHour = hour <= 12 ? hour : hour - 12;
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             buildMessage('flex', JSON.stringify({
               type: 'bubble',
               body: { type: 'box', layout: 'vertical', contents: [
@@ -819,12 +858,12 @@ async function handleEvent(
         if (friendRecord?.user_id) {
           // Find the same user on other accounts
           const otherFriends = await db.prepare(
-            'SELECT f.line_user_id, la.channel_access_token FROM friends f INNER JOIN line_accounts la ON la.id = f.line_account_id WHERE f.user_id = ? AND f.line_account_id != ? AND f.is_following = 1'
-          ).bind(friendRecord.user_id, lineAccountId).all<{ line_user_id: string; channel_access_token: string }>();
+            'SELECT f.id, f.line_user_id, la.channel_access_token FROM friends f INNER JOIN line_accounts la ON la.id = f.line_account_id WHERE f.user_id = ? AND f.line_account_id != ? AND f.is_following = 1'
+          ).bind(friendRecord.user_id, lineAccountId).all<{ id: string; line_user_id: string; channel_access_token: string }>();
 
           for (const other of otherFriends.results) {
             const otherClient = new LineClient(other.channel_access_token);
-            await otherClient.pushMessage(other.line_user_id, [buildMessage('flex', JSON.stringify({
+            await pushAndLog(db, otherClient, other.line_user_id, other.id, [buildMessage('flex', JSON.stringify({
               type: 'bubble', size: 'giga',
               header: { type: 'box', layout: 'vertical', paddingAll: '20px', backgroundColor: '#fffbeb',
                 contents: [{ type: 'text', text: `${friend.display_name || ''}さんへ`, size: 'lg', weight: 'bold', color: '#1e293b' }],
@@ -840,14 +879,14 @@ async function handleEvent(
               footer: { type: 'box', layout: 'vertical', paddingAll: '16px',
                 contents: [
                   { type: 'button', action: { type: 'message', label: '導入について相談する', text: '導入支援を希望します' }, style: 'primary', height: 'sm', color: '#06C755' },
-                  ...(c.env.LIFF_URL ? [{ type: 'button', action: { type: 'uri', label: 'フィードバックを送る', uri: `${c.env.LIFF_URL}?page=form` }, style: 'secondary', height: 'sm', margin: 'sm' }] : []),
+                  ...(liffUrl ? [{ type: 'button', action: { type: 'uri', label: 'フィードバックを送る', uri: `${liffUrl}?page=form` }, style: 'secondary', height: 'sm', margin: 'sm' }] : []),
                 ],
               },
             }))]);
           }
 
           // Reply on Account ② confirming
-          await lineClient.replyMessage(event.replyToken, [buildMessage('flex', JSON.stringify({
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', JSON.stringify({
             type: 'bubble',
             body: { type: 'box', layout: 'vertical', paddingAll: '20px',
               contents: [
@@ -870,7 +909,7 @@ async function handleEvent(
 
     // リッチメニュー: 見積もりを始める
     if (incomingText === '見積もりを始める') {
-      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildProductSelectFlex())]); } catch (err) { console.error('richmenu 見積もりを始める:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildProductSelectFlex())]); } catch (err) { console.error('richmenu 見積もりを始める:', err); }
       return;
     }
 
@@ -899,19 +938,19 @@ async function handleEvent(
           ],
         },
       });
-      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', flowFlex)]); } catch (err) { console.error('richmenu ご依頼の流れ:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', flowFlex)]); } catch (err) { console.error('richmenu ご依頼の流れ:', err); }
       return;
     }
 
     // リッチメニュー: よくある質問
     if (incomingText === 'よくある質問') {
-      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildConsultCategoryFlex())]); } catch (err) { console.error('richmenu よくある質問:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildConsultCategoryFlex())]); } catch (err) { console.error('richmenu よくある質問:', err); }
       return;
     }
 
     // リッチメニュー: 店舗の場所は？ → 店舗選択Flex（既存 store select_store ハンドラーへ転送）
     if (incomingText === '店舗の場所は？') {
-      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildStoreSelectFlex())]); } catch (err) { console.error('richmenu 店舗の場所は？:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildStoreSelectFlex())]); } catch (err) { console.error('richmenu 店舗の場所は？:', err); }
       return;
     }
 
@@ -926,23 +965,23 @@ async function handleEvent(
       await setFriendAttribute(db, friend.id, 'repair_product_id', p.id);
       await setFriendAttribute(db, friend.id, 'repair_product_name', incomingText);
       await setFriendAttribute(db, friend.id, 'repair_product_key', p.key);
-      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildModelMethodFlex(incomingText, p.key))]); } catch (err) { console.error('repair msg select_product:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildModelMethodFlex(incomingText, p.key))]); } catch (err) { console.error('repair msg select_product:', err); }
       return;
     }
 
     // モデル特定方法
     if (incomingText === 'モデル名で選ぶ') {
       const productKey = (await getFriendAttribute(db, friend.id, 'repair_product_key')) ?? 'other';
-      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildModelSelectFlex(productKey))]); } catch (err) { console.error('repair msg choose_model_method:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildModelSelectFlex(productKey))]); } catch (err) { console.error('repair msg choose_model_method:', err); }
       return;
     }
     if (incomingText === '年式で選ぶ') {
-      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildYearSelectFlex())]); } catch (err) { console.error('repair msg choose_year_method:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildYearSelectFlex())]); } catch (err) { console.error('repair msg choose_year_method:', err); }
       return;
     }
     if (incomingText === 'わからない') {
       const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
-      try { const sf = await buildSymptomSelectFlex(db, productId); await lineClient.replyMessage(event.replyToken, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg skip_model:', err); }
+      try { const sf = await buildSymptomSelectFlex(db, productId); await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg skip_model:', err); }
       return;
     }
 
@@ -950,7 +989,7 @@ async function handleEvent(
     if (MODEL_NUMBERS.has(incomingText)) {
       await setFriendAttribute(db, friend.id, 'repair_model_name', incomingText);
       const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
-      try { const sf = await buildSymptomSelectFlex(db, productId); await lineClient.replyMessage(event.replyToken, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg select_model:', err); }
+      try { const sf = await buildSymptomSelectFlex(db, productId); await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg select_model:', err); }
       return;
     }
 
@@ -959,13 +998,13 @@ async function handleEvent(
       const yearTextMatch = incomingText.match(/^(\d{4})年$/);
       if (yearTextMatch) {
         await setFriendAttribute(db, friend.id, 'repair_year', yearTextMatch[1]);
-        try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildInchSelectFlex())]); } catch (err) { console.error('repair msg select_year:', err); }
+        try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildInchSelectFlex())]); } catch (err) { console.error('repair msg select_year:', err); }
         return;
       }
     }
     if (incomingText === 'その他の年式') {
       await setFriendAttribute(db, friend.id, 'repair_year', '0');
-      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildInchSelectFlex())]); } catch (err) { console.error('repair msg select_year_other:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildInchSelectFlex())]); } catch (err) { console.error('repair msg select_year_other:', err); }
       return;
     }
 
@@ -973,7 +1012,7 @@ async function handleEvent(
     if (INCH_SIZES.has(incomingText)) {
       await setFriendAttribute(db, friend.id, 'repair_inch_size', incomingText);
       const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
-      try { const sf = await buildSymptomSelectFlex(db, productId); await lineClient.replyMessage(event.replyToken, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg select_inch:', err); }
+      try { const sf = await buildSymptomSelectFlex(db, productId); await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg select_inch:', err); }
       return;
     }
 
@@ -986,7 +1025,7 @@ async function handleEvent(
       } else {
         await setFriendAttribute(db, friend.id, 'repair_model_name', 'その他・分からない');
       }
-      try { const sf = await buildSymptomSelectFlex(db, productId); await lineClient.replyMessage(event.replyToken, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg other unknown:', err); }
+      try { const sf = await buildSymptomSelectFlex(db, productId); await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg other unknown:', err); }
       return;
     }
 
@@ -1026,7 +1065,7 @@ async function handleEvent(
           const quote = await createRepairQuote(db, { friendId: friend.id, productId, symptomId, modelName: resolvedModelName ?? productName, year: yearStr ? parseInt(yearStr, 10) : null, priceFrom, priceTo, deliveryDaysFrom: deliveryFrom, deliveryDaysTo: deliveryTo });
           await setFriendAttribute(db, friend.id, 'repair_quote_id', quote.id);
           const symptomImageUrl = getSymptomImageUrl(symptomName);
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'image', originalContentUrl: symptomImageUrl, previewImageUrl: symptomImageUrl },
             buildMessage('flex', buildQuoteFlex({ productName, symptomName, priceFrom, priceTo, deliveryFrom, deliveryTo, deliveryDays, quoteId: quote.id, modelName: resolvedModelName, year: yearStr ? parseInt(yearStr, 10) : null, inchSize })),
           ]);
@@ -1043,14 +1082,14 @@ async function handleEvent(
       if (quoteId) await updateRepairQuoteRequestType(db, quoteId, type);
       try {
         if (type === 'mail') {
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'text', text: '下記ボタンよりお申し込みをよろしくお願い申し上げます！' },
             buildMessage('flex', JSON.stringify({ type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'button', action: { type: 'uri', label: '郵送修理ご依頼フォーム', uri: MAIL_REPAIR_FORM_URL }, style: 'primary', height: 'sm', color: '#00B900' }] } })),
           ]);
         } else if (type === 'store') {
-          await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildStoreSelectFlex())]);
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildStoreSelectFlex())]);
         } else {
-          await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildConsultCategoryFlex())]);
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildConsultCategoryFlex())]);
         }
       } catch (err) { console.error('repair msg request_type:', err); }
       return;
@@ -1063,7 +1102,7 @@ async function handleEvent(
         await setFriendAttribute(db, friend.id, 'repair_store', store.shortName);
         const storeInfoText = `${store.shortName}での店頭修理をご希望ですね！✨\n下記店舗情報となります🙇‍♂️\n\n${store.name}\n住所：\n${store.zip}\n${store.address}\n電話番号：${store.tel}\n営業時間：${store.hours}\n\nご来店のご予約は下記のボタンからお進みください！`;
         try {
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'text', text: storeInfoText },
             buildMessage('flex', JSON.stringify({ type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'button', action: { type: 'uri', label: '来店予約する', uri: store.reservationUrl }, style: 'primary', height: 'sm', color: '#00B900' }] } })),
           ]);
@@ -1071,7 +1110,7 @@ async function handleEvent(
         return;
       }
       if (incomingText === '該当店舗なし') {
-        try { await lineClient.replyMessage(event.replyToken, [{ type: 'text', text: 'ご希望の店舗が見つからない場合は、お気軽にご相談ください。' }]); } catch (err) { console.error('repair msg no store:', err); }
+        try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: 'ご希望の店舗が見つからない場合は、お気軽にご相談ください。' }]); } catch (err) { console.error('repair msg no store:', err); }
         return;
       }
     }
@@ -1080,11 +1119,11 @@ async function handleEvent(
     if (CONSULT_CATEGORY_MAP[incomingText]) {
       const category = CONSULT_CATEGORY_MAP[incomingText];
       await setFriendAttribute(db, friend.id, 'repair_faq_category', category);
-      try { await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildFaqListFlex(category))]); } catch (err) { console.error('repair msg consult_category:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildFaqListFlex(category))]); } catch (err) { console.error('repair msg consult_category:', err); }
       return;
     }
     if (incomingText === '電話/チャットで相談する') {
-      try { await lineClient.replyMessage(event.replyToken, [{ type: 'text', text: CONSULT_PHONE_TEXT }]); } catch (err) { console.error('repair msg consult_phone:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULT_PHONE_TEXT }]); } catch (err) { console.error('repair msg consult_phone:', err); }
       return;
     }
 
@@ -1102,9 +1141,9 @@ async function handleEvent(
       if (matchedFaq) {
         try {
           if (matchedFaq.special === 'store_select') {
-            await lineClient.replyMessage(event.replyToken, [buildMessage('flex', buildStoreSelectFlex())]);
+            await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildStoreSelectFlex())]);
           } else if (matchedFaq.special === 'phone') {
-            await lineClient.replyMessage(event.replyToken, [{ type: 'text', text: CONSULT_PHONE_TEXT }]);
+            await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULT_PHONE_TEXT }]);
           } else {
             const footerContents: unknown[] = [];
             if (matchedFaq.special === 'reservation_button') footerContents.push({ type: 'button', action: { type: 'uri', label: '来店予約する', uri: STORE_RESERVATION_URL_GENERAL }, style: 'primary', height: 'sm', color: '#00B900' });
@@ -1115,7 +1154,7 @@ async function handleEvent(
               body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'text', text: matchedFaq.a, size: 'sm', color: '#333333', wrap: true }] },
             };
             if (footerContents.length > 0) bubble.footer = { type: 'box', layout: 'vertical', paddingAll: '16px', contents: footerContents };
-            await lineClient.replyMessage(event.replyToken, [buildMessage('flex', JSON.stringify(bubble))]);
+            await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', JSON.stringify(bubble))]);
           }
         } catch (err) { console.error('repair msg faq_question:', err); }
         return;
@@ -1155,17 +1194,7 @@ async function handleEvent(
           // Expand template variables ({{name}}, {{uid}}, {{auth_url:CHANNEL_ID}})
           const expandedContent = expandVariables(rule.response_content, friend as { id: string; display_name: string | null; user_id: string | null }, workerUrl);
           const replyMsg = buildMessage(rule.response_type, expandedContent);
-          await lineClient.replyMessage(event.replyToken, [replyMsg]);
-
-          // 送信ログ（replyMessage = 無料）
-          const outLogId = crypto.randomUUID();
-          await db
-            .prepare(
-              `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, delivery_type, created_at)
-               VALUES (?, ?, 'outgoing', ?, ?, NULL, NULL, 'reply', ?)`,
-            )
-            .bind(outLogId, friend.id, rule.response_type, rule.response_content, jstNow())
-            .run();
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [replyMsg]);
         } catch (err) {
           console.error('Failed to send auto-reply', err);
         }
@@ -1208,7 +1237,7 @@ async function handleEvent(
       await setFriendAttribute(db, friend.id, 'repair_product_name', productName);
       await setFriendAttribute(db, friend.id, 'repair_product_key', productKey);
       try {
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildModelMethodFlex(productName, productKey)),
         ]);
       } catch (err) {
@@ -1222,7 +1251,7 @@ async function handleEvent(
         ?? (await getFriendAttribute(db, friend.id, 'repair_product_key'))
         ?? 'other';
       try {
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildModelSelectFlex(productKey)),
         ]);
       } catch (err) {
@@ -1240,7 +1269,7 @@ async function handleEvent(
         ?? 'prod-oth-0001-0000-0000-000000000003';
       try {
         const symptomFlex = await buildSymptomSelectFlex(db, productId);
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', symptomFlex),
         ]);
       } catch (err) {
@@ -1251,7 +1280,7 @@ async function handleEvent(
 
     if (action === 'choose_year_method') {
       try {
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildYearSelectFlex()),
         ]);
       } catch (err) {
@@ -1265,7 +1294,7 @@ async function handleEvent(
         ?? 'prod-oth-0001-0000-0000-000000000003';
       try {
         const symptomFlex = await buildSymptomSelectFlex(db, productId);
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', symptomFlex),
         ]);
       } catch (err) {
@@ -1280,7 +1309,7 @@ async function handleEvent(
         await setFriendAttribute(db, friend.id, 'repair_year', String(year));
       }
       try {
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildInchSelectFlex()),
         ]);
       } catch (err) {
@@ -1298,7 +1327,7 @@ async function handleEvent(
         ?? 'prod-oth-0001-0000-0000-000000000003';
       try {
         const symptomFlex = await buildSymptomSelectFlex(db, productId);
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', symptomFlex),
         ]);
       } catch (err) {
@@ -1369,7 +1398,7 @@ async function handleEvent(
         });
         await setFriendAttribute(db, friend.id, 'repair_quote_id', quote.id);
         const symptomImageUrl = getSymptomImageUrl(symptomName);
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           { type: 'image', originalContentUrl: symptomImageUrl, previewImageUrl: symptomImageUrl },
           buildMessage('flex', buildQuoteFlex({
             productName,
@@ -1400,7 +1429,7 @@ async function handleEvent(
 
       try {
         if (type === 'mail') {
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'text', text: '下記ボタンよりお申し込みをよろしくお願い申し上げます！' },
             buildMessage('flex', JSON.stringify({
               type: 'bubble',
@@ -1413,11 +1442,11 @@ async function handleEvent(
             })),
           ]);
         } else if (type === 'store') {
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             buildMessage('flex', buildStoreSelectFlex()),
           ]);
         } else {
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             buildMessage('flex', buildConsultCategoryFlex()),
           ]);
         }
@@ -1432,7 +1461,7 @@ async function handleEvent(
 
       if (storeKey === 'none') {
         try {
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'text', text: 'ご希望の店舗が見つからない場合は、お気軽にご相談ください。' },
           ]);
         } catch (err) {
@@ -1456,7 +1485,7 @@ async function handleEvent(
         `ご来店のご予約は下記のボタンからお進みください！`;
 
       try {
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           { type: 'text', text: storeInfoText },
           buildMessage('flex', JSON.stringify({
             type: 'bubble',
@@ -1476,7 +1505,7 @@ async function handleEvent(
 
     if (action === 'start_repair') {
       try {
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildProductSelectFlex()),
         ]);
       } catch (err) {
@@ -1488,7 +1517,7 @@ async function handleEvent(
     if (action === 'consult_category') {
       const category = params.get('category') ?? '';
       try {
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildFaqListFlex(category)),
         ]);
       } catch (err) {
@@ -1499,7 +1528,7 @@ async function handleEvent(
 
     if (action === 'consult_phone') {
       try {
-        await lineClient.replyMessage(event.replyToken, [
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           { type: 'text', text: CONSULT_PHONE_TEXT },
         ]);
       } catch (err) {
@@ -1517,11 +1546,11 @@ async function handleEvent(
 
       try {
         if (faq.special === 'store_select') {
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             buildMessage('flex', buildStoreSelectFlex()),
           ]);
         } else if (faq.special === 'phone') {
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'text', text: CONSULT_PHONE_TEXT },
           ]);
         } else {
@@ -1553,7 +1582,7 @@ async function handleEvent(
           if (footerContents.length > 0) {
             bubble.footer = { type: 'box', layout: 'vertical', paddingAll: '16px', contents: footerContents };
           }
-          await lineClient.replyMessage(event.replyToken, [
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             buildMessage('flex', JSON.stringify(bubble)),
           ]);
         }
