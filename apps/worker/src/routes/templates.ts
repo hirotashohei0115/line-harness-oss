@@ -13,7 +13,8 @@ const templates = new Hono<Env>();
 templates.get('/api/templates', async (c) => {
   try {
     const category = c.req.query('category') ?? undefined;
-    const items = await getTemplates(c.env.DB, category);
+    const accountId = c.req.query('accountId') ?? undefined;
+    const items = await getTemplates(c.env.DB, category, accountId);
     return c.json({
       success: true,
       data: items.map((t) => ({

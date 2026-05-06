@@ -11,13 +11,22 @@ export interface TemplateRow {
   updated_at: string;
 }
 
-export async function getTemplates(db: D1Database, category?: string): Promise<TemplateRow[]> {
+export async function getTemplates(db: D1Database, category?: string, accountId?: string): Promise<TemplateRow[]> {
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+
   if (category) {
-    const result = await db.prepare(`SELECT * FROM templates WHERE category = ? ORDER BY created_at DESC`)
-      .bind(category).all<TemplateRow>();
-    return result.results;
+    conditions.push('category = ?');
+    values.push(category);
   }
-  const result = await db.prepare(`SELECT * FROM templates ORDER BY created_at DESC`).all<TemplateRow>();
+  if (accountId) {
+    conditions.push('(line_account_id = ? OR line_account_id IS NULL)');
+    values.push(accountId);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const result = await db.prepare(`SELECT * FROM templates ${where} ORDER BY created_at DESC`)
+    .bind(...values).all<TemplateRow>();
   return result.results;
 }
 

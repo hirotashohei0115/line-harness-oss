@@ -86,6 +86,14 @@ interface FriendItem {
   isFollowing: boolean
 }
 
+interface Template {
+  id: string
+  name: string
+  category: string
+  messageType: string
+  messageContent: string
+}
+
 interface MessageLog {
   id: string
   direction: 'incoming' | 'outgoing'
@@ -250,6 +258,8 @@ export default function ChatsPage() {
   const [sending, setSending] = useState(false)
   const [notes, setNotes] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [showTemplates, setShowTemplates] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -257,6 +267,17 @@ export default function ChatsPage() {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
     }
   }, [chatDetail?.messages])
+
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        const query = selectedAccountId ? `?accountId=${encodeURIComponent(selectedAccountId)}` : ''
+        const res = await fetchApi<{ success: boolean; data: Template[] }>(`/api/templates${query}`)
+        if (res.success) setTemplates(res.data.filter((t) => t.messageType === 'text'))
+      } catch { /* silent */ }
+    }
+    loadTemplates()
+  }, [selectedAccountId])
 
   const loadChats = useCallback(async () => {
     setLoading(true)
@@ -609,7 +630,32 @@ export default function ChatsPage() {
 
               {/* Send Message Form */}
               <div className="px-4 py-3 border-t border-gray-200">
+                {/* Template picker */}
+                {showTemplates && templates.length > 0 && (
+                  <div className="mb-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg bg-white shadow-sm">
+                    {templates.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => { setMessageContent(t.messageContent); setShowTemplates(false) }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                      >
+                        <span className="font-medium text-gray-800">{t.name}</span>
+                        <span className="ml-2 text-xs text-gray-400 truncate">{t.messageContent.slice(0, 40)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {showTemplates && templates.length === 0 && (
+                  <p className="mb-2 text-xs text-gray-400 text-center">テンプレートがありません</p>
+                )}
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowTemplates((v) => !v)}
+                    className="flex-shrink-0 px-2 py-2 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    title="テンプレート"
+                  >
+                    📋
+                  </button>
                   <input
                     type="text"
                     value={messageContent}
