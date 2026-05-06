@@ -220,7 +220,7 @@ async function processRepairFollowUps(db: D1Database, defaultToken: string): Pro
 
 // Scheduled handler for cron triggers — runs for all active LINE accounts
 async function scheduled(
-  _event: ScheduledEvent,
+  event: ScheduledEvent,
   env: Env['Bindings'],
   _ctx: ExecutionContext,
 ): Promise<void> {
@@ -251,8 +251,8 @@ async function scheduled(
   jobs.push(checkAccountHealth(env.DB));
 
   // Follow-up message: 毎日 JST 10:00 (UTC 01:00) に前日見積りユーザーへ 1,500円OFF を送信
-  const utcHour = new Date().getUTCHours();
-  if (utcHour === 1) {
+  // event.cron で発火したスケジュールを特定し、専用 cron のみで実行（*/5 の毎回実行を防ぐ）
+  if (event.cron === '0 1 * * *') {
     jobs.push(processRepairFollowUps(env.DB, env.LINE_CHANNEL_ACCESS_TOKEN));
   }
 
