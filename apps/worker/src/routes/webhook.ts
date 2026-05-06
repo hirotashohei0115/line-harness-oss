@@ -1095,6 +1095,16 @@ async function handleEvent(
       return;
     }
 
+    // 来店予約ボタンタップ → 来店日時・お名前を案内
+    if (incomingText === '来店予約する') {
+      try {
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
+          { type: 'text', text: 'ご来店予定日とお名前をお知らせください。\nex. 6/1(月) 13:00ごろ 山田太郎' },
+        ]);
+      } catch (err) { console.error('repair msg reservation:', err); }
+      return;
+    }
+
     // 店舗選択
     {
       const store = (STORES as readonly { key: string; shortName: string; name: string; zip: string; address: string; tel: string; hours: string; reservationUrl: string }[]).find(s => s.shortName === incomingText);
@@ -1104,7 +1114,7 @@ async function handleEvent(
         try {
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'text', text: storeInfoText },
-            buildMessage('flex', JSON.stringify({ type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'button', action: { type: 'uri', label: '来店予約する', uri: store.reservationUrl }, style: 'primary', height: 'sm', color: '#00B900' }] } })),
+            buildMessage('flex', JSON.stringify({ type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'button', action: { type: 'message', label: '来店予約する', text: '来店予約する' }, style: 'primary', height: 'sm', color: '#00B900' }] } })),
           ]);
         } catch (err) { console.error('repair msg select_store:', err); }
         return;
@@ -1146,7 +1156,7 @@ async function handleEvent(
             await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULT_PHONE_TEXT }]);
           } else {
             const footerContents: unknown[] = [];
-            if (matchedFaq.special === 'reservation_button') footerContents.push({ type: 'button', action: { type: 'uri', label: '来店予約する', uri: STORE_RESERVATION_URL_GENERAL }, style: 'primary', height: 'sm', color: '#00B900' });
+            if (matchedFaq.special === 'reservation_button') footerContents.push({ type: 'button', action: { type: 'message', label: '来店予約する', text: '来店予約する' }, style: 'primary', height: 'sm', color: '#00B900' });
             else if (matchedFaq.special === 'privacy_policy') footerContents.push({ type: 'button', action: { type: 'uri', label: '利用規約・プライバシーポリシー', uri: PRIVACY_POLICY_URL }, style: 'primary', height: 'sm', color: '#00B900' });
             const bubble: Record<string, unknown> = {
               type: 'bubble',
@@ -1492,7 +1502,7 @@ async function handleEvent(
             body: {
               type: 'box', layout: 'vertical', paddingAll: '20px',
               contents: [
-                { type: 'button', action: { type: 'uri', label: '来店予約する', uri: store.reservationUrl }, style: 'primary', height: 'sm', color: '#00B900' },
+                { type: 'button', action: { type: 'message', label: '来店予約する', text: '来店予約する' }, style: 'primary', height: 'sm', color: '#00B900' },
               ],
             },
           })),
@@ -1558,7 +1568,7 @@ async function handleEvent(
           if (faq.special === 'reservation_button') {
             footerContents.push({
               type: 'button',
-              action: { type: 'uri', label: '来店予約する', uri: STORE_RESERVATION_URL_GENERAL },
+              action: { type: 'message', label: '来店予約する', text: '来店予約する' },
               style: 'primary', height: 'sm', color: '#00B900',
             });
           } else if (faq.special === 'privacy_policy') {
