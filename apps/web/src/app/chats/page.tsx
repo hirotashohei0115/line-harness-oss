@@ -102,6 +102,21 @@ interface MessageLog {
   createdAt: string
 }
 
+interface RepairQuote {
+  id: string
+  productId: string | null
+  symptomId: string | null
+  modelName: string | null
+  year: number | null
+  priceFrom: number | null
+  priceTo: number | null
+  deliveryDaysFrom: number | null
+  deliveryDaysTo: number | null
+  requestType: string | null
+  status: string
+  createdAt: string
+}
+
 function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
   friendId: string
   friend: FriendItem | null
@@ -260,6 +275,8 @@ export default function ChatsPage() {
   const [savingNotes, setSavingNotes] = useState(false)
   const [templates, setTemplates] = useState<Template[]>([])
   const [showTemplates, setShowTemplates] = useState(false)
+  const [repairQuote, setRepairQuote] = useState<RepairQuote | null>(null)
+  const [repairAttrs, setRepairAttrs] = useState<Record<string, string>>({})
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -318,6 +335,29 @@ export default function ChatsPage() {
     }
   }, [])
 
+  const loadRepairInfo = useCallback(async (friendId: string) => {
+    try {
+      const [quoteRes, attrRes] = await Promise.allSettled([
+        fetchApi<{ success: boolean; data: RepairQuote[] }>(`/api/repair/quotes/${friendId}`),
+        fetchApi<{ success: boolean; data: Record<string, string> }>(`/api/repair/attributes/${friendId}`),
+      ])
+      if (quoteRes.status === 'fulfilled' && quoteRes.value.success) {
+        setRepairQuote(quoteRes.value.data[0] ?? null)
+      } else {
+        setRepairQuote(null)
+      }
+      if (attrRes.status === 'fulfilled' && attrRes.value.success) {
+        console.log('repairAttrs:', attrRes.value.data)
+        setRepairAttrs(attrRes.value.data)
+      } else {
+        setRepairAttrs({})
+      }
+    } catch {
+      setRepairQuote(null)
+      setRepairAttrs({})
+    }
+  }, [])
+
   useEffect(() => {
     loadChats()
   }, [loadChats])
@@ -329,6 +369,15 @@ export default function ChatsPage() {
       setChatDetail(null)
     }
   }, [selectedChatId, loadChatDetail])
+
+  useEffect(() => {
+    if (chatDetail?.friendId) {
+      loadRepairInfo(chatDetail.friendId)
+    } else {
+      setRepairQuote(null)
+      setRepairAttrs({})
+    }
+  }, [chatDetail?.friendId, loadRepairInfo])
 
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId)
@@ -485,7 +534,8 @@ export default function ChatsPage() {
               <p className="text-gray-400 text-sm">読み込み中...</p>
             </div>
           ) : chatDetail ? (
-            <>
+            <div className="flex flex-1 overflow-hidden">
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* Chat Header */}
               <div className="px-4 py-4 border-b border-gray-200 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
@@ -674,7 +724,123 @@ export default function ChatsPage() {
                   </button>
                 </div>
               </div>
-            </>
+              </div>
+
+              {/* Repair Info Sidebar */}
+              <div className="flex w-56 flex-shrink-0 flex-col border-l border-gray-200 bg-gray-50 overflow-y-auto">
+                <div className="px-3 py-2 border-b border-gray-200 bg-white">
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">修理情報</p>
+                </div>
+                {(() => {
+                  const product = repairAttrs?.repair_product_name
+                  const symptom = repairAttrs?.repair_symptom_name
+                  const modelName = repairAttrs?.repair_model_name
+                  const year = repairAttrs?.repair_year
+                  const rawInch = repairAttrs?.repair_inch_size
+                  const inchDisplay = rawInch
+                    ? String(rawInch).includes('インチ') ? rawInch : `${rawInch}インチ`
+                    : ''
+                  const store = repairAttrs?.repair_store
+                  const hasAnyInfo = product || symptom || repairQuote
+
+                  return (
+                    <div className="p-3 space-y-2 text-xs text-gray-700">
+                      {repairQuote && (
+                        <p className="text-[10px] text-gray-400">
+                          {new Date(repairQuote.createdAt).toLocaleDateString('ja-JP')}
+                        </p>
+                      )}
+
+                      {/* 1. 機種 */}
+                      {product && (
+                        <div>
+                          <p className="text-[10px] text-gray-400 mb-0.5">機種</p>
+                          <p className="font-medium">{product}</p>
+                        </div>
+                      )}
+
+                      {/* 2. モデル（年式・インチ） */}
+                      {modelName && (
+                        <div>
+                          <p className="text-[10px] text-gray-400 mb-0.5">モデル</p>
+                          <p className="font-medium">
+                            {modelName}
+                            {(year || inchDisplay) && (
+                              <span className="font-normal text-gray-500">
+                                {`（${[year ? `${year}年` : '', inchDisplay].filter(Boolean).join(' ')}）`}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* 3. 症状 */}
+                      {symptom && (
+                        <div>
+                          <p className="text-[10px] text-gray-400 mb-0.5">症状</p>
+                          <p className="font-medium">{symptom}</p>
+                        </div>
+                      )}
+
+                      {/* 4. 料金 */}
+                      {repairQuote?.priceFrom != null && (
+                        <div>
+                          <p className="text-[10px] text-gray-400 mb-0.5">料金</p>
+                          <p className="font-medium text-green-700">
+                            ¥{repairQuote.priceFrom.toLocaleString()}
+                            {repairQuote.priceTo ? `〜¥${repairQuote.priceTo.toLocaleString()}` : '〜'}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* 5. 納期 */}
+                      {repairQuote && (repairQuote.deliveryDaysFrom != null || repairQuote.deliveryDaysTo != null) && (
+                        <div>
+                          <p className="text-[10px] text-gray-400 mb-0.5">納期</p>
+                          <p>{repairQuote.deliveryDaysFrom}〜{repairQuote.deliveryDaysTo}日</p>
+                        </div>
+                      )}
+
+                      {/* 6. 依頼方法 */}
+                      {repairQuote?.requestType && (
+                        <div>
+                          <p className="text-[10px] text-gray-400 mb-0.5">依頼方法</p>
+                          <p>{{mail:'郵送',store:'店舗持込',consult:'相談'}[repairQuote.requestType] ?? repairQuote.requestType}</p>
+                        </div>
+                      )}
+
+                      {/* 7. 希望店舗 */}
+                      {store && (
+                        <div>
+                          <p className="text-[10px] text-gray-400 mb-0.5">希望店舗</p>
+                          <p className="font-medium">{store}</p>
+                        </div>
+                      )}
+
+                      {/* 8. ステータス */}
+                      {repairQuote && (
+                        <div className="pt-1">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            repairQuote.status === 'quoted' ? 'bg-blue-100 text-blue-700' :
+                            repairQuote.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                            repairQuote.status === 'completed' ? 'bg-gray-100 text-gray-600' :
+                            'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {repairQuote.status === 'quoted' ? '見積済' :
+                             repairQuote.status === 'accepted' ? '受注済' :
+                             repairQuote.status === 'completed' ? '完了' : repairQuote.status}
+                          </span>
+                        </div>
+                      )}
+
+                      {!hasAnyInfo && (
+                        <p className="text-gray-400">修理情報なし</p>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
           ) : null}
         </div>
       </div>

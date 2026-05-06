@@ -16,6 +16,7 @@
 
 import { initBooking } from './booking.js';
 import { initForm } from './form.js';
+import { initMailRepair } from './mail-repair.js';
 
 declare const liff: {
   init(config: { liffId: string }): Promise<void>;
@@ -268,6 +269,8 @@ async function main() {
       const params = new URLSearchParams(window.location.search);
       const formId = params.get('id');
       await initForm(formId);
+    } else if (page === 'mail-repair') {
+      await initMailRepair();
     } else {
       await linkAndAddFlow();
     }

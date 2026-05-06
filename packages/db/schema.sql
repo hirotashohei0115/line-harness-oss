@@ -662,3 +662,23 @@ CREATE INDEX IF NOT EXISTS idx_repair_model_prices_model ON repair_model_prices 
 CREATE INDEX IF NOT EXISTS idx_repair_model_prices_symptom ON repair_model_prices (symptom);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_repair_model_prices_unique ON repair_model_prices (model_number, symptom);
 
+
+-- ============================================================
+-- Mail Orders (郵送修理依頼)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS mail_orders (
+  id               TEXT PRIMARY KEY,
+  friend_id        TEXT NOT NULL REFERENCES friends(id) ON DELETE CASCADE,
+  name             TEXT NOT NULL,
+  postal_code      TEXT NOT NULL,
+  address          TEXT NOT NULL,
+  phone            TEXT NOT NULL,
+  packaging_kit    INTEGER NOT NULL DEFAULT 0,
+  delivery_store   TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'pending',
+  created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_mail_orders_friend ON mail_orders (friend_id);
+CREATE INDEX IF NOT EXISTS idx_mail_orders_status ON mail_orders (status);
