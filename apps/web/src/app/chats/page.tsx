@@ -142,8 +142,9 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
         createdAt: new Date().toISOString(),
       }])
       setMessage('')
-    } catch { /* silent */ }
-    setSending(false)
+    } catch { /* silent */ } finally {
+      setSending(false)
+    }
   }
 
   function renderMessageContent(msg: MessageLog): React.ReactNode {
@@ -314,7 +315,7 @@ export default function ChatsPage() {
   }
 
   const handleSendMessage = async () => {
-    if (!selectedChatId || !messageContent.trim()) return
+    if (!selectedChatId || !messageContent.trim() || sending) return
     setSending(true)
     try {
       await api.chats.send(selectedChatId, { content: messageContent.trim() })
