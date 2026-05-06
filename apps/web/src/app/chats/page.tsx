@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, fetchApi } from '@/lib/api'
 import { useAccount } from '@/contexts/account-context'
 import Header from '@/components/layout/header'
@@ -104,6 +104,7 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
   const [sending, setSending] = useState(false)
   const [messages, setMessages] = useState<MessageLog[]>([])
   const [loadingMessages, setLoadingMessages] = useState(true)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const loadMessages = async () => {
@@ -118,6 +119,12 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
     }
     loadMessages()
   }, [friendId])
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages])
 
   const handleSend = async () => {
     if (!message.trim() || sending) return
@@ -139,31 +146,19 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
     setSending(false)
   }
 
-  function renderContent(msg: MessageLog) {
-    if (msg.messageType === 'text') return msg.content
+  function renderMessageContent(msg: MessageLog): React.ReactNode {
     if (msg.messageType === 'flex') {
+      return <FlexPreviewComponent content={msg.content} maxWidth={260} />
+    }
+    if (msg.messageType === 'image') {
       try {
         const parsed = JSON.parse(msg.content)
-        // Extract ALL text from flex (up to 200 chars)
-        const texts: string[] = []
-        const collectText = (obj: Record<string, unknown>) => {
-          if (texts.join(' ').length > 200) return
-          if (obj.type === 'text' && typeof obj.text === 'string') {
-            const t = (obj.text as string).trim()
-            if (t && !t.startsWith('{{')) texts.push(t)
-          }
-          for (const key of ['header', 'body', 'footer']) {
-            if (obj[key]) collectText(obj[key] as Record<string, unknown>)
-          }
-          if (Array.isArray(obj.contents)) {
-            for (const c of obj.contents) collectText(c as Record<string, unknown>)
-          }
-        }
-        collectText(parsed)
-        return texts.slice(0, 4).join('\n') || '[Flex Message]'
-      } catch { return '[Flex Message]' }
+        return <img src={parsed.originalContentUrl || parsed.previewImageUrl} alt="" className="max-w-[200px] rounded" />
+      } catch {
+        return <span>🖼️ [画像]</span>
+      }
     }
-    return `[${msg.messageType}]`
+    return <span className="text-sm whitespace-pre-wrap break-words">{msg.content}</span>
   }
 
   return (
@@ -186,23 +181,30 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
           <p className="text-xs text-gray-400">メッセージ履歴</p>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3" style={{ backgroundColor: '#7494C0' }}>
         {loadingMessages ? (
-          <p className="text-center text-gray-400 text-sm">読み込み中...</p>
+          <p className="text-center text-white/60 text-sm">読み込み中...</p>
         ) : messages.length === 0 ? (
-          <p className="text-center text-gray-400 text-sm">メッセージ履歴がありません</p>
+          <p className="text-center text-white/60 text-sm">メッセージ履歴がありません</p>
         ) : (
           messages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${
-                msg.direction === 'outgoing'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-gray-100 text-gray-900'
-              }`}>
-                <p className="text-sm whitespace-pre-wrap break-words">{renderContent(msg)}</p>
-                <p className={`text-xs mt-1 ${msg.direction === 'outgoing' ? 'text-green-200' : 'text-gray-400'}`}>
-                  {new Date(msg.createdAt).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                </p>
+            <div key={msg.id} className={`flex items-end gap-2 ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}>
+              {msg.direction === 'incoming' && (
+                <div className="w-8 h-8 rounded-full bg-gray-300 flex-shrink-0 mb-1" />
+              )}
+              <div className={`flex flex-col ${msg.direction === 'outgoing' ? 'items-end' : 'items-start'}`}>
+                <div className={`max-w-[280px] px-3 py-2 text-sm break-words ${
+                  msg.direction === 'outgoing'
+                    ? 'rounded-tl-2xl rounded-tr-md rounded-bl-2xl rounded-br-2xl text-white'
+                    : 'rounded-tl-md rounded-tr-2xl rounded-bl-2xl rounded-br-2xl bg-white text-gray-900'
+                } ${msg.messageType === 'flex' ? 'p-0 bg-transparent shadow-none' : ''}`}
+                style={msg.direction === 'outgoing' && msg.messageType !== 'flex' ? { backgroundColor: '#06C755' } : undefined}
+                >
+                  {renderMessageContent(msg)}
+                </div>
+                <span className="text-xs text-white/50 mt-0.5 px-1">
+                  {new Date(msg.createdAt).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                </span>
               </div>
             </div>
           ))
@@ -247,6 +249,13 @@ export default function ChatsPage() {
   const [sending, setSending] = useState(false)
   const [notes, setNotes] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    }
+  }, [chatDetail?.messages])
 
   const loadChats = useCallback(async () => {
     setLoading(true)
@@ -510,7 +519,7 @@ export default function ChatsPage() {
               </div>
 
               {/* Messages — LINE-style chat bubbles */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{ backgroundColor: '#7494C0' }}>
+              <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-2" style={{ backgroundColor: '#7494C0' }}>
                 {(!chatDetail.messages || chatDetail.messages.length === 0) ? (
                   <div className="text-center py-8">
                     <p className="text-white/60 text-sm">メッセージはまだありません。</p>
@@ -568,7 +577,7 @@ export default function ChatsPage() {
                           </div>
                           {/* 時刻 */}
                           <span className="text-xs text-white/50 mt-0.5 px-1">
-                            {new Date(msg.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(msg.createdAt).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       </div>
