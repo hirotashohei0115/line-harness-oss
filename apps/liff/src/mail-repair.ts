@@ -13,7 +13,7 @@ declare const liff: {
   closeWindow(): void;
 };
 
-const API_URL = import.meta.env?.VITE_API_URL || 'https://macbook-repair-worker.empower-repair.workers.dev';
+const API_URL = 'https://macbook-repair-worker.empower-repair.workers.dev';
 
 function escapeHtml(str: string): string {
   const div = document.createElement('div');

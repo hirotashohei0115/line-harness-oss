@@ -216,8 +216,11 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       .run();
 
     // LINEでお礼メッセージを送信
-    const kitLabel = packagingKit ? 'あり' : 'なし';
-    const thankMsg = `郵送修理のご依頼ありがとうございます！\n\n以下の内容で承りました。\n━━━━━━━━━━\nお名前：${name}様\n配送先：${deliveryStore}\n梱包キット：${kitLabel}\n━━━━━━━━━━\n端末の発送をお待ちしております📦\n\n着払いにてご発送ください。`;
+    const kitLabel = packagingKit ? 'あり(+1,000円)' : 'なし';
+    const storeInfo = deliveryStore === '盛岡店'
+      ? `リペアマスター盛岡店\n〒020-0034\n岩手県盛岡市盛岡駅前通1-44\n盛岡フェザン 本館1階\nTEL: 019-613-8665`
+      : `リペアマスター菖蒲店\n〒346-0106\n埼玉県久喜市菖蒲町菖蒲6005-1\nモラージュ菖蒲 1F\nTEL: 070-1271-7186`;
+    const thankMsg = `郵送修理のご依頼ありがとうございます！\n\n以下の内容で承りました。\n━━━━━━━━━━\nお名前：${name}様\n郵便番号：${postalCode}\nご住所：${address}\n電話番号：${phone}\n梱包キット：${kitLabel}\n配送先：${deliveryStore}\n━━━━━━━━━━\n\n【郵送先】\n${storeInfo}\n━━━━━━━━━━\n\n端末の発送をお待ちしております📦\n着払いにてご発送ください。`;
     try {
       const lineClient = new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN);
       await lineClient.pushMessage(lineUserId, [{ type: 'text', text: thankMsg }]);
