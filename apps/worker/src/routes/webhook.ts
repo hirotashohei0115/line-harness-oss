@@ -88,7 +88,7 @@ webhook.post('/webhook', async (c) => {
 
 // ---- Repair Flow Constants ----
 
-const MAIL_REPAIR_FORM_URL = 'https://liff.line.me/2010008321-sGVwpLSL';
+const MAIL_REPAIR_FORM_URL = 'https://liff.line.me/2010008850-nbdSiIe2';
 const STORE_RESERVATION_URL_GENERAL = 'https://forms.gle/XXXXXXXXXXXXXXXX';
 const PRIVACY_POLICY_URL = 'https://forms.gle/XXXXXXXXXXXXXXXX';
 const CONSULT_PHONE_TEXT =
