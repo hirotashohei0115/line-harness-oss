@@ -117,6 +117,19 @@ interface RepairQuote {
   createdAt: string
 }
 
+interface MailOrder {
+  id: string
+  friendId: string
+  name: string
+  postalCode: string
+  address: string
+  phone: string
+  packagingKit: boolean
+  deliveryStore: string
+  status: string
+  createdAt: string
+}
+
 function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
   friendId: string
   friend: FriendItem | null
@@ -277,6 +290,7 @@ export default function ChatsPage() {
   const [showTemplates, setShowTemplates] = useState(false)
   const [repairQuote, setRepairQuote] = useState<RepairQuote | null>(null)
   const [repairAttrs, setRepairAttrs] = useState<Record<string, string>>({})
+  const [mailOrder, setMailOrder] = useState<MailOrder | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -337,9 +351,10 @@ export default function ChatsPage() {
 
   const loadRepairInfo = useCallback(async (friendId: string) => {
     try {
-      const [quoteRes, attrRes] = await Promise.allSettled([
+      const [quoteRes, attrRes, mailOrderRes] = await Promise.allSettled([
         fetchApi<{ success: boolean; data: RepairQuote[] }>(`/api/repair/quotes/${friendId}`),
         fetchApi<{ success: boolean; data: Record<string, string> }>(`/api/repair/attributes/${friendId}`),
+        fetchApi<{ success: boolean; data: MailOrder | null }>(`/api/repair/mail-orders/${friendId}`),
       ])
       if (quoteRes.status === 'fulfilled' && quoteRes.value.success) {
         setRepairQuote(quoteRes.value.data[0] ?? null)
@@ -347,14 +362,19 @@ export default function ChatsPage() {
         setRepairQuote(null)
       }
       if (attrRes.status === 'fulfilled' && attrRes.value.success) {
-        console.log('repairAttrs:', attrRes.value.data)
         setRepairAttrs(attrRes.value.data)
       } else {
         setRepairAttrs({})
       }
+      if (mailOrderRes.status === 'fulfilled' && mailOrderRes.value.success) {
+        setMailOrder(mailOrderRes.value.data)
+      } else {
+        setMailOrder(null)
+      }
     } catch {
       setRepairQuote(null)
       setRepairAttrs({})
+      setMailOrder(null)
     }
   }, [])
 
@@ -376,6 +396,7 @@ export default function ChatsPage() {
     } else {
       setRepairQuote(null)
       setRepairAttrs({})
+      setMailOrder(null)
     }
   }, [chatDetail?.friendId, loadRepairInfo])
 
@@ -833,7 +854,50 @@ export default function ChatsPage() {
                         </div>
                       )}
 
-                      {!hasAnyInfo && (
+                      {/* 郵送依頼情報 */}
+                      {mailOrder && (
+                        <div className="mt-2 pt-2 border-t border-gray-200 space-y-2">
+                          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">郵送依頼情報</p>
+                          <div>
+                            <p className="text-[10px] text-gray-400 mb-0.5">お名前</p>
+                            <p className="font-medium">{mailOrder.name}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-400 mb-0.5">郵便番号</p>
+                            <p>{mailOrder.postalCode}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-400 mb-0.5">ご住所</p>
+                            <p>{mailOrder.address}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-400 mb-0.5">電話番号</p>
+                            <p>{mailOrder.phone}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-400 mb-0.5">梱包キット</p>
+                            <p>{mailOrder.packagingKit ? 'あり (+1,000円)' : 'なし'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-400 mb-0.5">配送先店舗</p>
+                            <p className="font-medium">{mailOrder.deliveryStore}</p>
+                          </div>
+                          <div>
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                              mailOrder.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                              mailOrder.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
+                              mailOrder.status === 'completed' ? 'bg-gray-100 text-gray-600' :
+                              'bg-orange-100 text-orange-700'
+                            }`}>
+                              {mailOrder.status === 'pending' ? '受付済' :
+                               mailOrder.status === 'shipped' ? '発送済' :
+                               mailOrder.status === 'completed' ? '完了' : mailOrder.status}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {!hasAnyInfo && !mailOrder && (
                         <p className="text-gray-400">修理情報なし</p>
                       )}
                     </div>

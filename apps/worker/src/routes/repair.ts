@@ -235,4 +235,52 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
   }
 });
 
+// GET /api/repair/mail-orders/:friendId
+repairRoutes.get('/api/repair/mail-orders/:friendId', async (c) => {
+  const friendId = c.req.param('friendId');
+  try {
+    const row = await c.env.DB
+      .prepare(
+        `SELECT id, friend_id, name, postal_code, address, phone, packaging_kit, delivery_store, status, created_at
+         FROM mail_orders WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1`,
+      )
+      .bind(friendId)
+      .first<{
+        id: string;
+        friend_id: string;
+        name: string;
+        postal_code: string;
+        address: string;
+        phone: string;
+        packaging_kit: number;
+        delivery_store: string;
+        status: string;
+        created_at: string;
+      }>();
+
+    if (!row) {
+      return c.json({ success: true, data: null });
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        id: row.id,
+        friendId: row.friend_id,
+        name: row.name,
+        postalCode: row.postal_code,
+        address: row.address,
+        phone: row.phone,
+        packagingKit: row.packaging_kit === 1,
+        deliveryStore: row.delivery_store,
+        status: row.status,
+        createdAt: row.created_at,
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/repair/mail-orders/:friendId error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 export { repairRoutes };
