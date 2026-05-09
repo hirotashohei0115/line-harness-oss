@@ -129,8 +129,10 @@ function renderForm(displayName: string): void {
           <label class="mr-label" for="mr-store">配送先店舗<span class="mr-required">*</span></label>
           <select class="mr-select" id="mr-store" name="deliveryStore" required>
             <option value="">選択してください</option>
-            <option value="郵送修理センター菖蒲店（埼玉県）">郵送修理センター菖蒲店（埼玉県）</option>
             <option value="郵送修理センター盛岡店（岩手県）">郵送修理センター盛岡店（岩手県）</option>
+            <option value="郵送修理センター菖蒲店（埼玉県）">郵送修理センター菖蒲店（埼玉県）</option>
+            <option value="郵送修理センター岐阜店（岐阜県）">郵送修理センター岐阜店（岐阜県）</option>
+            <option value="郵送修理センター大分店（大分県）">郵送修理センター大分店（大分県）</option>
           </select>
         </div>
 

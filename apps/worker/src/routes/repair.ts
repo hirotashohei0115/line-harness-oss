@@ -218,8 +218,12 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
 
     // LINEでお礼メッセージを送信
     const kitLabel = packagingKit ? 'あり(+1,000円)' : 'なし';
-    const storeInfo = deliveryStore === '盛岡店'
+    const storeInfo = deliveryStore.includes('盛岡')
       ? `リペアマスター盛岡店\n〒020-0034\n岩手県盛岡市盛岡駅前通1-44\n盛岡フェザン 本館1階\nTEL: 019-613-8665`
+      : deliveryStore.includes('岐阜')
+      ? `リペアマスターモレラ岐阜店\n〒501-0497\n岐阜県本巣市三橋1100\nモレラ岐阜店 2F\nTEL: 070-3131-6181`
+      : deliveryStore.includes('大分')
+      ? `リペアマスター大分店\n〒870-1155\n大分県大分市玉沢楠本755-1\nトキハわさだタウン3街区 1F\nTEL: 070-1261-6924`
       : `リペアマスター菖蒲店\n〒346-0106\n埼玉県久喜市菖蒲町菖蒲6005-1\nモラージュ菖蒲 1F\nTEL: 070-1271-7186`;
     const closingMsg = packagingKit
       ? `梱包キットを発送いたします📦\n今しばらくお待ちください。\n梱包キットが到着されましたら上記の郵送先へご発送お願いします。`
@@ -237,7 +241,7 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       const cwToken = c.env.CHATWORK_API_TOKEN;
       const cwRoom = c.env.CHATWORK_ROOM_ID;
       if (cwToken && cwRoom) {
-        const cwMsg = `[info][title]📦 梱包キット希望の郵送依頼が届きました[/title]ユーザー：${name}様\n郵便番号：${postalCode}\n住所：${address}\n電話番号：${phone}\n配送先：${deliveryStore}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+        const cwMsg = `[info][title]📦 梱包キット希望の郵送依頼が届きました[/title]ユーザー：${name}様\n郵便番号：${postalCode}\n住所：${address}\n電話番号：${phone}\n配送先：${deliveryStore}\n\n【郵送先】\n${storeInfo}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
         await sendChatworkMessage(cwToken, cwRoom, cwMsg);
       }
     }
