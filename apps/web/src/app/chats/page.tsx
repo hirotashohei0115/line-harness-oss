@@ -291,6 +291,9 @@ export default function ChatsPage() {
   const [repairQuote, setRepairQuote] = useState<RepairQuote | null>(null)
   const [repairAttrs, setRepairAttrs] = useState<Record<string, string>>({})
   const [mailOrder, setMailOrder] = useState<MailOrder | null>(null)
+  const [repairEditMode, setRepairEditMode] = useState(false)
+  const [repairEditData, setRepairEditData] = useState<Record<string, string>>({})
+  const [savingRepair, setSavingRepair] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -398,6 +401,7 @@ export default function ChatsPage() {
       setRepairAttrs({})
       setMailOrder(null)
     }
+    setRepairEditMode(false)
   }, [chatDetail?.friendId, loadRepairInfo])
 
   const handleSelectChat = (chatId: string) => {
@@ -441,6 +445,41 @@ export default function ChatsPage() {
       setError('メモの保存に失敗しました。')
     } finally {
       setSavingNotes(false)
+    }
+  }
+
+  const handleRepairEdit = () => {
+    setRepairEditData({
+      repair_product_name: repairAttrs.repair_product_name ?? '',
+      repair_model_name: repairAttrs.repair_model_name ?? '',
+      repair_symptom_name: repairAttrs.repair_symptom_name ?? '',
+      repair_year: repairAttrs.repair_year ?? '',
+      repair_inch_size: repairAttrs.repair_inch_size ?? '',
+      repair_store: repairAttrs.repair_store ?? '',
+      priceFrom: repairQuote?.priceFrom != null ? String(repairQuote.priceFrom) : '',
+      priceTo: repairQuote?.priceTo != null ? String(repairQuote.priceTo) : '',
+      deliveryDaysFrom: repairQuote?.deliveryDaysFrom != null ? String(repairQuote.deliveryDaysFrom) : '',
+      deliveryDaysTo: repairQuote?.deliveryDaysTo != null ? String(repairQuote.deliveryDaysTo) : '',
+      requestType: repairQuote?.requestType ?? '',
+      status: repairQuote?.status ?? '',
+    })
+    setRepairEditMode(true)
+  }
+
+  const handleRepairSave = async () => {
+    if (!chatDetail?.friendId) return
+    setSavingRepair(true)
+    try {
+      await fetchApi(`/api/repair/attributes/${chatDetail.friendId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(repairEditData),
+      })
+      setRepairEditMode(false)
+      await loadRepairInfo(chatDetail.friendId)
+    } catch {
+      // silent
+    } finally {
+      setSavingRepair(false)
     }
   }
 
@@ -757,160 +796,227 @@ export default function ChatsPage() {
 
               {/* Repair Info Sidebar */}
               <div className="flex w-56 flex-shrink-0 flex-col border-l border-gray-200 bg-gray-50 overflow-y-auto">
-                <div className="px-3 py-2 border-b border-gray-200 bg-white">
+                <div className="px-3 py-2 border-b border-gray-200 bg-white flex items-center justify-between">
                   <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">修理情報</p>
+                  {!repairEditMode && chatDetail && (
+                    <button
+                      onClick={handleRepairEdit}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+                    >編集</button>
+                  )}
                 </div>
-                {(() => {
-                  const product = repairAttrs?.repair_product_name
-                  const symptom = repairAttrs?.repair_symptom_name
-                  const modelName = repairAttrs?.repair_model_name
-                  const year = repairAttrs?.repair_year
-                  const rawInch = repairAttrs?.repair_inch_size
-                  const inchDisplay = rawInch
-                    ? String(rawInch).includes('インチ') ? rawInch : `${rawInch}インチ`
-                    : ''
-                  const store = repairAttrs?.repair_store
-                  const hasAnyInfo = product || symptom || repairQuote
 
-                  return (
-                    <div className="p-3 space-y-2 text-xs text-gray-700">
-                      {repairQuote && (
-                        <p className="text-[10px] text-gray-400">
-                          {new Date(repairQuote.createdAt).toLocaleDateString('ja-JP')}
-                        </p>
-                      )}
+                {repairEditMode ? (
+                  /* ─── Edit Mode ─── */
+                  <div className="p-3 space-y-2 text-xs">
+                    {([
+                      { key: 'repair_product_name', label: '機種' },
+                      { key: 'repair_model_name', label: 'モデル番号' },
+                      { key: 'repair_symptom_name', label: '症状' },
+                      { key: 'repair_year', label: '年式' },
+                      { key: 'repair_inch_size', label: 'インチ' },
+                      { key: 'repair_store', label: '希望店舗' },
+                      { key: 'priceFrom', label: '料金（下限）¥' },
+                      { key: 'priceTo', label: '料金（上限）¥' },
+                      { key: 'deliveryDaysFrom', label: '納期（下限）日' },
+                      { key: 'deliveryDaysTo', label: '納期（上限）日' },
+                    ] as { key: string; label: string }[]).map(({ key, label }) => (
+                      <div key={key}>
+                        <p className="text-[10px] text-gray-400 mb-0.5">{label}</p>
+                        <input
+                          type="text"
+                          value={repairEditData[key] ?? ''}
+                          onChange={e => setRepairEditData(d => ({ ...d, [key]: e.target.value }))}
+                          className="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                        />
+                      </div>
+                    ))}
+                    <div>
+                      <p className="text-[10px] text-gray-400 mb-0.5">依頼方法</p>
+                      <select
+                        value={repairEditData.requestType ?? ''}
+                        onChange={e => setRepairEditData(d => ({ ...d, requestType: e.target.value }))}
+                        className="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                      >
+                        <option value="">未設定</option>
+                        <option value="mail">郵送</option>
+                        <option value="store">来店</option>
+                        <option value="consult">相談</option>
+                      </select>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray-400 mb-0.5">ステータス</p>
+                      <select
+                        value={repairEditData.status ?? ''}
+                        onChange={e => setRepairEditData(d => ({ ...d, status: e.target.value }))}
+                        className="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                      >
+                        <option value="">未設定</option>
+                        <option value="quoted">見積済</option>
+                        <option value="accepted">対応中</option>
+                        <option value="completed">修理完了</option>
+                        <option value="shipped">返送済</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-1 pt-1">
+                      <button
+                        onClick={handleRepairSave}
+                        disabled={savingRepair}
+                        className="flex-1 py-1 rounded text-[11px] font-medium text-white disabled:opacity-50"
+                        style={{ backgroundColor: '#06C755' }}
+                      >{savingRepair ? '保存中...' : '保存'}</button>
+                      <button
+                        onClick={() => setRepairEditMode(false)}
+                        className="flex-1 py-1 rounded text-[11px] font-medium bg-gray-100 hover:bg-gray-200 text-gray-600"
+                      >キャンセル</button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ─── View Mode ─── */
+                  (() => {
+                    const product = repairAttrs?.repair_product_name
+                    const symptom = repairAttrs?.repair_symptom_name
+                    const modelName = repairAttrs?.repair_model_name
+                    const year = repairAttrs?.repair_year
+                    const rawInch = repairAttrs?.repair_inch_size
+                    const inchDisplay = rawInch
+                      ? String(rawInch).includes('インチ') ? rawInch : `${rawInch}インチ`
+                      : ''
+                    const store = repairAttrs?.repair_store
+                    const hasAnyInfo = product || symptom || repairQuote
 
-                      {/* 1. 機種 */}
-                      {product && (
-                        <div>
-                          <p className="text-[10px] text-gray-400 mb-0.5">機種</p>
-                          <p className="font-medium">{product}</p>
-                        </div>
-                      )}
-
-                      {/* 2. モデル（年式・インチ） */}
-                      {modelName && (
-                        <div>
-                          <p className="text-[10px] text-gray-400 mb-0.5">モデル</p>
-                          <p className="font-medium">
-                            {modelName}
-                            {(year || inchDisplay) && (
-                              <span className="font-normal text-gray-500">
-                                {`（${[year ? `${year}年` : '', inchDisplay].filter(Boolean).join(' ')}）`}
-                              </span>
-                            )}
+                    return (
+                      <div className="p-3 space-y-2 text-xs text-gray-700">
+                        {repairQuote && (
+                          <p className="text-[10px] text-gray-400">
+                            {new Date(repairQuote.createdAt).toLocaleDateString('ja-JP')}
                           </p>
-                        </div>
-                      )}
+                        )}
 
-                      {/* 3. 症状 */}
-                      {symptom && (
-                        <div>
-                          <p className="text-[10px] text-gray-400 mb-0.5">症状</p>
-                          <p className="font-medium">{symptom}</p>
-                        </div>
-                      )}
-
-                      {/* 4. 料金 */}
-                      {repairQuote?.priceFrom != null && (
-                        <div>
-                          <p className="text-[10px] text-gray-400 mb-0.5">料金</p>
-                          <p className="font-medium text-green-700">
-                            ¥{repairQuote.priceFrom.toLocaleString()}
-                            {repairQuote.priceTo ? `〜¥${repairQuote.priceTo.toLocaleString()}` : '〜'}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* 5. 納期 */}
-                      {repairQuote && (repairQuote.deliveryDaysFrom != null || repairQuote.deliveryDaysTo != null) && (
-                        <div>
-                          <p className="text-[10px] text-gray-400 mb-0.5">納期</p>
-                          <p>{repairQuote.deliveryDaysFrom}〜{repairQuote.deliveryDaysTo}日</p>
-                        </div>
-                      )}
-
-                      {/* 6. 依頼方法 */}
-                      {repairQuote?.requestType && (
-                        <div>
-                          <p className="text-[10px] text-gray-400 mb-0.5">依頼方法</p>
-                          <p>{{mail:'郵送',store:'店舗持込',consult:'相談'}[repairQuote.requestType] ?? repairQuote.requestType}</p>
-                        </div>
-                      )}
-
-                      {/* 7. 希望店舗 */}
-                      {store && (
-                        <div>
-                          <p className="text-[10px] text-gray-400 mb-0.5">希望店舗</p>
-                          <p className="font-medium">{store}</p>
-                        </div>
-                      )}
-
-                      {/* 8. ステータス */}
-                      {repairQuote && (
-                        <div className="pt-1">
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                            repairQuote.status === 'quoted' ? 'bg-blue-100 text-blue-700' :
-                            repairQuote.status === 'accepted' ? 'bg-green-100 text-green-700' :
-                            repairQuote.status === 'completed' ? 'bg-gray-100 text-gray-600' :
-                            'bg-yellow-100 text-yellow-700'
-                          }`}>
-                            {repairQuote.status === 'quoted' ? '見積済' :
-                             repairQuote.status === 'accepted' ? '受注済' :
-                             repairQuote.status === 'completed' ? '完了' : repairQuote.status}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* 郵送依頼情報 */}
-                      {mailOrder && (
-                        <div className="mt-2 pt-2 border-t border-gray-200 space-y-2">
-                          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">郵送依頼情報</p>
+                        {product && (
                           <div>
-                            <p className="text-[10px] text-gray-400 mb-0.5">お名前</p>
-                            <p className="font-medium">{mailOrder.name}</p>
+                            <p className="text-[10px] text-gray-400 mb-0.5">機種</p>
+                            <p className="font-medium">{product}</p>
                           </div>
+                        )}
+
+                        {modelName && (
                           <div>
-                            <p className="text-[10px] text-gray-400 mb-0.5">郵便番号</p>
-                            <p>{mailOrder.postalCode}</p>
+                            <p className="text-[10px] text-gray-400 mb-0.5">モデル</p>
+                            <p className="font-medium">
+                              {modelName}
+                              {(year || inchDisplay) && (
+                                <span className="font-normal text-gray-500">
+                                  {`（${[year ? `${year}年` : '', inchDisplay].filter(Boolean).join(' ')}）`}
+                                </span>
+                              )}
+                            </p>
                           </div>
+                        )}
+
+                        {symptom && (
                           <div>
-                            <p className="text-[10px] text-gray-400 mb-0.5">ご住所</p>
-                            <p>{mailOrder.address}</p>
+                            <p className="text-[10px] text-gray-400 mb-0.5">症状</p>
+                            <p className="font-medium">{symptom}</p>
                           </div>
+                        )}
+
+                        {repairQuote?.priceFrom != null && (
                           <div>
-                            <p className="text-[10px] text-gray-400 mb-0.5">電話番号</p>
-                            <p>{mailOrder.phone}</p>
+                            <p className="text-[10px] text-gray-400 mb-0.5">料金</p>
+                            <p className="font-medium text-green-700">
+                              ¥{repairQuote.priceFrom.toLocaleString()}
+                              {repairQuote.priceTo ? `〜¥${repairQuote.priceTo.toLocaleString()}` : '〜'}
+                            </p>
                           </div>
+                        )}
+
+                        {repairQuote && (repairQuote.deliveryDaysFrom != null || repairQuote.deliveryDaysTo != null) && (
                           <div>
-                            <p className="text-[10px] text-gray-400 mb-0.5">梱包キット</p>
-                            <p>{mailOrder.packagingKit ? 'あり (+1,000円)' : 'なし'}</p>
+                            <p className="text-[10px] text-gray-400 mb-0.5">納期</p>
+                            <p>{repairQuote.deliveryDaysFrom}〜{repairQuote.deliveryDaysTo}日</p>
                           </div>
+                        )}
+
+                        {repairQuote?.requestType && (
                           <div>
-                            <p className="text-[10px] text-gray-400 mb-0.5">配送先店舗</p>
-                            <p className="font-medium">{mailOrder.deliveryStore}</p>
+                            <p className="text-[10px] text-gray-400 mb-0.5">依頼方法</p>
+                            <p>{{mail:'郵送',store:'店舗持込',consult:'相談'}[repairQuote.requestType] ?? repairQuote.requestType}</p>
                           </div>
+                        )}
+
+                        {store && (
                           <div>
+                            <p className="text-[10px] text-gray-400 mb-0.5">希望店舗</p>
+                            <p className="font-medium">{store}</p>
+                          </div>
+                        )}
+
+                        {repairQuote && (
+                          <div className="pt-1">
                             <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                              mailOrder.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                              mailOrder.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
-                              mailOrder.status === 'completed' ? 'bg-gray-100 text-gray-600' :
-                              'bg-orange-100 text-orange-700'
+                              repairQuote.status === 'quoted' ? 'bg-blue-100 text-blue-700' :
+                              repairQuote.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                              repairQuote.status === 'completed' ? 'bg-gray-100 text-gray-600' :
+                              'bg-yellow-100 text-yellow-700'
                             }`}>
-                              {mailOrder.status === 'pending' ? '受付済' :
-                               mailOrder.status === 'shipped' ? '発送済' :
-                               mailOrder.status === 'completed' ? '完了' : mailOrder.status}
+                              {repairQuote.status === 'quoted' ? '見積済' :
+                               repairQuote.status === 'accepted' ? '受注済' :
+                               repairQuote.status === 'completed' ? '完了' : repairQuote.status}
                             </span>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {!hasAnyInfo && !mailOrder && (
-                        <p className="text-gray-400">修理情報なし</p>
-                      )}
-                    </div>
-                  )
-                })()}
+                        {/* 郵送依頼情報 */}
+                        {mailOrder && (
+                          <div className="mt-2 pt-2 border-t border-gray-200 space-y-2">
+                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">郵送依頼情報</p>
+                            <div>
+                              <p className="text-[10px] text-gray-400 mb-0.5">お名前</p>
+                              <p className="font-medium">{mailOrder.name}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-gray-400 mb-0.5">郵便番号</p>
+                              <p>{mailOrder.postalCode}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-gray-400 mb-0.5">ご住所</p>
+                              <p>{mailOrder.address}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-gray-400 mb-0.5">電話番号</p>
+                              <p>{mailOrder.phone}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-gray-400 mb-0.5">梱包キット</p>
+                              <p>{mailOrder.packagingKit ? 'あり (+1,000円)' : 'なし'}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-gray-400 mb-0.5">配送先店舗</p>
+                              <p className="font-medium">{mailOrder.deliveryStore}</p>
+                            </div>
+                            <div>
+                              <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                mailOrder.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                mailOrder.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
+                                mailOrder.status === 'completed' ? 'bg-gray-100 text-gray-600' :
+                                'bg-orange-100 text-orange-700'
+                              }`}>
+                                {mailOrder.status === 'pending' ? '受付済' :
+                                 mailOrder.status === 'shipped' ? '発送済' :
+                                 mailOrder.status === 'completed' ? '完了' : mailOrder.status}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {!hasAnyInfo && !mailOrder && (
+                          <p className="text-gray-400">修理情報なし</p>
+                        )}
+                      </div>
+                    )
+                  })()
+                )}
               </div>
             </div>
           ) : null}

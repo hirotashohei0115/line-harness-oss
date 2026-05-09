@@ -301,4 +301,66 @@ repairRoutes.get('/api/repair/mail-orders/:friendId', async (c) => {
   }
 });
 
+// PATCH /api/repair/attributes/:friendId — admin edit repair info
+repairRoutes.patch('/api/repair/attributes/:friendId', async (c) => {
+  const friendId = c.req.param('friendId');
+  let body: Record<string, string | null>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error: 'Invalid JSON body' }, 400);
+  }
+
+  const db = c.env.DB;
+  const now = new Date().toISOString().slice(0, 23);
+
+  // Attribute keys stored in friend_attributes
+  const attrKeys = ['repair_product_name', 'repair_model_name', 'repair_symptom_name', 'repair_year', 'repair_inch_size', 'repair_store'] as const;
+
+  try {
+    // Update friend_attributes
+    for (const key of attrKeys) {
+      if (key in body) {
+        const val = body[key];
+        if (val === null || val === '') {
+          await db.prepare(`DELETE FROM friend_attributes WHERE friend_id = ? AND key = ?`).bind(friendId, key).run();
+        } else {
+          await db.prepare(
+            `INSERT INTO friend_attributes (id, friend_id, key, value, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT (friend_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+          ).bind(crypto.randomUUID(), friendId, key, val, now, now).run();
+        }
+      }
+    }
+
+    // Update latest repair_quote if quote-related fields provided
+    const quoteFields = ['priceFrom', 'priceTo', 'deliveryDaysFrom', 'deliveryDaysTo', 'requestType', 'status'];
+    const quoteUpdates = quoteFields.filter(f => f in body);
+    if (quoteUpdates.length > 0) {
+      const latestQuote = await db.prepare(
+        `SELECT id FROM repair_quotes WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1`,
+      ).bind(friendId).first<{ id: string }>();
+
+      if (latestQuote) {
+        const colMap: Record<string, string> = {
+          priceFrom: 'price_from', priceTo: 'price_to',
+          deliveryDaysFrom: 'delivery_days_from', deliveryDaysTo: 'delivery_days_to',
+          requestType: 'request_type', status: 'status',
+        };
+        const setClauses = quoteUpdates.map(f => `${colMap[f]} = ?`).join(', ');
+        const values = quoteUpdates.map(f => body[f] === '' ? null : body[f]);
+        await db.prepare(
+          `UPDATE repair_quotes SET ${setClauses}, updated_at = ? WHERE id = ?`,
+        ).bind(...values, now, latestQuote.id).run();
+      }
+    }
+
+    return c.json({ success: true });
+  } catch (err) {
+    console.error('PATCH /api/repair/attributes/:friendId error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 export { repairRoutes };
