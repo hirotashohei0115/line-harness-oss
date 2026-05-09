@@ -24,6 +24,7 @@ import {
 } from '@line-crm/db';
 import { fireEvent } from '../services/event-bus.js';
 import { buildMessage, expandVariables } from '../services/step-delivery.js';
+import { sendChatworkMessage, jstTimestamp } from '../lib/chatwork.js';
 import type { Env } from '../index.js';
 
 const webhook = new Hono<Env>();
@@ -74,7 +75,7 @@ webhook.post('/webhook', async (c) => {
   const processingPromise = (async () => {
     for (const event of body.events) {
       try {
-        await handleEvent(db, lineClient, event, channelAccessToken, matchedAccountId, c.env.WORKER_URL || new URL(c.req.url).origin, c.env.LIFF_URL);
+        await handleEvent(db, lineClient, event, channelAccessToken, matchedAccountId, c.env.WORKER_URL || new URL(c.req.url).origin, c.env.LIFF_URL, c.env.CHATWORK_API_TOKEN, c.env.CHATWORK_ROOM_ID);
       } catch (err) {
         console.error('Error handling webhook event:', err);
       }
@@ -686,6 +687,8 @@ async function handleEvent(
   lineAccountId: string | null = null,
   workerUrl?: string,
   liffUrl?: string,
+  chatworkApiToken?: string,
+  chatworkRoomId?: string,
 ): Promise<void> {
   if (event.type === 'follow') {
     const userId =
@@ -1175,6 +1178,14 @@ async function handleEvent(
     // チャットを作成/更新（ボタンタップでない実際のユーザーメッセージのみ）
     if (!isAutoKeyword && !isTimeCommand) {
       await upsertChatOnMessage(db, friend.id);
+
+      // Chatwork通知: 選択肢以外の自由入力メッセージ
+      const cwToken = chatworkApiToken;
+      const cwRoom = chatworkRoomId;
+      if (cwToken && cwRoom) {
+        const cwMsg = `[info][title]💬 個別メッセージが届きました[/title]ユーザー：${friend.display_name || userId}\nメッセージ：${incomingText}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+        sendChatworkMessage(cwToken, cwRoom, cwMsg).catch(() => {});
+      }
     }
 
     // 自動返信チェック（このアカウントのルール + グローバルルールのみ）

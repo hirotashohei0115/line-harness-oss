@@ -8,6 +8,7 @@ import {
 } from '@line-crm/db';
 import type { RepairQuote } from '@line-crm/db';
 import { LineClient } from '@line-crm/line-sdk';
+import { sendChatworkMessage, jstTimestamp } from '../lib/chatwork.js';
 import type { Env } from '../index.js';
 
 function serializeQuote(q: RepairQuote) {
@@ -229,6 +230,16 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       await lineClient.pushMessage(lineUserId, [{ type: 'text', text: thankMsg }]);
     } catch (pushErr) {
       console.error('mail-order push message error:', pushErr);
+    }
+
+    // Chatwork通知: 梱包キット希望の場合
+    if (packagingKit) {
+      const cwToken = c.env.CHATWORK_API_TOKEN;
+      const cwRoom = c.env.CHATWORK_ROOM_ID;
+      if (cwToken && cwRoom) {
+        const cwMsg = `[info][title]📦 梱包キット希望の郵送依頼が届きました[/title]ユーザー：${name}様\n郵便番号：${postalCode}\n住所：${address}\n電話番号：${phone}\n配送先：${deliveryStore}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+        sendChatworkMessage(cwToken, cwRoom, cwMsg).catch(() => {});
+      }
     }
 
     return c.json({ success: true, data: { id } }, 201);
