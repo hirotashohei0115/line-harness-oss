@@ -210,7 +210,10 @@ async function processRepairFollowUps(db: D1Database, defaultToken: string): Pro
   const lineClient = new LineClient(defaultToken);
   const flexMsg = buildFollowUpFlex();
 
+  const sentFriendIds = new Set<string>();
   for (const quote of quotes) {
+    if (sentFriendIds.has(quote.friend_id)) continue;
+    sentFriendIds.add(quote.friend_id);
     try {
       await lineClient.pushMessage(quote.line_user_id, [flexMsg]);
       await markFollowSent(db, quote.id);

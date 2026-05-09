@@ -208,6 +208,9 @@ export async function getUnsentFollowUpQuotes(
   from: string,
   to: string,
 ): Promise<FollowUpQuoteRow[]> {
+  // Use MAX(rq.id) to pick the latest quote per friend, preventing duplicate messages
+  // when a friend has multiple unsent quotes in the same window.
+  // Also exclude friends who already received a follow-up for any quote.
   const result = await db
     .prepare(
       `SELECT rq.id, rq.friend_id, f.line_user_id, rq.price_from, rq.price_to
@@ -216,9 +219,22 @@ export async function getUnsentFollowUpQuotes(
        WHERE rq.status = 'quoted'
          AND rq.follow_sent = 0
          AND rq.created_at >= ?
-         AND rq.created_at < ?`,
+         AND rq.created_at < ?
+         AND NOT EXISTS (
+           SELECT 1 FROM repair_quotes rq2
+           WHERE rq2.friend_id = rq.friend_id
+             AND rq2.follow_sent = 1
+         )
+         AND rq.id = (
+           SELECT MAX(rq3.id) FROM repair_quotes rq3
+           WHERE rq3.friend_id = rq.friend_id
+             AND rq3.status = 'quoted'
+             AND rq3.follow_sent = 0
+             AND rq3.created_at >= ?
+             AND rq3.created_at < ?
+         )`,
     )
-    .bind(from, to)
+    .bind(from, to, from, to)
     .all<FollowUpQuoteRow>();
   return result.results;
 }
