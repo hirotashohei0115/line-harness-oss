@@ -117,10 +117,10 @@ function renderForm(displayName: string): void {
         </div>
 
         <div class="mr-field">
-          <label class="mr-label" for="mr-kit">梱包キット<span class="mr-required">*</span></label>
+          <label class="mr-label" for="mr-kit">無料梱包キット<span class="mr-required">*</span></label>
           <select class="mr-select" id="mr-kit" name="packagingKit" required>
             <option value="">選択してください</option>
-            <option value="true">希望する（+1,000円）</option>
+            <option value="true">希望する（無料）</option>
             <option value="false">希望しない</option>
           </select>
         </div>

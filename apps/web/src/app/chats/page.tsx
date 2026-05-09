@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api, fetchApi } from '@/lib/api'
 import { useAccount } from '@/contexts/account-context'
 import Header from '@/components/layout/header'
@@ -294,6 +294,8 @@ export default function ChatsPage() {
   const [repairEditMode, setRepairEditMode] = useState(false)
   const [repairEditData, setRepairEditData] = useState<Record<string, string>>({})
   const [savingRepair, setSavingRepair] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'name'>('newest')
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -448,6 +450,22 @@ export default function ChatsPage() {
     }
   }
 
+  const filteredChats = useMemo(() => {
+    let result = [...chats]
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      result = result.filter(c => c.friendName.toLowerCase().includes(q))
+    }
+    if (sortOrder === 'newest') {
+      result.sort((a, b) => (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt))
+    } else if (sortOrder === 'oldest') {
+      result.sort((a, b) => (a.lastMessageAt ?? a.createdAt).localeCompare(b.lastMessageAt ?? b.createdAt))
+    } else if (sortOrder === 'name') {
+      result.sort((a, b) => a.friendName.localeCompare(b.friendName, 'ja'))
+    }
+    return result
+  }, [chats, searchQuery, sortOrder])
+
   const handleRepairEdit = () => {
     setRepairEditData({
       repair_product_name: repairAttrs.repair_product_name ?? '',
@@ -528,6 +546,26 @@ export default function ChatsPage() {
             ))}
           </div>
 
+          {/* Search & Sort */}
+          <div className="px-3 py-2 border-b border-gray-100 space-y-1.5">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="名前で検索..."
+              className="w-full text-xs border border-gray-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500"
+            />
+            <select
+              value={sortOrder}
+              onChange={e => setSortOrder(e.target.value as 'newest' | 'oldest' | 'name')}
+              className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
+            >
+              <option value="newest">最終メッセージ（新しい順）</option>
+              <option value="oldest">最終メッセージ（古い順）</option>
+              <option value="name">名前（あいうえお順）</option>
+            </select>
+          </div>
+
           {/* Chat List */}
           <div className="flex-1 overflow-y-auto">
             {loading ? (
@@ -546,7 +584,10 @@ export default function ChatsPage() {
               </div>
             ) : (
               <>
-                {chats.map((chat) => {
+                {filteredChats.length === 0 && !loading && (
+                  <p className="px-4 py-6 text-xs text-gray-400 text-center">該当するチャットがありません</p>
+                )}
+                {filteredChats.map((chat) => {
                   const statusInfo = statusConfig[chat.status]
                   const isSelected = selectedChatId === chat.id
                   return (
@@ -989,7 +1030,7 @@ export default function ChatsPage() {
                             </div>
                             <div>
                               <p className="text-[10px] text-gray-400 mb-0.5">梱包キット</p>
-                              <p>{mailOrder.packagingKit ? 'あり (+1,000円)' : 'なし'}</p>
+                              <p>{mailOrder.packagingKit ? 'あり（無料）' : 'なし'}</p>
                             </div>
                             <div>
                               <p className="text-[10px] text-gray-400 mb-0.5">配送先店舗</p>

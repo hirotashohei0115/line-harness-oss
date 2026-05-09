@@ -217,7 +217,7 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       .run();
 
     // LINEでお礼メッセージを送信
-    const kitLabel = packagingKit ? 'あり(+1,000円)' : 'なし';
+    const kitLabel = packagingKit ? 'あり（無料）' : 'なし';
     const storeInfo = deliveryStore.includes('盛岡')
       ? `リペアマスター盛岡店\n〒020-0034\n岩手県盛岡市盛岡駅前通1-44\n盛岡フェザン 本館1階\nTEL: 019-613-8665`
       : deliveryStore.includes('岐阜')
