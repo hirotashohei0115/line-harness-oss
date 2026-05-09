@@ -216,6 +216,12 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       .bind(id, friend.id, name, postalCode, address, phone, packagingKit ? 1 : 0, deliveryStore, now, now)
       .run();
 
+    // フォーム入力名で display_name を更新
+    await c.env.DB
+      .prepare(`UPDATE friends SET display_name = ?, updated_at = ? WHERE id = ?`)
+      .bind(name, now, friend.id)
+      .run();
+
     // LINEでお礼メッセージを送信
     const kitLabel = packagingKit ? 'あり（無料）' : 'なし';
     const storeInfo = deliveryStore.includes('盛岡')
@@ -326,10 +332,10 @@ repairRoutes.patch('/api/repair/attributes/:friendId', async (c) => {
           await db.prepare(`DELETE FROM friend_attributes WHERE friend_id = ? AND key = ?`).bind(friendId, key).run();
         } else {
           await db.prepare(
-            `INSERT INTO friend_attributes (id, friend_id, key, value, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)
+            `INSERT INTO friend_attributes (id, friend_id, key, value, updated_at)
+             VALUES (?, ?, ?, ?, ?)
              ON CONFLICT (friend_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-          ).bind(crypto.randomUUID(), friendId, key, val, now, now).run();
+          ).bind(crypto.randomUUID(), friendId, key, val, now).run();
         }
       }
     }
