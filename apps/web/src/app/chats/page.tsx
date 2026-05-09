@@ -130,6 +130,12 @@ interface MailOrder {
   createdAt: string
 }
 
+interface Tag {
+  id: string
+  name: string
+  color: string | null
+}
+
 function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
   friendId: string
   friend: FriendItem | null
@@ -296,6 +302,10 @@ export default function ChatsPage() {
   const [savingRepair, setSavingRepair] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'name'>('newest')
+  const [friendTags, setFriendTags] = useState<Tag[]>([])
+  const [allTags, setAllTags] = useState<Tag[]>([])
+  const [tagInput, setTagInput] = useState('')
+  const [addingTag, setAddingTag] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -383,6 +393,24 @@ export default function ChatsPage() {
     }
   }, [])
 
+  const loadFriendTags = useCallback(async (friendId: string) => {
+    try {
+      const res = await fetchApi<{ success: boolean; data: { tags: Tag[] } }>(`/api/friends/${friendId}`)
+      if (res.success) setFriendTags(res.data.tags ?? [])
+    } catch { setFriendTags([]) }
+  }, [])
+
+  const loadAllTags = useCallback(async () => {
+    try {
+      const res = await fetchApi<{ success: boolean; data: Tag[] }>(`/api/tags`)
+      if (res.success) setAllTags(res.data)
+    } catch { /* silent */ }
+  }, [])
+
+  useEffect(() => {
+    loadAllTags()
+  }, [loadAllTags])
+
   useEffect(() => {
     loadChats()
   }, [loadChats])
@@ -398,13 +426,16 @@ export default function ChatsPage() {
   useEffect(() => {
     if (chatDetail?.friendId) {
       loadRepairInfo(chatDetail.friendId)
+      loadFriendTags(chatDetail.friendId)
     } else {
       setRepairQuote(null)
       setRepairAttrs({})
       setMailOrder(null)
+      setFriendTags([])
     }
     setRepairEditMode(false)
-  }, [chatDetail?.friendId, loadRepairInfo])
+    setTagInput('')
+  }, [chatDetail?.friendId, loadRepairInfo, loadFriendTags])
 
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId)
@@ -494,10 +525,49 @@ export default function ChatsPage() {
       })
       setRepairEditMode(false)
       await loadRepairInfo(chatDetail.friendId)
-    } catch {
-      // silent
+    } catch (err) {
+      alert(`保存に失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`)
     } finally {
       setSavingRepair(false)
+    }
+  }
+
+  const handleAddTag = async () => {
+    const name = tagInput.trim()
+    if (!name || !chatDetail?.friendId || addingTag) return
+    setAddingTag(true)
+    try {
+      let tag = allTags.find(t => t.name.toLowerCase() === name.toLowerCase())
+      if (!tag) {
+        const createRes = await fetchApi<{ success: boolean; data: Tag }>(`/api/tags`, {
+          method: 'POST',
+          body: JSON.stringify({ name }),
+        })
+        if (!createRes.success) throw new Error('タグの作成に失敗しました')
+        tag = createRes.data
+        setAllTags(prev => [...prev, tag!])
+      }
+      if (friendTags.some(t => t.id === tag!.id)) { setTagInput(''); return }
+      await fetchApi(`/api/friends/${chatDetail.friendId}/tags`, {
+        method: 'POST',
+        body: JSON.stringify({ tagId: tag.id }),
+      })
+      setFriendTags(prev => [...prev, tag!])
+      setTagInput('')
+    } catch (err) {
+      alert(`タグの追加に失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`)
+    } finally {
+      setAddingTag(false)
+    }
+  }
+
+  const handleRemoveTag = async (tagId: string) => {
+    if (!chatDetail?.friendId) return
+    try {
+      await fetchApi(`/api/friends/${chatDetail.friendId}/tags/${tagId}`, { method: 'DELETE' })
+      setFriendTags(prev => prev.filter(t => t.id !== tagId))
+    } catch {
+      alert('タグの削除に失敗しました')
     }
   }
 
@@ -894,9 +964,8 @@ export default function ChatsPage() {
                       >
                         <option value="">未設定</option>
                         <option value="quoted">見積済</option>
-                        <option value="accepted">対応中</option>
-                        <option value="completed">修理完了</option>
-                        <option value="shipped">返送済</option>
+                        <option value="ordered">受注済</option>
+                        <option value="cancelled">キャンセル</option>
                       </select>
                     </div>
                     <div className="flex gap-1 pt-1">
@@ -997,13 +1066,13 @@ export default function ChatsPage() {
                           <div className="pt-1">
                             <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
                               repairQuote.status === 'quoted' ? 'bg-blue-100 text-blue-700' :
-                              repairQuote.status === 'accepted' ? 'bg-green-100 text-green-700' :
-                              repairQuote.status === 'completed' ? 'bg-gray-100 text-gray-600' :
+                              repairQuote.status === 'ordered' ? 'bg-green-100 text-green-700' :
+                              repairQuote.status === 'cancelled' ? 'bg-red-100 text-red-700' :
                               'bg-yellow-100 text-yellow-700'
                             }`}>
                               {repairQuote.status === 'quoted' ? '見積済' :
-                               repairQuote.status === 'accepted' ? '受注済' :
-                               repairQuote.status === 'completed' ? '完了' : repairQuote.status}
+                               repairQuote.status === 'ordered' ? '受注済' :
+                               repairQuote.status === 'cancelled' ? 'キャンセル' : repairQuote.status}
                             </span>
                           </div>
                         )}
@@ -1058,6 +1127,58 @@ export default function ChatsPage() {
                     )
                   })()
                 )}
+
+                {/* Tag Section */}
+                <div className="border-t border-gray-200">
+                  <div className="px-3 py-2 bg-white flex items-center">
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">タグ</p>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    {/* Tag list */}
+                    <div className="flex flex-wrap gap-1 min-h-[24px]">
+                      {friendTags.length === 0 ? (
+                        <p className="text-[11px] text-gray-400">タグなし</p>
+                      ) : (
+                        friendTags.map(tag => (
+                          <span
+                            key={tag.id}
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-700"
+                          >
+                            {tag.name}
+                            <button
+                              onClick={() => handleRemoveTag(tag.id)}
+                              className="ml-0.5 text-blue-500 hover:text-blue-800 leading-none"
+                              title="削除"
+                            >×</button>
+                          </span>
+                        ))
+                      )}
+                    </div>
+                    {/* Tag input */}
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={tagInput}
+                        onChange={e => setTagInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void handleAddTag() } }}
+                        placeholder="タグを入力..."
+                        className="flex-1 border border-gray-300 rounded px-1.5 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-green-500 min-w-0"
+                        list="tag-suggestions"
+                      />
+                      <datalist id="tag-suggestions">
+                        {allTags.filter(t => !friendTags.some(ft => ft.id === t.id)).map(t => (
+                          <option key={t.id} value={t.name} />
+                        ))}
+                      </datalist>
+                      <button
+                        onClick={() => void handleAddTag()}
+                        disabled={!tagInput.trim() || addingTag}
+                        className="px-2 py-1 rounded text-[11px] font-medium text-white disabled:opacity-50 flex-shrink-0"
+                        style={{ backgroundColor: '#06C755' }}
+                      >{addingTag ? '...' : '追加'}</button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}
