@@ -813,7 +813,9 @@ async function handleEvent(
       .bind(logId, friend.id, incomingText, now)
       .run();
 
-    // チャットを作成/更新: ボタンタップや自動応答キーワードは除外（repair flow後に判定）
+    // チャットを作成/更新（全メッセージ対象 — ボタンタップ含む）
+    await upsertChatOnMessage(db, friend.id);
+
     const autoKeywords = ['料金', '機能', 'API', 'フォーム', 'ヘルプ', 'UUID', 'UUID連携について教えて', 'UUID連携を確認', '配信時間', '導入支援を希望します', 'アカウント連携を見る', '体験を完了する', 'BAN対策を見る', '連携確認'];
     const isAutoKeyword = autoKeywords.some(k => incomingText === k);
     const isTimeCommand = /(?:配信時間|配信|届けて|通知)[はを]?\s*\d{1,2}\s*時/.test(incomingText);
@@ -1181,11 +1183,8 @@ async function handleEvent(
     }
     // ===== End repair flow =====
 
-    // チャットを作成/更新（ボタンタップでない実際のユーザーメッセージのみ）
+    // Chatwork通知: 選択肢以外の自由入力メッセージのみ
     if (!isAutoKeyword && !isTimeCommand) {
-      await upsertChatOnMessage(db, friend.id);
-
-      // Chatwork通知: 選択肢以外の自由入力メッセージ
       const cwToken = chatworkApiToken;
       const cwRoom = chatworkRoomId;
       if (cwToken && cwRoom) {
@@ -1250,6 +1249,34 @@ async function handleEvent(
 
     const params = new URLSearchParams(event.postback.data);
     const action = params.get('action');
+
+    // postbackをmessages_logに保存してチャット画面に表示する
+    {
+      const displayText = event.postback.displayText;
+      const actionLabels: Record<string, () => string> = {
+        select_product:    () => `【機種選択】${params.get('name') ?? ''}`,
+        choose_model_method: () => 'モデルを選択',
+        select_model:      () => `【モデル選択】${params.get('model_name') ?? ''}`,
+        choose_year_method: () => '年式・インチで選択',
+        skip_model:        () => 'モデルをスキップ',
+        select_year:       () => `【年式選択】${params.get('year') ?? ''}年`,
+        select_inch:       () => `【インチ選択】${params.get('inch') ?? ''}`,
+        select_symptom:    () => `【症状選択】${params.get('symptom_name') ?? ''}`,
+        request_type:      () => { const t = params.get('type'); return t === 'mail' ? '【郵送修理を選択】' : t === 'store' ? '【店頭持込を選択】' : '【相談を選択】'; },
+        select_store:      () => `【店舗選択】${params.get('store_key') ?? ''}`,
+        start_repair:      () => '修理を開始',
+        consult_category:  () => `【相談カテゴリ】${params.get('category') ?? ''}`,
+        consult_phone:     () => '電話で相談',
+        faq_question:      () => '質問を選択',
+      };
+      const logContent = displayText || actionLabels[action ?? '']?.() || event.postback.data;
+      const now = jstNow();
+      await db.prepare(
+        `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, created_at)
+         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, ?)`,
+      ).bind(crypto.randomUUID(), friend.id, logContent, now).run();
+      await upsertChatOnMessage(db, friend.id);
+    }
 
     if (action === 'select_product') {
       const productKey = params.get('product') ?? '';
