@@ -1105,6 +1105,12 @@ async function handleEvent(
           { type: 'text', text: 'ご来店予定日とお名前をお知らせください。\nex. 6/1(月) 13:00ごろ 山田太郎' },
         ]);
       } catch (err) { console.error('repair msg reservation:', err); }
+
+      // Chatwork通知: 来店予約ボタンタップ
+      if (chatworkApiToken && chatworkRoomId) {
+        const cwMsg = `[info][title]🏪 来店予約ボタンがタップされました[/title]ユーザー：${friend.display_name || userId}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+        await sendChatworkMessage(chatworkApiToken, chatworkRoomId, cwMsg);
+      }
       return;
     }
 

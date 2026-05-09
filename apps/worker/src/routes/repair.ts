@@ -232,13 +232,13 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       console.error('mail-order push message error:', pushErr);
     }
 
-    // Chatwork通知: 梱包キット希望の場合
+    // Chatwork通知: 梱包キット希望の場合（awaitで確実に送信）
     if (packagingKit) {
       const cwToken = c.env.CHATWORK_API_TOKEN;
       const cwRoom = c.env.CHATWORK_ROOM_ID;
       if (cwToken && cwRoom) {
         const cwMsg = `[info][title]📦 梱包キット希望の郵送依頼が届きました[/title]ユーザー：${name}様\n郵便番号：${postalCode}\n住所：${address}\n電話番号：${phone}\n配送先：${deliveryStore}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
-        sendChatworkMessage(cwToken, cwRoom, cwMsg).catch(() => {});
+        await sendChatworkMessage(cwToken, cwRoom, cwMsg);
       }
     }
 

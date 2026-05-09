@@ -13,7 +13,6 @@ import {
   toJstString,
 } from '@line-crm/db';
 import { GoogleCalendarClient } from '../services/google-calendar.js';
-import { sendChatworkMessage, jstTimestamp } from '../lib/chatwork.js';
 import type { Env } from '../index.js';
 
 const calendar = new Hono<Env>();
@@ -207,16 +206,6 @@ calendar.post('/api/integrations/google-calendar/book', async (c) => {
         // Google API 失敗はベストエフォート — D1 予約は維持する
         console.warn('Google Calendar createEvent error (booking still created in D1):', err);
       }
-    }
-
-    // Chatwork通知: 来店予約
-    const cwToken = c.env.CHATWORK_API_TOKEN;
-    const cwRoom = c.env.CHATWORK_ROOM_ID;
-    if (cwToken && cwRoom) {
-      const displayName = body.metadata?.displayName as string | undefined;
-      const store = body.metadata?.store as string | undefined;
-      const cwMsg = `[info][title]🏪 来店予約が入りました[/title]ユーザー：${displayName || body.friendId || '不明'}\n予約日時：${body.startAt}\n店舗：${store || body.title}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
-      sendChatworkMessage(cwToken, cwRoom, cwMsg).catch(() => {});
     }
 
     return c.json({
