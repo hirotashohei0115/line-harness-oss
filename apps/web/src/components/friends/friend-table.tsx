@@ -7,6 +7,14 @@ import type { ContactMark } from '@/lib/api'
 import { api } from '@/lib/api'
 import TagBadge from './tag-badge'
 
+function getMarkTextColor(bgColor: string): string {
+  const hex = bgColor.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16) || 0
+  const g = parseInt(hex.substring(2, 4), 16) || 0
+  const b = parseInt(hex.substring(4, 6), 16) || 0
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#000000' : '#ffffff'
+}
+
 interface FriendTableProps {
   friends: FriendWithTags[]
   allTags: Tag[]
@@ -186,18 +194,23 @@ export default function FriendTable({ friends, allTags, allMarks, onRefresh }: F
                     {formatDate(friend.createdAt)}
                   </td>
 
-                  {/* Mark dot */}
+                  {/* Mark badge */}
                   <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="relative">
                       <button
-                        className="w-5 h-5 rounded-full border border-gray-300 block hover:ring-2 hover:ring-offset-1 hover:ring-gray-400 transition-all"
-                        style={{ backgroundColor: markMap.get(friend.contactMarkId ?? '')?.color ?? '#e5e7eb' }}
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium hover:opacity-80 transition-opacity max-w-[140px] truncate"
+                        style={{
+                          backgroundColor: markMap.get(friend.contactMarkId ?? '')?.color ?? '#e5e7eb',
+                          color: getMarkTextColor(markMap.get(friend.contactMarkId ?? '')?.color ?? '#e5e7eb'),
+                        }}
                         onClick={(e) => {
                           e.stopPropagation()
                           setMarkSelectorFor(markSelectorFor === friend.id ? null : friend.id)
                         }}
                         title={markMap.get(friend.contactMarkId ?? '')?.name ?? 'マークなし'}
-                      />
+                      >
+                        {markMap.get(friend.contactMarkId ?? '')?.name ?? 'マークなし'}
+                      </button>
                       {markSelectorFor === friend.id && (
                         <div
                           className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[200px] max-h-64 overflow-y-auto"

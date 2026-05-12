@@ -50,6 +50,14 @@ const statusFilters: { key: StatusFilter; label: string }[] = [
   { key: 'resolved', label: '解決済' },
 ]
 
+function getMarkTextColor(bgColor: string): string {
+  const hex = bgColor.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16) || 0
+  const g = parseInt(hex.substring(2, 4), 16) || 0
+  const b = parseInt(hex.substring(4, 6), 16) || 0
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#000000' : '#ffffff'
+}
+
 function formatDatetime(iso: string | null): string {
   if (!iso) return '-'
   return new Date(iso).toLocaleString('ja-JP', {
@@ -692,23 +700,24 @@ export default function ChatsPage() {
                         )}
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-900 truncate">{chat.friendName}</p>
+                          {(() => {
+                            const chatWithMark = chat as Chat & { contactMarkId?: string }
+                            const mark = allMarks.find((m) => m.id === chatWithMark.contactMarkId)
+                            if (!mark) return null
+                            return (
+                              <span
+                                className="inline-block px-2 py-0.5 rounded text-xs font-medium mt-0.5 mb-0.5"
+                                style={{ backgroundColor: mark.color, color: getMarkTextColor(mark.color) }}
+                              >
+                                {mark.name}
+                              </span>
+                            )
+                          })()}
                           <p className="text-xs text-gray-400 mt-0.5">{formatDatetime(chat.lastMessageAt)}</p>
                         </div>
                         <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${statusInfo.className}`}>
                           {statusInfo.label}
                         </span>
-                        {(() => {
-                          const chatWithMark = chat as Chat & { contactMarkId?: string }
-                          const mark = allMarks.find((m) => m.id === chatWithMark.contactMarkId)
-                          if (!mark) return null
-                          return (
-                            <div
-                              className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-200"
-                              style={{ backgroundColor: mark.color }}
-                              title={mark.name}
-                            />
-                          )
-                        })()}
                       </div>
                     </button>
                   )
