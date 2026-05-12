@@ -36,6 +36,7 @@ import { adPlatforms } from './routes/ad-platforms.js';
 import { staff } from './routes/staff.js';
 import { repairRoutes } from './routes/repair.js';
 import { funnelRoutes } from './routes/funnel.js';
+import { crossAnalysisRoutes } from './routes/cross-analysis.js';
 import { marks } from './routes/marks.js';
 
 export type Env = {
@@ -97,6 +98,7 @@ app.route('/', adPlatforms);
 app.route('/', staff);
 app.route('/', repairRoutes);
 app.route('/', funnelRoutes);
+app.route('/', crossAnalysisRoutes);
 app.route('/', marks);
 
 // Short link: /r/:ref → landing page with LINE open button
