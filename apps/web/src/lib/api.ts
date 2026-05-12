@@ -30,6 +30,15 @@ import type { Broadcast } from '@line-crm/shared'
 /** Broadcast type from API (now camelCase after worker serialization) */
 export type ApiBroadcast = Broadcast
 
+export type ContactMark = {
+  id: string
+  name: string
+  color: string
+  sortOrder: number
+  isDefault: boolean
+  createdAt: string
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
 
 /**
@@ -63,7 +72,7 @@ export type FriendListParams = {
   accountId?: string
 }
 
-export type FriendWithTags = Friend & { tags: Tag[] }
+export type FriendWithTags = Friend & { tags: Tag[]; contactMarkId?: string | null }
 
 export const api = {
   friends: {
@@ -92,6 +101,11 @@ export const api = {
       fetchApi<ApiResponse<null>>(`/api/friends/${friendId}/tags/${tagId}`, {
         method: 'DELETE',
       }),
+    updateMark: (friendId: string, markId: string | null) =>
+      fetchApi<ApiResponse<null>>(`/api/friends/${friendId}/mark`, {
+        method: 'PATCH',
+        body: JSON.stringify({ markId }),
+      }),
   },
   tags: {
     list: () =>
@@ -103,6 +117,22 @@ export const api = {
       }),
     delete: (id: string) =>
       fetchApi<ApiResponse<null>>(`/api/tags/${id}`, { method: 'DELETE' }),
+  },
+  marks: {
+    list: () =>
+      fetchApi<ApiResponse<ContactMark[]>>('/api/marks'),
+    create: (data: { name: string; color: string; sortOrder?: number }) =>
+      fetchApi<ApiResponse<ContactMark>>('/api/marks', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: { name?: string; color?: string; sortOrder?: number }) =>
+      fetchApi<ApiResponse<ContactMark>>(`/api/marks/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      fetchApi<ApiResponse<null>>(`/api/marks/${id}`, { method: 'DELETE' }),
   },
   scenarios: {
     list: (params?: { accountId?: string }) => {
