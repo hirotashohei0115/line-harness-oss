@@ -35,6 +35,7 @@ import { forms } from './routes/forms.js';
 import { adPlatforms } from './routes/ad-platforms.js';
 import { staff } from './routes/staff.js';
 import { repairRoutes } from './routes/repair.js';
+import { marks } from './routes/marks.js';
 
 export type Env = {
   Bindings: {
@@ -94,6 +95,7 @@ app.route('/', forms);
 app.route('/', adPlatforms);
 app.route('/', staff);
 app.route('/', repairRoutes);
+app.route('/', marks);
 
 // Short link: /r/:ref → landing page with LINE open button
 app.get('/r/:ref', (c) => {
