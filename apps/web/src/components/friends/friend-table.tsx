@@ -1,23 +1,37 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { Tag } from '@line-crm/shared'
 import type { FriendWithTags } from '@/lib/api'
+import type { ContactMark } from '@/lib/api'
 import { api } from '@/lib/api'
 import TagBadge from './tag-badge'
 
 interface FriendTableProps {
   friends: FriendWithTags[]
   allTags: Tag[]
+  allMarks: ContactMark[]
   onRefresh: () => void
 }
 
-export default function FriendTable({ friends, allTags, onRefresh }: FriendTableProps) {
+export default function FriendTable({ friends, allTags, allMarks, onRefresh }: FriendTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [addingTagForFriend, setAddingTagForFriend] = useState<string | null>(null)
   const [selectedTagId, setSelectedTagId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [markSelectorFor, setMarkSelectorFor] = useState<string | null>(null)
+  const markMap = useMemo(() => new Map(allMarks.map((m) => [m.id, m])), [allMarks])
+
+  const handleMarkChange = async (friendId: string, markId: string | null) => {
+    try {
+      await api.friends.updateMark(friendId, markId)
+      setMarkSelectorFor(null)
+      onRefresh()
+    } catch {
+      setError('マークの変更に失敗しました')
+    }
+  }
 
   const toggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id)
@@ -94,6 +108,9 @@ export default function FriendTable({ friends, allTags, onRefresh }: FriendTable
             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
               登録日
             </th>
+            <th className="px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-10">
+              マーク
+            </th>
             <th className="px-4 py-3" />
           </tr>
         </thead>
@@ -169,6 +186,45 @@ export default function FriendTable({ friends, allTags, onRefresh }: FriendTable
                     {formatDate(friend.createdAt)}
                   </td>
 
+                  {/* Mark dot */}
+                  <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="relative">
+                      <button
+                        className="w-5 h-5 rounded-full border border-gray-300 block hover:ring-2 hover:ring-offset-1 hover:ring-gray-400 transition-all"
+                        style={{ backgroundColor: markMap.get(friend.contactMarkId ?? '')?.color ?? '#e5e7eb' }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setMarkSelectorFor(markSelectorFor === friend.id ? null : friend.id)
+                        }}
+                        title={markMap.get(friend.contactMarkId ?? '')?.name ?? 'マークなし'}
+                      />
+                      {markSelectorFor === friend.id && (
+                        <div
+                          className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[200px] max-h-64 overflow-y-auto"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            className="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50 flex items-center gap-2"
+                            onClick={() => handleMarkChange(friend.id, null)}
+                          >
+                            <span className="w-4 h-4 rounded-full border border-gray-300 flex-shrink-0 inline-block" />
+                            マークなし
+                          </button>
+                          {allMarks.map((m) => (
+                            <button
+                              key={m.id}
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"
+                              onClick={() => handleMarkChange(friend.id, m.id)}
+                            >
+                              <span className="w-4 h-4 rounded-full flex-shrink-0 border border-gray-200 inline-block" style={{ backgroundColor: m.color }} />
+                              <span className="truncate">{m.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+
                   {/* Expand indicator */}
                   <td className="px-4 py-3 text-right">
                     <svg
@@ -183,7 +239,7 @@ export default function FriendTable({ friends, allTags, onRefresh }: FriendTable
                 {/* Expanded detail row */}
                 {isExpanded && (
                   <tr key={`${friend.id}-detail`} className="bg-gray-50">
-                    <td colSpan={5} className="px-6 py-4">
+                    <td colSpan={6} className="px-6 py-4">
                       <div className="space-y-3">
                         <div>
                           <p className="text-xs font-semibold text-gray-500 mb-1">LINE ユーザーID</p>
