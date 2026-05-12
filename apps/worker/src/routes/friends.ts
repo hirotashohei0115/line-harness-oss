@@ -280,11 +280,11 @@ friends.get('/api/friends/:id/messages', async (c) => {
     const result = await c.env.DB
       .prepare(
         `SELECT id, direction, message_type as messageType, content, created_at as createdAt
-         FROM messages_log WHERE friend_id = ? ORDER BY created_at ASC LIMIT 200`,
+         FROM messages_log WHERE friend_id = ? ORDER BY created_at DESC LIMIT 200`,
       )
       .bind(friendId)
       .all<{ id: string; direction: string; messageType: string; content: string; createdAt: string }>();
-    return c.json({ success: true, data: result.results });
+    return c.json({ success: true, data: result.results.slice().reverse() });
   } catch (err) {
     console.error('GET /api/friends/:id/messages error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
