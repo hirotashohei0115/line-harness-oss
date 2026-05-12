@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/funnels/:id/edit", "destination": "/funnels/_placeholder/edit" },
+    { "source": "/funnels/:id",      "destination": "/funnels/_placeholder" }
+  ]
+}
