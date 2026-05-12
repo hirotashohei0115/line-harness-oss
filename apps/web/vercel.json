@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/funnels/:id/edit", "destination": "/funnels/_placeholder/edit" },
-    { "source": "/funnels/:id",      "destination": "/funnels/_placeholder" }
+    { "source": "/funnels/:id",      "destination": "/funnels/_placeholder" },
+    { "source": "/cross-analyses/:id", "destination": "/cross-analyses/_placeholder" }
   ]
 }

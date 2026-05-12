@@ -66,6 +66,29 @@ export type FunnelAnalyzeResult = {
   steps: { name: string; reached: number; rate: number; dropoff: number }[]
 }
 
+export type CrossCondition = { type: 'tag' | 'contact_mark' | 'repair_method' | 'delivery_store'; ids: string[] }
+export type CrossGroup = { name: string; conditions: CrossCondition[] }
+export type CrossAxisDef = { label: string; groups: CrossGroup[] }
+
+export type CrossAnalysis = {
+  id: string
+  name: string
+  axis1Label: string
+  axis2Label: string
+  axis1Groups: CrossGroup[]
+  axis2Groups: CrossGroup[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type CrossRunResult = {
+  name: string
+  period: { from: string; to: string }
+  axis1Label: string
+  axis2Label: string
+  rows: { group: string; total: number; cells: { group: string; count: number }[] }[]
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
 
 /**
@@ -173,6 +196,17 @@ export const api = {
     delete: (id: string) => fetchApi<ApiResponse<null>>(`/api/funnels/${id}`, { method: 'DELETE' }),
     analyze: (id: string, from: string, to: string) =>
       fetchApi<ApiResponse<FunnelAnalyzeResult>>(`/api/funnels/${id}/analyze?from=${from}&to=${to}`),
+  },
+  crossAnalyses: {
+    list: () => fetchApi<ApiResponse<CrossAnalysis[]>>('/api/cross-analyses'),
+    get: (id: string) => fetchApi<ApiResponse<CrossAnalysis>>(`/api/cross-analyses/${id}`),
+    create: (data: { name: string; axis1: CrossAxisDef; axis2: CrossAxisDef }) =>
+      fetchApi<ApiResponse<CrossAnalysis>>('/api/cross-analyses', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { name?: string; axis1?: CrossAxisDef; axis2?: CrossAxisDef }) =>
+      fetchApi<ApiResponse<CrossAnalysis>>(`/api/cross-analyses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) => fetchApi<ApiResponse<null>>(`/api/cross-analyses/${id}`, { method: 'DELETE' }),
+    run: (data: { name?: string; period?: { from: string; to: string }; axis1: CrossAxisDef; axis2: CrossAxisDef }) =>
+      fetchApi<ApiResponse<CrossRunResult>>('/api/cross-analyses/run', { method: 'POST', body: JSON.stringify(data) }),
   },
   scenarios: {
     list: (params?: { accountId?: string }) => {
