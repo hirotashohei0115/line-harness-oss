@@ -84,7 +84,7 @@ chats.get('/api/chats', async (c) => {
     const lineAccountId = c.req.query('lineAccountId') ?? undefined;
 
     // JOIN friends to get display_name and picture_url
-    let sql = `SELECT c.*, f.display_name, f.picture_url, f.line_user_id
+    let sql = `SELECT c.*, f.display_name, f.picture_url, f.line_user_id, f.contact_mark_id
                FROM chats c
                LEFT JOIN friends f ON c.friend_id = f.id`;
     const conditions: string[] = [];
@@ -126,6 +126,7 @@ chats.get('/api/chats', async (c) => {
         lastMessageAt: ch.last_message_at,
         createdAt: ch.created_at,
         updatedAt: ch.updated_at,
+        contactMarkId: (ch as unknown as Record<string, unknown>).contact_mark_id as string | null ?? null,
       })),
     });
   } catch (err) {

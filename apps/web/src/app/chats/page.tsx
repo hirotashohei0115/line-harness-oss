@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api, fetchApi } from '@/lib/api'
+import type { ContactMark } from '@/lib/api'
 import { useAccount } from '@/contexts/account-context'
 import Header from '@/components/layout/header'
 import CcPromptButton from '@/components/cc-prompt-button'
@@ -102,14 +103,6 @@ interface MessageLog {
   createdAt: string
 }
 
-interface ContactMarkLocal {
-  id: string
-  name: string
-  color: string
-  sortOrder: number
-  isDefault: boolean
-  createdAt: string
-}
 
 interface RepairQuote {
   id: string
@@ -315,7 +308,7 @@ export default function ChatsPage() {
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [tagInput, setTagInput] = useState('')
   const [addingTag, setAddingTag] = useState(false)
-  const [allMarks, setAllMarks] = useState<ContactMarkLocal[]>([])
+  const [allMarks, setAllMarks] = useState<ContactMark[]>([])
   const [selectedFriendMarkId, setSelectedFriendMarkId] = useState<string | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
@@ -427,7 +420,7 @@ export default function ChatsPage() {
 
   useEffect(() => {
     api.marks.list().then((res) => {
-      if (res.success) setAllMarks(res.data as ContactMarkLocal[])
+      if (res.success) setAllMarks(res.data as ContactMark[])
     }).catch(() => {})
   }, [])
 

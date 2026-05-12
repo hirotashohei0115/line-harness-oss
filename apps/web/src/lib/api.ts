@@ -69,6 +69,7 @@ export type FriendListParams = {
   offset?: string
   limit?: string
   tagId?: string
+  markId?: string
   accountId?: string
 }
 
@@ -81,6 +82,7 @@ export const api = {
       if (params?.offset) query.offset = params.offset
       if (params?.limit) query.limit = params.limit
       if (params?.tagId) query.tagId = params.tagId
+      if (params?.markId) query.markId = params.markId
       if (params?.accountId) query.lineAccountId = params.accountId
       return fetchApi<ApiResponse<PaginatedResponse<FriendWithTags>>>(
         '/api/friends?' + new URLSearchParams(query)

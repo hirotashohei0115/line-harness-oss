@@ -52,12 +52,8 @@ marks.post('/api/marks', async (c) => {
       .bind(id, body.name, color, sortOrder, now)
       .run();
 
-    const row = await c.env.DB
-      .prepare('SELECT * FROM contact_marks WHERE id = ?')
-      .bind(id)
-      .first<ContactMark>();
-
-    return c.json({ success: true, data: serializeMark(row!) }, 201);
+    const row: ContactMark = { id, name: body.name, color, sort_order: sortOrder, is_default: 0, created_at: now };
+    return c.json({ success: true, data: serializeMark(row) }, 201);
   } catch (err) {
     console.error('POST /api/marks error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
@@ -85,12 +81,8 @@ marks.patch('/api/marks/:id', async (c) => {
       .bind(name, color, sortOrder, id)
       .run();
 
-    const updated = await c.env.DB
-      .prepare('SELECT * FROM contact_marks WHERE id = ?')
-      .bind(id)
-      .first<ContactMark>();
-
-    return c.json({ success: true, data: serializeMark(updated!) });
+    const updated: ContactMark = { ...existing, name, color, sort_order: sortOrder };
+    return c.json({ success: true, data: serializeMark(updated) });
   } catch (err) {
     console.error('PATCH /api/marks/:id error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
