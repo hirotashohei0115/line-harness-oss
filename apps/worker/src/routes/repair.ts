@@ -11,6 +11,14 @@ import { LineClient } from '@line-crm/line-sdk';
 import { sendChatworkMessage, jstTimestamp } from '../lib/chatwork.js';
 import type { Env } from '../index.js';
 
+async function setContactMark(db: D1Database, friendId: string, markId: string): Promise<void> {
+  try {
+    await db.prepare('UPDATE friends SET contact_mark_id = ? WHERE id = ?').bind(markId, friendId).run();
+  } catch (err) {
+    console.error('setContactMark error:', err);
+  }
+}
+
 function serializeQuote(q: RepairQuote) {
   return {
     id: q.id,
@@ -215,6 +223,9 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       )
       .bind(id, friend.id, name, postalCode, address, phone, packagingKit ? 1 : 0, deliveryStore, now, now)
       .run();
+
+    // フォーム送信完了マーク: 梱包キット希望→mark_27、それ以外→mark_03
+    await setContactMark(c.env.DB, friend.id, packagingKit ? 'mark_27' : 'mark_03');
 
     // フォーム入力名で display_name を更新
     await c.env.DB
