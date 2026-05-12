@@ -1,25 +1,43 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import type { FunnelAnalyzeResult } from '@/lib/api'
 import Header from '@/components/layout/header'
 
+function getFunnelIdFromPath(): string {
+  if (typeof window === 'undefined') return ''
+  const m = window.location.pathname.match(/\/funnels\/([^/]+)(?:\/|$)/)
+  const id = m?.[1] ?? ''
+  return id === '_placeholder' ? '' : id
+}
+
 export default function FunnelAnalyzeClient() {
-  const { id } = useParams<{ id: string }>()
   const router = useRouter()
 
   const today = new Date().toISOString().slice(0, 10)
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
+  const [id, setId] = useState<string>('')
   const [from, setFrom] = useState(thirtyDaysAgo)
   const [to, setTo] = useState(today)
   const [result, setResult] = useState<FunnelAnalyzeResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    const realId = getFunnelIdFromPath()
+    if (realId) {
+      setId(realId)
+    } else {
+      setLoading(false)
+      setError('ファネルIDが取得できませんでした')
+    }
+  }, [])
+
   const load = useCallback(async () => {
+    if (!id) return
     setLoading(true)
     setError('')
     try {
@@ -30,7 +48,7 @@ export default function FunnelAnalyzeClient() {
     finally { setLoading(false) }
   }, [id, from, to])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { if (id) load() }, [id, load])
 
   const maxReached = result ? Math.max(result.total, ...result.steps.map((s) => s.reached), 1) : 1
 
