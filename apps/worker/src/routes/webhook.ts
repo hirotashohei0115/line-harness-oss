@@ -679,6 +679,14 @@ async function pushAndLog(
   }
 }
 
+async function setContactMark(db: D1Database, friendId: string, markId: string): Promise<void> {
+  try {
+    await db.prepare('UPDATE friends SET contact_mark_id = ? WHERE id = ?').bind(markId, friendId).run();
+  } catch (err) {
+    console.error('setContactMark error:', err);
+  }
+}
+
 async function handleEvent(
   db: D1Database,
   lineClient: LineClient,
@@ -779,6 +787,7 @@ async function handleEvent(
 
     // イベントバス発火: friend_add
     await fireEvent(db, 'friend_add', { friendId: friend.id, eventData: { displayName: friend.display_name } }, lineAccessToken, lineAccountId);
+    await setContactMark(db, friend.id, 'mark_01');
     return;
   }
 
@@ -914,6 +923,7 @@ async function handleEvent(
 
     // リッチメニュー: 見積もりを始める
     if (incomingText === '見積もりを始める') {
+      await setContactMark(db, friend.id, 'mark_17');
       try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildProductSelectFlex())]); } catch (err) { console.error('richmenu 見積もりを始める:', err); }
       return;
     }
@@ -1102,6 +1112,7 @@ async function handleEvent(
 
     // 来店予約ボタンタップ → 来店日時・お名前を案内
     if (incomingText === '来店予約する') {
+      await setContactMark(db, friend.id, 'mark_04');
       try {
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           { type: 'text', text: 'ご来店予定日とお名前をお知らせください。\nex. 6/1(月) 13:00ごろ 山田太郎' },
@@ -1290,6 +1301,7 @@ async function handleEvent(
       await setFriendAttribute(db, friend.id, 'repair_product_id', productId);
       await setFriendAttribute(db, friend.id, 'repair_product_name', productName);
       await setFriendAttribute(db, friend.id, 'repair_product_key', productKey);
+      await setContactMark(db, friend.id, 'mark_16');
       try {
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildModelMethodFlex(productName, productKey)),
@@ -1319,6 +1331,7 @@ async function handleEvent(
       if (modelName) {
         await setFriendAttribute(db, friend.id, 'repair_model_name', modelName);
       }
+      await setContactMark(db, friend.id, 'mark_18');
       const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id'))
         ?? 'prod-oth-0001-0000-0000-000000000003';
       try {
@@ -1401,6 +1414,7 @@ async function handleEvent(
       const inchSize = await getFriendAttribute(db, friend.id, 'repair_inch_size');
 
       await setFriendAttribute(db, friend.id, 'repair_symptom_id', symptomId);
+      await setContactMark(db, friend.id, 'mark_21');
 
       let priceFrom: number | null = null;
       let priceTo: number | null = null;
@@ -1481,8 +1495,11 @@ async function handleEvent(
         await updateRepairQuoteRequestType(db, quoteId, type);
       }
 
+      await setContactMark(db, friend.id, 'mark_22');
+
       try {
         if (type === 'mail') {
+          await setContactMark(db, friend.id, 'mark_23');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'text', text: '下記ボタンよりお申し込みをよろしくお願い申し上げます！' },
             buildMessage('flex', JSON.stringify({
@@ -1500,6 +1517,7 @@ async function handleEvent(
             buildMessage('flex', buildStoreSelectFlex()),
           ]);
         } else {
+          await setContactMark(db, friend.id, 'mark_11');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             buildMessage('flex', buildConsultCategoryFlex()),
           ]);
@@ -1528,6 +1546,7 @@ async function handleEvent(
       if (!store) return;
 
       await setFriendAttribute(db, friend.id, 'repair_store', store.shortName);
+      await setContactMark(db, friend.id, 'mark_24');
 
       const storeInfoText =
         `${store.shortName}での店頭修理をご希望ですね！✨\n` +
@@ -1558,6 +1577,7 @@ async function handleEvent(
     }
 
     if (action === 'start_repair') {
+      await setContactMark(db, friend.id, 'mark_17');
       try {
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildProductSelectFlex()),
