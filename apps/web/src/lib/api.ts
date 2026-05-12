@@ -39,6 +39,33 @@ export type ContactMark = {
   createdAt: string
 }
 
+export type FunnelStep = {
+  id: string
+  funnelId: string
+  name: string
+  stepOrder: number
+  conditionType: 'tag' | 'contact_mark'
+  conditionIds: string[]
+  createdAt: string
+}
+
+export type Funnel = {
+  id: string
+  name: string
+  description: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type FunnelWithSteps = Funnel & { steps: FunnelStep[] }
+
+export type FunnelAnalyzeResult = {
+  funnel: Funnel
+  period: { from: string; to: string }
+  total: number
+  steps: { name: string; reached: number; rate: number; dropoff: number }[]
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
 
 /**
@@ -135,6 +162,17 @@ export const api = {
       }),
     delete: (id: string) =>
       fetchApi<ApiResponse<null>>(`/api/marks/${id}`, { method: 'DELETE' }),
+  },
+  funnels: {
+    list: () => fetchApi<ApiResponse<Funnel[]>>('/api/funnels'),
+    get: (id: string) => fetchApi<ApiResponse<FunnelWithSteps>>(`/api/funnels/${id}`),
+    create: (data: { name: string; description?: string; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark'; condition_ids: string[] }[] }) =>
+      fetchApi<ApiResponse<FunnelWithSteps>>('/api/funnels', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { name?: string; description?: string | null; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark'; condition_ids: string[] }[] }) =>
+      fetchApi<ApiResponse<FunnelWithSteps>>(`/api/funnels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) => fetchApi<ApiResponse<null>>(`/api/funnels/${id}`, { method: 'DELETE' }),
+    analyze: (id: string, from: string, to: string) =>
+      fetchApi<ApiResponse<FunnelAnalyzeResult>>(`/api/funnels/${id}/analyze?from=${from}&to=${to}`),
   },
   scenarios: {
     list: (params?: { accountId?: string }) => {
