@@ -102,6 +102,15 @@ interface MessageLog {
   createdAt: string
 }
 
+interface ContactMarkLocal {
+  id: string
+  name: string
+  color: string
+  sortOrder: number
+  isDefault: boolean
+  createdAt: string
+}
+
 interface RepairQuote {
   id: string
   productId: string | null
@@ -306,6 +315,8 @@ export default function ChatsPage() {
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [tagInput, setTagInput] = useState('')
   const [addingTag, setAddingTag] = useState(false)
+  const [allMarks, setAllMarks] = useState<ContactMarkLocal[]>([])
+  const [selectedFriendMarkId, setSelectedFriendMarkId] = useState<string | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -395,8 +406,11 @@ export default function ChatsPage() {
 
   const loadFriendTags = useCallback(async (friendId: string) => {
     try {
-      const res = await fetchApi<{ success: boolean; data: { tags: Tag[] } }>(`/api/friends/${friendId}`)
-      if (res.success) setFriendTags(res.data.tags ?? [])
+      const res = await fetchApi<{ success: boolean; data: { tags: Tag[]; contactMarkId?: string | null } }>(`/api/friends/${friendId}`)
+      if (res.success) {
+        setFriendTags(res.data.tags ?? [])
+        setSelectedFriendMarkId(res.data.contactMarkId ?? null)
+      }
     } catch { setFriendTags([]) }
   }, [])
 
@@ -410,6 +424,12 @@ export default function ChatsPage() {
   useEffect(() => {
     loadAllTags()
   }, [loadAllTags])
+
+  useEffect(() => {
+    api.marks.list().then((res) => {
+      if (res.success) setAllMarks(res.data as ContactMarkLocal[])
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     loadChats()
@@ -432,6 +452,7 @@ export default function ChatsPage() {
       setRepairAttrs({})
       setMailOrder(null)
       setFriendTags([])
+      setSelectedFriendMarkId(null)
     }
     setRepairEditMode(false)
     setTagInput('')
@@ -683,6 +704,18 @@ export default function ChatsPage() {
                         <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${statusInfo.className}`}>
                           {statusInfo.label}
                         </span>
+                        {(() => {
+                          const chatWithMark = chat as Chat & { contactMarkId?: string }
+                          const mark = allMarks.find((m) => m.id === chatWithMark.contactMarkId)
+                          if (!mark) return null
+                          return (
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-200"
+                              style={{ backgroundColor: mark.color }}
+                              title={mark.name}
+                            />
+                          )
+                        })()}
                       </div>
                     </button>
                   )
@@ -915,6 +948,38 @@ export default function ChatsPage() {
                       className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
                     >編集</button>
                   )}
+                </div>
+
+                {/* 対応マーク */}
+                <div className="px-3 py-2 border-b border-gray-100">
+                  <p className="text-xs font-semibold text-gray-500 mb-2">対応マーク</p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div
+                      className="w-4 h-4 rounded-full border border-gray-200 flex-shrink-0"
+                      style={{ backgroundColor: allMarks.find((m) => m.id === selectedFriendMarkId)?.color ?? '#e5e7eb' }}
+                    />
+                    <span className="text-xs text-gray-600">
+                      {allMarks.find((m) => m.id === selectedFriendMarkId)?.name ?? 'マークなし'}
+                    </span>
+                  </div>
+                  <select
+                    className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    value={selectedFriendMarkId ?? ''}
+                    onChange={async (e) => {
+                      const markId = e.target.value || null
+                      if (chatDetail) {
+                        try {
+                          await api.friends.updateMark(chatDetail.friendId, markId)
+                          setSelectedFriendMarkId(markId)
+                        } catch { /* silent */ }
+                      }
+                    }}
+                  >
+                    <option value="">マークなし</option>
+                    {allMarks.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {repairEditMode ? (
