@@ -687,6 +687,16 @@ async function setContactMark(db: D1Database, friendId: string, markId: string):
   }
 }
 
+async function addTagToFriend(db: D1Database, friendId: string, tagName: string): Promise<void> {
+  try {
+    const tag = await db.prepare('SELECT id FROM tags WHERE name = ?').bind(tagName).first<{ id: string }>();
+    if (!tag) return;
+    await db.prepare('INSERT OR IGNORE INTO friend_tags (friend_id, tag_id) VALUES (?, ?)').bind(friendId, tag.id).run();
+  } catch (err) {
+    console.error('addTagToFriend error:', err);
+  }
+}
+
 async function handleEvent(
   db: D1Database,
   lineClient: LineClient,
@@ -980,6 +990,7 @@ async function handleEvent(
       await setFriendAttribute(db, friend.id, 'repair_product_id', p.id);
       await setFriendAttribute(db, friend.id, 'repair_product_name', incomingText);
       await setFriendAttribute(db, friend.id, 'repair_product_key', p.key);
+      await addTagToFriend(db, friend.id, incomingText === 'MacBook Air' ? 'MacbookAir' : incomingText === 'MacBook Pro' ? 'MacbookPro' : 'その他');
       try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildModelMethodFlex(incomingText, p.key))]); } catch (err) { console.error('repair msg select_product:', err); }
       return;
     }
@@ -1097,13 +1108,17 @@ async function handleEvent(
       if (quoteId) await updateRepairQuoteRequestType(db, quoteId, type);
       try {
         if (type === 'mail') {
+          await addTagToFriend(db, friend.id, '依頼する');
+          await addTagToFriend(db, friend.id, '郵送依頼');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'text', text: '下記ボタンよりお申し込みをよろしくお願い申し上げます！' },
             buildMessage('flex', JSON.stringify({ type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'button', action: { type: 'uri', label: '郵送修理ご依頼フォーム', uri: MAIL_REPAIR_FORM_URL }, style: 'primary', height: 'sm', color: '#00B900' }] } })),
           ]);
         } else if (type === 'store') {
+          await addTagToFriend(db, friend.id, '依頼する');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildStoreSelectFlex())]);
         } else {
+          await addTagToFriend(db, friend.id, '依頼しない');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildConsultCategoryFlex())]);
         }
       } catch (err) { console.error('repair msg request_type:', err); }
@@ -1113,6 +1128,7 @@ async function handleEvent(
     // 来店予約ボタンタップ → 来店日時・お名前を案内
     if (incomingText === '来店予約する') {
       await setContactMark(db, friend.id, 'mark_04');
+      await addTagToFriend(db, friend.id, '店舗持込');
       try {
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           { type: 'text', text: 'ご来店予定日とお名前をお知らせください。\nex. 6/1(月) 13:00ごろ 山田太郎' },
@@ -1302,6 +1318,7 @@ async function handleEvent(
       await setFriendAttribute(db, friend.id, 'repair_product_name', productName);
       await setFriendAttribute(db, friend.id, 'repair_product_key', productKey);
       await setContactMark(db, friend.id, 'mark_16');
+      await addTagToFriend(db, friend.id, productKey === 'air' ? 'MacbookAir' : productKey === 'pro' ? 'MacbookPro' : 'その他');
       try {
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildModelMethodFlex(productName, productKey)),
@@ -1500,6 +1517,8 @@ async function handleEvent(
       try {
         if (type === 'mail') {
           await setContactMark(db, friend.id, 'mark_23');
+          await addTagToFriend(db, friend.id, '依頼する');
+          await addTagToFriend(db, friend.id, '郵送依頼');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'text', text: '下記ボタンよりお申し込みをよろしくお願い申し上げます！' },
             buildMessage('flex', JSON.stringify({
@@ -1513,11 +1532,13 @@ async function handleEvent(
             })),
           ]);
         } else if (type === 'store') {
+          await addTagToFriend(db, friend.id, '依頼する');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             buildMessage('flex', buildStoreSelectFlex()),
           ]);
         } else {
           await setContactMark(db, friend.id, 'mark_11');
+          await addTagToFriend(db, friend.id, '依頼しない');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             buildMessage('flex', buildConsultCategoryFlex()),
           ]);

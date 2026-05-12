@@ -19,6 +19,16 @@ async function setContactMark(db: D1Database, friendId: string, markId: string):
   }
 }
 
+async function addTagToFriend(db: D1Database, friendId: string, tagName: string): Promise<void> {
+  try {
+    const tag = await db.prepare('SELECT id FROM tags WHERE name = ?').bind(tagName).first<{ id: string }>();
+    if (!tag) return;
+    await db.prepare('INSERT OR IGNORE INTO friend_tags (friend_id, tag_id) VALUES (?, ?)').bind(friendId, tag.id).run();
+  } catch (err) {
+    console.error('addTagToFriend error:', err);
+  }
+}
+
 function serializeQuote(q: RepairQuote) {
   return {
     id: q.id,
@@ -226,6 +236,18 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
 
     // フォーム送信完了マーク: 梱包キット希望→mark_27、それ以外→mark_03
     await setContactMark(c.env.DB, friend.id, packagingKit ? 'mark_27' : 'mark_03');
+
+    // 自動タグ付与
+    await addTagToFriend(c.env.DB, friend.id, packagingKit ? '梱包キット希望する' : '梱包キット希望しない');
+    if (deliveryStore.includes('菖蒲')) {
+      await addTagToFriend(c.env.DB, friend.id, '郵送（菖蒲）');
+    } else if (deliveryStore.includes('盛岡')) {
+      await addTagToFriend(c.env.DB, friend.id, '郵送（盛岡）');
+    } else if (deliveryStore.includes('岐阜')) {
+      await addTagToFriend(c.env.DB, friend.id, '郵送（岐阜）');
+    } else if (deliveryStore.includes('大分')) {
+      await addTagToFriend(c.env.DB, friend.id, '郵送（大分）');
+    }
 
     // フォーム入力名で display_name を更新
     await c.env.DB
