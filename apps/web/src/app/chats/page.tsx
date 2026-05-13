@@ -988,9 +988,6 @@ export default function ChatsPage() {
                             style={pinned ? { opacity: 1 } : { filter: 'grayscale(1)', opacity: 0.3 }}
                             title={pinned ? 'ピン解除' : 'ピン止め'}
                           >📌</button>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.className}`}>
-                            {statusInfo.label}
-                          </span>
                         </div>
                       </div>
                     </div>
@@ -1041,11 +1038,6 @@ export default function ChatsPage() {
                     <p className="text-sm font-medium text-gray-900 truncate">
                       {chatDetail.friendName}
                     </p>
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-1 ${statusConfig[chatDetail.status].className}`}
-                    >
-                      {statusConfig[chatDetail.status].label}
-                    </span>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
