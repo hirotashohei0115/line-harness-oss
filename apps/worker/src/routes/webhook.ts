@@ -713,6 +713,10 @@ async function handleEvent(
       event.source.type === 'user' ? event.source.userId : undefined;
     if (!userId) return;
 
+    // 既存ユーザーか確認（ブロック解除・再友達追加の検出）
+    const existingFriend = await getFriendByLineUserId(db, userId);
+    const isReFollow = Boolean(existingFriend);
+
     // プロフィール取得 & 友だち登録/更新
     let profile;
     try {
@@ -734,7 +738,7 @@ async function handleEvent(
         .bind(lineAccountId, friend.id).run();
     }
 
-    // ウェルカムメッセージ + 機種選択Flex
+    // 機種選択Flex（新規・再フォロー共通で送信）
     try {
       await replyAndLog(db, lineClient, event.replyToken, friend.id, [
         { type: 'image', originalContentUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb', previewImageUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb' },
@@ -745,7 +749,13 @@ async function handleEvent(
       console.error('Failed to send welcome message:', err);
     }
 
-    // friend_add シナリオに登録（このアカウントのシナリオのみ）
+    // 再フォロー（ブロック解除）の場合はオートメーション・シナリオをスキップ
+    if (isReFollow) {
+      console.log(`Re-follow detected for ${userId}, skipping automation and scenarios`);
+      return;
+    }
+
+    // 新規ユーザーのみ: friend_add シナリオに登録
     const scenarios = await getScenarios(db);
     for (const scenario of scenarios) {
       // Only trigger scenarios belonging to this account (or unassigned for backward compat)
@@ -795,7 +805,7 @@ async function handleEvent(
       }
     }
 
-    // イベントバス発火: friend_add
+    // 新規ユーザーのみ: イベントバス発火・対応マーク設定
     await fireEvent(db, 'friend_add', { friendId: friend.id, eventData: { displayName: friend.display_name } }, lineAccessToken, lineAccountId);
     await setContactMark(db, friend.id, 'mark_01');
     return;
