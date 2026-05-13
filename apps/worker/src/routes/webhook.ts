@@ -1044,7 +1044,12 @@ async function handleEvent(
       await setFriendAttribute(db, friend.id, 'repair_product_name', incomingText);
       await setFriendAttribute(db, friend.id, 'repair_product_key', p.key);
       await addTagToFriend(db, friend.id, incomingText === 'MacBook Air' ? 'MacbookAir' : incomingText === 'MacBook Pro' ? 'MacbookPro' : 'その他');
-      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildModelMethodFlex(incomingText, p.key))]); } catch (err) { console.error('repair msg select_product:', err); }
+      if (incomingText === 'その他') {
+        const consultText = `下記項目について教えてください。\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n①機種や型番：\n　例、MacBook Air 2022 A2337\n②症状：\n　例、液晶割れ、画が映らない\n③ご要望：\n　例、修理費用が知りたい\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n\n上記３点について、ご回答をよろしくお願い致します。\nテクニカルスタッフが確認し、LINEにて折り返しご連絡させていただきます。\n営業時間外の場合（10:00~20:00以外）は翌営業日になる可能性がございます。\nあらかじめご了承いただけますと幸いです。`;
+        try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: consultText }]); } catch (err) { console.error('repair msg other product:', err); }
+      } else {
+        try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildModelMethodFlex(incomingText, p.key))]); } catch (err) { console.error('repair msg select_product:', err); }
+      }
       return;
     }
 
