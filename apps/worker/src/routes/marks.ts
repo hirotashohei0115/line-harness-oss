@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getChatByFriendId, updateChat } from '@line-crm/db';
 import type { Env } from '../index.js';
 
 interface ContactMark {
@@ -117,6 +118,12 @@ marks.patch('/api/friends/:friendId/mark', async (c) => {
       .prepare('UPDATE friends SET contact_mark_id = ? WHERE id = ?')
       .bind(body.markId, friendId)
       .run();
+
+    // 対応完了（クロージング）マークの場合はチャットを resolved に更新
+    if (body.markId === 'mark_09') {
+      const chat = await getChatByFriendId(c.env.DB, friendId);
+      if (chat) await updateChat(c.env.DB, chat.id, { status: 'resolved' });
+    }
 
     return c.json({ success: true, data: null });
   } catch (err) {

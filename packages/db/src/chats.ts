@@ -130,9 +130,8 @@ export async function upsertChatOnMessage(db: D1Database, friendId: string): Pro
   const existing = await getChatByFriendId(db, friendId);
   const now = jstNow();
   if (existing) {
-    // resolvedだった場合はunreadに戻す
-    const newStatus = existing.status === 'resolved' ? 'unread' : existing.status;
-    await updateChat(db, existing.id, { status: newStatus, lastMessageAt: now });
+    // ユーザーからメッセージが来たら常に unread に戻す
+    await updateChat(db, existing.id, { status: 'unread', lastMessageAt: now });
     return (await getChatById(db, existing.id))!;
   }
   return createChat(db, { friendId });
