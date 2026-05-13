@@ -119,11 +119,12 @@ export type FriendListParams = {
   offset?: string
   limit?: string
   tagId?: string
+  tagIds?: string
   markId?: string
   accountId?: string
 }
 
-export type FriendWithTags = Friend & { tags: Tag[]; contactMarkId?: string | null }
+export type FriendWithTags = Friend & { tags: Tag[]; contactMarkId?: string | null; isPinned?: boolean; pinnedAt?: string | null }
 
 export const api = {
   friends: {
@@ -132,6 +133,7 @@ export const api = {
       if (params?.offset) query.offset = params.offset
       if (params?.limit) query.limit = params.limit
       if (params?.tagId) query.tagId = params.tagId
+      if (params?.tagIds) query.tagIds = params.tagIds
       if (params?.markId) query.markId = params.markId
       if (params?.accountId) query.lineAccountId = params.accountId
       return fetchApi<ApiResponse<PaginatedResponse<FriendWithTags>>>(
@@ -158,6 +160,13 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ markId }),
       }),
+    pin: (friendId: string, pinned: boolean) =>
+      fetchApi<ApiResponse<null>>(`/api/friends/${friendId}/pin`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pinned }),
+      }),
+    search: (q: string) =>
+      fetchApi<ApiResponse<string[]>>(`/api/friends/search?q=${encodeURIComponent(q)}`),
   },
   tags: {
     list: () =>

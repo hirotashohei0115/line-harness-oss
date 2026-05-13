@@ -19,6 +19,9 @@ interface Chat {
   lastMessageAt: string | null
   createdAt: string
   updatedAt: string
+  contactMarkId?: string | null
+  isPinned?: boolean
+  pinnedAt?: string | null
 }
 
 interface ChatMessage {
@@ -318,7 +321,28 @@ export default function ChatsPage() {
   const [addingTag, setAddingTag] = useState(false)
   const [allMarks, setAllMarks] = useState<ContactMark[]>([])
   const [selectedFriendMarkId, setSelectedFriendMarkId] = useState<string | null>(null)
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([])
+  const [filterMarkId, setFilterMarkId] = useState<string | null>(null)
+  const [advancedSearch, setAdvancedSearch] = useState('')
+  const [advancedSearchIds, setAdvancedSearchIds] = useState<string[] | null>(null)
+  const [filterFriendIdSet, setFilterFriendIdSet] = useState<Set<string> | null>(null)
+  const [showTagFilter, setShowTagFilter] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
+
+  const handleTogglePin = async (chat: Chat) => {
+    const newPinned = !chat.isPinned
+    try {
+      await fetchApi(`/api/friends/${chat.friendId}/pin`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pinned: newPinned }),
+      })
+      setChats(prev => prev.map(c =>
+        c.id === chat.id
+          ? { ...c, isPinned: newPinned, pinnedAt: newPinned ? new Date().toISOString() : null }
+          : c
+      ))
+    } catch { /* silent */ }
+  }
 
   useEffect(() => {
     if (chatScrollRef.current) {
@@ -433,6 +457,26 @@ export default function ChatsPage() {
   }, [])
 
   useEffect(() => {
+    if (filterTagIds.length === 0) { setFilterFriendIdSet(null); return }
+    const tagIdsStr = filterTagIds.join(',')
+    const base = `/api/friends?tagIds=${tagIdsStr}&limit=1000`
+    const url = selectedAccountId ? `${base}&lineAccountId=${encodeURIComponent(selectedAccountId)}` : base
+    fetchApi<{ success: boolean; data: { items: { id: string }[] } }>(url)
+      .then(res => { if (res.success) setFilterFriendIdSet(new Set(res.data.items.map(f => f.id))) })
+      .catch(() => {})
+  }, [filterTagIds, selectedAccountId])
+
+  useEffect(() => {
+    if (!advancedSearch.trim()) { setAdvancedSearchIds(null); return }
+    const timer = setTimeout(() => {
+      fetchApi<{ success: boolean; data: string[] }>(
+        `/api/friends/search?q=${encodeURIComponent(advancedSearch.trim())}`
+      ).then(res => { if (res.success) setAdvancedSearchIds(res.data) }).catch(() => {})
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [advancedSearch])
+
+  useEffect(() => {
     loadChats()
   }, [loadChats])
 
@@ -509,6 +553,16 @@ export default function ChatsPage() {
       const q = searchQuery.trim().toLowerCase()
       result = result.filter(c => c.friendName.toLowerCase().includes(q))
     }
+    if (advancedSearchIds !== null) {
+      const idSet = new Set(advancedSearchIds)
+      result = result.filter(c => idSet.has(c.friendId))
+    }
+    if (filterFriendIdSet !== null) {
+      result = result.filter(c => filterFriendIdSet.has(c.friendId))
+    }
+    if (filterMarkId) {
+      result = result.filter(c => c.contactMarkId === filterMarkId)
+    }
     if (sortOrder === 'newest') {
       result.sort((a, b) => (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt))
     } else if (sortOrder === 'oldest') {
@@ -516,8 +570,9 @@ export default function ChatsPage() {
     } else if (sortOrder === 'name') {
       result.sort((a, b) => a.friendName.localeCompare(b.friendName, 'ja'))
     }
+    result.sort((a, b) => Number(b.isPinned ?? false) - Number(a.isPinned ?? false))
     return result
-  }, [chats, searchQuery, sortOrder])
+  }, [chats, searchQuery, sortOrder, advancedSearchIds, filterFriendIdSet, filterMarkId])
 
   const handleRepairEdit = () => {
     setRepairEditData({
@@ -638,13 +693,20 @@ export default function ChatsPage() {
             ))}
           </div>
 
-          {/* Search & Sort */}
+          {/* Search & Sort & Filter */}
           <div className="px-3 py-2 border-b border-gray-100 space-y-1.5">
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="名前で検索..."
+              className="w-full text-xs border border-gray-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500"
+            />
+            <input
+              type="text"
+              value={advancedSearch}
+              onChange={e => setAdvancedSearch(e.target.value)}
+              placeholder="電話/郵便番号/住所で検索..."
               className="w-full text-xs border border-gray-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500"
             />
             <select
@@ -655,6 +717,52 @@ export default function ChatsPage() {
               <option value="newest">最終メッセージ（新しい順）</option>
               <option value="oldest">最終メッセージ（古い順）</option>
               <option value="name">名前（あいうえお順）</option>
+            </select>
+            {/* Tag filter */}
+            <div className="relative">
+              <button
+                onClick={() => setShowTagFilter(v => !v)}
+                className={`w-full text-xs border rounded-md px-2.5 py-1.5 text-left flex items-center justify-between bg-white focus:outline-none focus:ring-1 focus:ring-green-500 ${filterTagIds.length > 0 ? 'border-green-400 text-green-700 font-medium' : 'border-gray-300 text-gray-400'}`}
+              >
+                <span>{filterTagIds.length > 0 ? `タグ: ${filterTagIds.length}件選択中` : 'タグで絞り込み...'}</span>
+                <span className="text-gray-400 text-[10px]">▾</span>
+              </button>
+              {showTagFilter && (
+                <div className="absolute top-full left-0 right-0 mt-0.5 z-20 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                  {allTags.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-gray-400">タグがありません</p>
+                  ) : (
+                    allTags.map(tag => (
+                      <label key={tag.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={filterTagIds.includes(tag.id)}
+                          onChange={() => setFilterTagIds(prev => prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id])}
+                          className="rounded accent-green-500"
+                        />
+                        <span className="text-xs text-gray-700">{tag.name}</span>
+                      </label>
+                    ))
+                  )}
+                  {filterTagIds.length > 0 && (
+                    <button
+                      onClick={() => { setFilterTagIds([]); setShowTagFilter(false) }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 border-t border-gray-100"
+                    >クリア</button>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* Mark filter */}
+            <select
+              value={filterMarkId ?? ''}
+              onChange={e => setFilterMarkId(e.target.value || null)}
+              className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
+            >
+              <option value="">対応マークで絞り込み...</option>
+              {allMarks.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
             </select>
           </div>
 
@@ -683,10 +791,10 @@ export default function ChatsPage() {
                   const statusInfo = statusConfig[chat.status]
                   const isSelected = selectedChatId === chat.id
                   return (
-                    <button
+                    <div
                       key={chat.id}
                       onClick={() => { setSelectedFriendId(null); handleSelectChat(chat.id); }}
-                      className={`w-full text-left px-4 py-3 border-b border-gray-100 transition-colors ${
+                      className={`w-full text-left px-4 py-3 border-b border-gray-100 transition-colors cursor-pointer ${
                         isSelected && !selectedFriendId ? 'bg-green-50' : 'hover:bg-gray-50'
                       }`}
                     >
@@ -701,8 +809,7 @@ export default function ChatsPage() {
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-900 truncate">{chat.friendName}</p>
                           {(() => {
-                            const chatWithMark = chat as Chat & { contactMarkId?: string }
-                            const mark = allMarks.find((m) => m.id === chatWithMark.contactMarkId)
+                            const mark = allMarks.find((m) => m.id === chat.contactMarkId)
                             if (!mark) return null
                             return (
                               <span
@@ -715,11 +822,18 @@ export default function ChatsPage() {
                           })()}
                           <p className="text-xs text-gray-400 mt-0.5">{formatDatetime(chat.lastMessageAt)}</p>
                         </div>
-                        <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${statusInfo.className}`}>
-                          {statusInfo.label}
-                        </span>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); void handleTogglePin(chat) }}
+                            className={`p-1 rounded leading-none hover:bg-gray-100 transition-colors text-base ${chat.isPinned ? 'text-yellow-400' : 'text-gray-200 hover:text-gray-400'}`}
+                            title={chat.isPinned ? 'ピン解除' : 'ピン止め'}
+                          >📌</button>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.className}`}>
+                            {statusInfo.label}
+                          </span>
+                        </div>
                       </div>
-                    </button>
+                    </div>
                   )
                 })}
               </>
