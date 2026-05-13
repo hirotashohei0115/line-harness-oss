@@ -475,6 +475,8 @@ export const api = {
       const q = params?.accountId ? `?lineAccountId=${encodeURIComponent(params.accountId)}` : ''
       return fetchApi<ApiResponse<{ count: number }>>(`/api/chats/unread-count${q}`)
     },
+    readAll: (id: string) =>
+      fetchApi<ApiResponse<null>>(`/api/chats/${id}/read-all`, { method: 'POST' }),
   },
   reminders: {
     list: (params?: { accountId?: string }) => {

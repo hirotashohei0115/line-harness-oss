@@ -329,6 +329,8 @@ export default function ChatsPage() {
   const [filterFriendIdSet, setFilterFriendIdSet] = useState<Set<string> | null>(null)
   const [showTagFilter, setShowTagFilter] = useState(false)
   const [showFilterPanel, setShowFilterPanel] = useState(false)
+  const [readConfirmed, setReadConfirmed] = useState(false)
+  const [readingAll, setReadingAll] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const prevChatsRef = useRef<Chat[]>([])
   const isAtBottomRef = useRef(true)
@@ -356,6 +358,11 @@ export default function ChatsPage() {
     if (Notification.permission === 'default') {
       Notification.requestPermission().then(p => { notifPermRef.current = p === 'granted' })
     }
+  }, [])
+
+  // Reset tab title when leaving the chats page
+  useEffect(() => {
+    return () => { document.title = 'LINE Harness' }
   }, [])
 
   // Auto-scroll: always on open, conditional on poll
@@ -603,6 +610,20 @@ export default function ChatsPage() {
     isAtBottomRef.current = true
     setSelectedChatId(chatId)
     setMessageContent('')
+    setReadConfirmed(false)
+  }
+
+  const handleReadAll = async () => {
+    if (!selectedChatId || readingAll || readConfirmed) return
+    setReadingAll(true)
+    try {
+      await api.chats.readAll(selectedChatId)
+      setReadConfirmed(true)
+      setChats(prev => prev.map(c =>
+        c.id === selectedChatId ? { ...c, unreadCount: 0 } : c
+      ))
+    } catch { /* silent */ }
+    setReadingAll(false)
   }
 
   const handleSendMessage = async () => {
@@ -1056,6 +1077,31 @@ export default function ChatsPage() {
                   )}
                 </div>
               </div>
+
+              {/* Read confirmation banner */}
+              {(() => {
+                const currentUnread = chats.find(c => c.id === selectedChatId)?.unreadCount ?? 0
+                if (currentUnread === 0 && !readConfirmed) return null
+                return (
+                  <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2">
+                    {readConfirmed ? (
+                      <span className="text-xs text-green-600 font-medium">確認済み ✓</span>
+                    ) : (
+                      <>
+                        <span className="text-xs text-gray-500">未読メッセージが {currentUnread} 件あります</span>
+                        <button
+                          onClick={handleReadAll}
+                          disabled={readingAll}
+                          className="px-3 py-1 text-xs font-medium text-white rounded-md disabled:opacity-50 transition-colors"
+                          style={{ backgroundColor: '#06C755' }}
+                        >
+                          {readingAll ? '処理中...' : 'メッセージをすべて確認済みにする'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Messages — LINE-style chat bubbles */}
               <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-2" style={{ backgroundColor: '#7494C0' }}>

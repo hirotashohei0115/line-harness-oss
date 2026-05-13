@@ -160,15 +160,25 @@ chats.get('/api/chats/unread-count', async (c) => {
   }
 });
 
+// POST /api/chats/:id/read-all — manually mark all incoming messages as read
+chats.post('/api/chats/:id/read-all', async (c) => {
+  try {
+    const item = await getChatById(c.env.DB, c.req.param('id'));
+    if (!item) return c.json({ success: false, error: 'Chat not found' }, 404);
+    await c.env.DB
+      .prepare(`UPDATE messages_log SET is_read = 1 WHERE friend_id = ? AND direction = 'incoming' AND is_read = 0`)
+      .bind(item.friend_id).run();
+    return c.json({ success: true, data: null });
+  } catch (err) {
+    console.error('POST /api/chats/:id/read-all error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 chats.get('/api/chats/:id', async (c) => {
   try {
     const item = await getChatById(c.env.DB, c.req.param('id'));
     if (!item) return c.json({ success: false, error: 'Chat not found' }, 404);
-
-    // Mark incoming messages as read
-    await c.env.DB
-      .prepare(`UPDATE messages_log SET is_read = 1 WHERE friend_id = ? AND direction = 'incoming' AND is_read = 0`)
-      .bind(item.friend_id).run();
 
     // 友だち情報を取得
     const friend = await c.env.DB
