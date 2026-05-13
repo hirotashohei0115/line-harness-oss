@@ -83,8 +83,9 @@ chats.get('/api/chats', async (c) => {
     const operatorId = c.req.query('operatorId') ?? undefined;
     const lineAccountId = c.req.query('lineAccountId') ?? undefined;
 
-    // JOIN friends to get display_name and picture_url
-    let sql = `SELECT c.*, f.display_name, f.picture_url, f.line_user_id, f.contact_mark_id, f.is_pinned, f.pinned_at
+    // JOIN friends to get display_name and picture_url, plus unread message count
+    let sql = `SELECT c.*, f.display_name, f.picture_url, f.line_user_id, f.contact_mark_id, f.is_pinned, f.pinned_at,
+                 (SELECT COUNT(*) FROM messages_log ml WHERE ml.friend_id = c.friend_id AND ml.direction = 'incoming' AND ml.is_read = 0) as unread_count
                FROM chats c
                LEFT JOIN friends f ON c.friend_id = f.id`;
     const conditions: string[] = [];
@@ -129,6 +130,7 @@ chats.get('/api/chats', async (c) => {
         contactMarkId: (ch as unknown as Record<string, unknown>).contact_mark_id as string | null ?? null,
         isPinned: Boolean((ch as Record<string, unknown>).is_pinned),
         pinnedAt: (ch as Record<string, unknown>).pinned_at as string | null,
+        unreadCount: Number((ch as Record<string, unknown>).unread_count ?? 0),
       })),
     });
   } catch (err) {
@@ -137,10 +139,36 @@ chats.get('/api/chats', async (c) => {
   }
 });
 
+// Must be before /:id
+chats.get('/api/chats/unread-count', async (c) => {
+  try {
+    const lineAccountId = c.req.query('lineAccountId');
+    let row: { count: number } | null;
+    if (lineAccountId) {
+      row = await c.env.DB
+        .prepare(`SELECT COUNT(*) as count FROM chats c JOIN friends f ON c.friend_id = f.id WHERE c.status = 'unread' AND f.line_account_id = ?`)
+        .bind(lineAccountId).first<{ count: number }>();
+    } else {
+      row = await c.env.DB
+        .prepare(`SELECT COUNT(*) as count FROM chats WHERE status = 'unread'`)
+        .first<{ count: number }>();
+    }
+    return c.json({ success: true, data: { count: row?.count ?? 0 } });
+  } catch (err) {
+    console.error('GET /api/chats/unread-count error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 chats.get('/api/chats/:id', async (c) => {
   try {
     const item = await getChatById(c.env.DB, c.req.param('id'));
     if (!item) return c.json({ success: false, error: 'Chat not found' }, 404);
+
+    // Mark incoming messages as read
+    await c.env.DB
+      .prepare(`UPDATE messages_log SET is_read = 1 WHERE friend_id = ? AND direction = 'incoming' AND is_read = 0`)
+      .bind(item.friend_id).run();
 
     // 友だち情報を取得
     const friend = await c.env.DB

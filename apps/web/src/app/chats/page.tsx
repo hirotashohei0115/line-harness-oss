@@ -22,6 +22,7 @@ interface Chat {
   contactMarkId?: string | null
   isPinned?: boolean
   pinnedAt?: string | null
+  unreadCount?: number
 }
 
 interface ChatMessage {
@@ -931,13 +932,20 @@ export default function ChatsPage() {
                       {/* Pin indicator — left border */}
                       <div className={`flex-shrink-0 w-1 rounded-r-sm self-stretch ${pinned ? 'bg-orange-400' : ''}`} />
                       <div className="flex items-center gap-3 flex-1 px-3">
-                        {chat.friendPictureUrl ? (
-                          <img src={chat.friendPictureUrl} alt="" className="w-10 h-10 rounded-full flex-shrink-0" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                            <span className="text-gray-500 text-sm">{chat.friendName.charAt(0)}</span>
-                          </div>
-                        )}
+                        <div className="relative flex-shrink-0">
+                          {chat.friendPictureUrl ? (
+                            <img src={chat.friendPictureUrl} alt="" className="w-10 h-10 rounded-full" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                              <span className="text-gray-500 text-sm">{chat.friendName.charAt(0)}</span>
+                            </div>
+                          )}
+                          {(chat.unreadCount ?? 0) > 0 && (
+                            <span className="absolute -top-1 -left-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
+                              {(chat.unreadCount ?? 0) >= 10 ? '9+' : chat.unreadCount}
+                            </span>
+                          )}
+                        </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-900 truncate">{chat.friendName}</p>
                           {(() => {

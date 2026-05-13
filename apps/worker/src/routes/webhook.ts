@@ -826,8 +826,8 @@ async function handleEvent(
     // 受信メッセージをログに記録
     await db
       .prepare(
-        `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, created_at)
-         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, ?)`,
+        `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
+         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 0, ?)`,
       )
       .bind(logId, friend.id, incomingText, now)
       .run();
@@ -1299,8 +1299,8 @@ async function handleEvent(
       const logContent = displayText || actionLabels[action ?? '']?.() || event.postback.data;
       const now = jstNow();
       await db.prepare(
-        `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, created_at)
-         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, ?)`,
+        `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
+         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 0, ?)`,
       ).bind(crypto.randomUUID(), friend.id, logContent, now).run();
       await upsertChatOnMessage(db, friend.id);
     }

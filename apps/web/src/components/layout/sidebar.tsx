@@ -169,10 +169,29 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const [staffName, setStaffName] = useState<string | null>(null)
   const [staffRole, setStaffRole] = useState<string | null>(null)
+  const [chatUnread, setChatUnread] = useState(0)
 
   useEffect(() => {
     setStaffName(localStorage.getItem('lh_staff_name'))
     setStaffRole(localStorage.getItem('lh_staff_role'))
+  }, [])
+
+  useEffect(() => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
+    const fetchUnread = () => {
+      const key = typeof window !== 'undefined' ? localStorage.getItem('lh_api_key') || '' : ''
+      fetch(`${API_URL}/api/chats/unread-count`, {
+        headers: { Authorization: `Bearer ${key}` },
+      })
+        .then(r => r.json())
+        .then((d: { success: boolean; data: { count: number } }) => {
+          if (d.success) setChatUnread(d.data.count)
+        })
+        .catch(() => {})
+    }
+    fetchUnread()
+    const id = setInterval(fetchUnread, 10000)
+    return () => clearInterval(id)
   }, [])
 
   useEffect(() => { setIsOpen(false) }, [pathname])
@@ -231,7 +250,12 @@ export default function Sidebar() {
                   style={active ? { backgroundColor: isDanger ? '#EF4444' : '#06C755' } : {}}
                 >
                   <NavIcon d={item.icon} />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {item.href === '/chats' && chatUnread > 0 && (
+                    <span className="min-w-[20px] h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                      {chatUnread >= 100 ? '99+' : chatUnread}
+                    </span>
+                  )}
                 </Link>
               )
             })}
