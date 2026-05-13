@@ -642,6 +642,23 @@ function extractLogContent(msg: LineMessage): { type: string; content: string } 
   return { type: 'text', content: (msg.text as string) || '' };
 }
 
+async function logFriendAction(
+  db: D1Database,
+  friendId: string,
+  actionType: string,
+  actionLabel: string,
+  actionData?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await db
+      .prepare(`INSERT INTO friend_action_logs (id, friend_id, action_type, action_label, action_data, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), friendId, actionType, actionLabel, actionData ? JSON.stringify(actionData) : null, jstNow())
+      .run();
+  } catch (err) {
+    console.error('logFriendAction error:', err);
+  }
+}
+
 async function replyAndLog(
   db: D1Database,
   lineClient: LineClient,
@@ -805,7 +822,8 @@ async function handleEvent(
       }
     }
 
-    // 新規ユーザーのみ: イベントバス発火・対応マーク設定
+    // 新規ユーザーのみ: アクションログ・イベントバス発火・対応マーク設定
+    await logFriendAction(db, friend.id, 'friend_add', '友達追加');
     await fireEvent(db, 'friend_add', { friendId: friend.id, eventData: { displayName: friend.display_name } }, lineAccessToken, lineAccountId);
     await setContactMark(db, friend.id, 'mark_01');
     return;
@@ -948,6 +966,13 @@ async function handleEvent(
       return;
     }
 
+    if (incomingText === '修理依頼をする') {
+      await logFriendAction(db, friend.id, 'menu_repair', '修理依頼をする');
+      await setContactMark(db, friend.id, 'mark_17');
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildProductSelectFlex())]); } catch (err) { console.error('修理依頼をする text handler:', err); }
+      return;
+    }
+
     // リッチメニュー: ご依頼の流れを教えて
     if (incomingText === 'ご依頼の流れを教えて') {
       const flowFlex = JSON.stringify({
@@ -991,6 +1016,7 @@ async function handleEvent(
 
     // 機種選択
     if (incomingText === 'MacBook Air' || incomingText === 'MacBook Pro' || incomingText === 'その他') {
+      await logFriendAction(db, friend.id, 'product_select', incomingText);
       const productMap: Record<string, { key: string; id: string }> = {
         'MacBook Air': { key: 'air', id: 'prod-air-0001-0000-0000-000000000001' },
         'MacBook Pro': { key: 'pro', id: 'prod-pro-0001-0000-0000-000000000002' },
@@ -1069,6 +1095,7 @@ async function handleEvent(
     {
       const symptomRow = await db.prepare('SELECT id, name FROM repair_symptoms WHERE name = ? LIMIT 1').bind(incomingText).first<{ id: string; name: string }>();
       if (symptomRow) {
+        await logFriendAction(db, friend.id, 'symptom_select', symptomRow.name);
         const symptomId = symptomRow.id;
         const symptomName = symptomRow.name;
         const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
@@ -1112,6 +1139,8 @@ async function handleEvent(
 
     // 依頼方法
     if (incomingText === '郵送で依頼する' || incomingText === '店舗に持込む' || incomingText === '質問・相談したい') {
+      if (incomingText === '質問・相談したい') { await logFriendAction(db, friend.id, 'consult', '質問・相談したい'); }
+      else { await logFriendAction(db, friend.id, 'delivery_method', incomingText); }
       const quoteId = (await getFriendAttribute(db, friend.id, 'repair_quote_id')) ?? '';
       const typeMap: Record<string, 'mail' | 'store' | 'consult'> = { '郵送で依頼する': 'mail', '店舗に持込む': 'store', '質問・相談したい': 'consult' };
       const type = typeMap[incomingText];
@@ -1137,6 +1166,7 @@ async function handleEvent(
 
     // 来店予約ボタンタップ → 来店日時・お名前を案内
     if (incomingText === '来店予約する') {
+      await logFriendAction(db, friend.id, 'delivery_method', '来店予約する');
       await setContactMark(db, friend.id, 'mark_04');
       await addTagToFriend(db, friend.id, '店舗持込');
       try {
@@ -1267,6 +1297,11 @@ async function handleEvent(
       }
     }
 
+    // 自由メッセージ（既知キーワード/自動返信のいずれにも該当しない場合）
+    if (!matched && !isAutoKeyword) {
+      await logFriendAction(db, friend.id, 'free_message', incomingText.slice(0, 100));
+    }
+
     // イベントバス発火: message_received
     await fireEvent(db, 'message_received', {
       friendId: friend.id,
@@ -1318,6 +1353,7 @@ async function handleEvent(
     if (action === 'select_product') {
       const productKey = params.get('product') ?? '';
       const productName = params.get('name') ?? '';
+      await logFriendAction(db, friend.id, 'product_select', productName || productKey);
       const productIdMap: Record<string, string> = {
         air:   'prod-air-0001-0000-0000-000000000001',
         pro:   'prod-pro-0001-0000-0000-000000000002',
@@ -1355,6 +1391,7 @@ async function handleEvent(
 
     if (action === 'select_model') {
       const modelName = params.get('model_name') ?? '';
+      await logFriendAction(db, friend.id, 'model_select', modelName || 'モデル選択');
       if (modelName) {
         await setFriendAttribute(db, friend.id, 'repair_model_name', modelName);
       }
@@ -1433,6 +1470,7 @@ async function handleEvent(
     if (action === 'select_symptom') {
       const symptomId = params.get('symptom_id') ?? '';
       const symptomName = params.get('symptom_name') ?? '';
+      await logFriendAction(db, friend.id, 'symptom_select', symptomName || '症状選択');
       const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id'))
         ?? 'prod-oth-0001-0000-0000-000000000003';
       const productName = (await getFriendAttribute(db, friend.id, 'repair_product_name')) ?? 'MacBook';
@@ -1521,7 +1559,8 @@ async function handleEvent(
       if (type && quoteId) {
         await updateRepairQuoteRequestType(db, quoteId, type);
       }
-
+      await logFriendAction(db, friend.id, 'order_confirm',
+        type === 'mail' ? '依頼する（郵送）' : type === 'store' ? '依頼する（来店）' : '依頼しない');
       await setContactMark(db, friend.id, 'mark_22');
 
       try {
@@ -1576,6 +1615,7 @@ async function handleEvent(
       const store = STORES.find((s) => s.key === storeKey);
       if (!store) return;
 
+      await logFriendAction(db, friend.id, 'store_select', store.shortName);
       await setFriendAttribute(db, friend.id, 'repair_store', store.shortName);
       await setContactMark(db, friend.id, 'mark_24');
 
@@ -1608,6 +1648,7 @@ async function handleEvent(
     }
 
     if (action === 'start_repair') {
+      await logFriendAction(db, friend.id, 'menu_repair', '修理依頼をする');
       await setContactMark(db, friend.id, 'mark_17');
       try {
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [

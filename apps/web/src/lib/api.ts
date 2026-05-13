@@ -44,7 +44,7 @@ export type FunnelStep = {
   funnelId: string
   name: string
   stepOrder: number
-  conditionType: 'tag' | 'contact_mark'
+  conditionType: 'tag' | 'contact_mark' | 'action'
   conditionIds: string[]
   createdAt: string
 }
@@ -63,7 +63,7 @@ export type FunnelAnalyzeResult = {
   funnel: Funnel
   period: { from: string; to: string }
   total: number
-  steps: { name: string; reached: number; rate: number; dropoff: number }[]
+  steps: { name: string; reached: number; notReached: number; rate: number; prevRate: number; totalRate: number; dropoff: number }[]
 }
 
 export type CrossAnalysis = {
@@ -196,9 +196,9 @@ export const api = {
   funnels: {
     list: () => fetchApi<ApiResponse<Funnel[]>>('/api/funnels'),
     get: (id: string) => fetchApi<ApiResponse<FunnelWithSteps>>(`/api/funnels/${id}`),
-    create: (data: { name: string; description?: string; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark'; condition_ids: string[] }[] }) =>
+    create: (data: { name: string; description?: string; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark' | 'action'; condition_ids: string[] }[] }) =>
       fetchApi<ApiResponse<FunnelWithSteps>>('/api/funnels', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: string, data: { name?: string; description?: string | null; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark'; condition_ids: string[] }[] }) =>
+    update: (id: string, data: { name?: string; description?: string | null; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark' | 'action'; condition_ids: string[] }[] }) =>
       fetchApi<ApiResponse<FunnelWithSteps>>(`/api/funnels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) => fetchApi<ApiResponse<null>>(`/api/funnels/${id}`, { method: 'DELETE' }),
     analyze: (id: string, from: string, to: string) =>

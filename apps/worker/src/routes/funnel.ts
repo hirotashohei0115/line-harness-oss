@@ -14,7 +14,7 @@ interface FunnelStepRow {
   funnel_id: string;
   name: string;
   step_order: number;
-  condition_type: 'tag' | 'contact_mark';
+  condition_type: 'tag' | 'contact_mark' | 'action';
   condition_ids: string;
   created_at: string;
 }
@@ -50,7 +50,7 @@ funnelRoutes.post('/api/funnels', async (c) => {
   try {
     const body = await c.req.json<{
       name: string; description?: string;
-      steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark'; condition_ids: string[] }[];
+      steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark' | 'action'; condition_ids: string[] }[];
     }>();
     if (!body.name) return c.json({ success: false, error: 'name is required' }, 400);
     const id = crypto.randomUUID();
@@ -90,7 +90,7 @@ funnelRoutes.patch('/api/funnels/:id', async (c) => {
     const id = c.req.param('id');
     const body = await c.req.json<{
       name?: string; description?: string | null;
-      steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark'; condition_ids: string[] }[];
+      steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark' | 'action'; condition_ids: string[] }[];
     }>();
     const existing = await c.env.DB.prepare('SELECT * FROM funnel_definitions WHERE id = ?').bind(id).first<FunnelRow>();
     if (!existing) return c.json({ success: false, error: 'Not found' }, 404);
@@ -150,22 +150,42 @@ funnelRoutes.get('/api/funnels/:id/analyze', async (c) => {
     for (const step of stepsResult.results) {
       const conditionIds = JSON.parse(step.condition_ids || '[]') as string[];
       let reached = 0;
+
       if (conditionIds.length > 0) {
         const placeholders = conditionIds.map(() => '?').join(',');
+
         if (step.condition_type === 'tag') {
           const row = await c.env.DB
             .prepare(`SELECT COUNT(DISTINCT f.id) as count FROM friends f JOIN friend_tags ft ON f.id = ft.friend_id WHERE f.created_at >= ? AND f.created_at <= ? AND ft.tag_id IN (${placeholders})`)
             .bind(fromTs, toTs, ...conditionIds).first<{ count: number }>();
           reached = row?.count ?? 0;
-        } else {
+        } else if (step.condition_type === 'contact_mark') {
           const row = await c.env.DB
             .prepare(`SELECT COUNT(*) as count FROM friends WHERE created_at >= ? AND created_at <= ? AND contact_mark_id IN (${placeholders})`)
             .bind(fromTs, toTs, ...conditionIds).first<{ count: number }>();
           reached = row?.count ?? 0;
+        } else if (step.condition_type === 'action') {
+          // アクションログベース: 指定action_typeのログが存在するユーザー
+          const row = await c.env.DB
+            .prepare(`SELECT COUNT(DISTINCT f.id) as count FROM friends f JOIN friend_action_logs fal ON f.id = fal.friend_id WHERE f.created_at >= ? AND f.created_at <= ? AND fal.action_type IN (${placeholders})`)
+            .bind(fromTs, toTs, ...conditionIds).first<{ count: number }>();
+          reached = row?.count ?? 0;
         }
       }
-      const rate = prevReached > 0 ? Math.round((reached / prevReached) * 1000) / 10 : 0;
-      steps.push({ name: step.name, reached, rate, dropoff: Math.round((100 - rate) * 10) / 10 });
+
+      const prevRate = prevReached > 0 ? Math.round((reached / prevReached) * 1000) / 10 : 0;
+      const totalRate = total > 0 ? Math.round((reached / total) * 1000) / 10 : 0;
+      const notReached = prevReached - reached;
+
+      steps.push({
+        name: step.name,
+        reached,
+        notReached,
+        rate: prevRate,         // 前ステップからの移行率
+        prevRate,               // alias
+        totalRate,              // 全体比
+        dropoff: Math.round((100 - prevRate) * 10) / 10,
+      });
       prevReached = reached;
     }
 

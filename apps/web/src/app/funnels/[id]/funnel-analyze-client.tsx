@@ -25,15 +25,12 @@ export default function FunnelAnalyzeClient() {
   const [result, setResult] = useState<FunnelAnalyzeResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [modal, setModal] = useState<{ title: string; count: number } | null>(null)
 
   useEffect(() => {
     const realId = getFunnelIdFromPath()
-    if (realId) {
-      setId(realId)
-    } else {
-      setLoading(false)
-      setError('ファネルIDが取得できませんでした')
-    }
+    if (realId) { setId(realId) }
+    else { setLoading(false); setError('ファネルIDが取得できませんでした') }
   }, [])
 
   const load = useCallback(async () => {
@@ -50,7 +47,9 @@ export default function FunnelAnalyzeClient() {
 
   useEffect(() => { if (id) load() }, [id, load])
 
-  const maxReached = result ? Math.max(result.total, ...result.steps.map((s) => s.reached), 1) : 1
+  const finalCVR = result && result.total > 0 && result.steps.length > 0
+    ? Math.round((result.steps[result.steps.length - 1].reached / result.total) * 1000) / 10
+    : 0
 
   return (
     <div>
@@ -82,111 +81,137 @@ export default function FunnelAnalyzeClient() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center text-gray-400 text-sm">分析中...</div>
       ) : result && (
         <>
-          {/* Summary card */}
+          {/* Summary cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
-              <p className="text-xs text-gray-500 mb-1">期間内友だち追加</p>
+              <p className="text-xs text-gray-500 mb-1">計測対象（母数）</p>
               <p className="text-2xl font-bold text-gray-900">{result.total.toLocaleString('ja-JP')}</p>
-              <p className="text-xs text-gray-400">母数</p>
+              <p className="text-xs text-gray-400">期間内友だち追加</p>
             </div>
-            {result.steps[0] && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
-                <p className="text-xs text-gray-500 mb-1 truncate">{result.steps[0].name}</p>
-                <p className="text-2xl font-bold text-green-600">{result.steps[0].rate}%</p>
-                <p className="text-xs text-gray-400">Step 1 到達率</p>
-              </div>
-            )}
-            {result.steps[result.steps.length - 1] && result.steps.length > 1 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
-                <p className="text-xs text-gray-500 mb-1 truncate">{result.steps[result.steps.length - 1].name}</p>
-                <p className="text-2xl font-bold text-blue-600">{result.steps[result.steps.length - 1].reached.toLocaleString('ja-JP')}</p>
-                <p className="text-xs text-gray-400">最終ステップ到達</p>
-              </div>
-            )}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
-              <p className="text-xs text-gray-500 mb-1">全体CVR</p>
-              <p className="text-2xl font-bold text-purple-600">
-                {result.total > 0 && result.steps.length > 0
-                  ? `${Math.round((result.steps[result.steps.length - 1]?.reached ?? 0) / result.total * 1000) / 10}%`
-                  : '—'}
-              </p>
-              <p className="text-xs text-gray-400">母数→最終</p>
+              <p className="text-xs text-gray-500 mb-1">最終CVR</p>
+              <p className="text-2xl font-bold text-green-600">{finalCVR}%</p>
+              <p className="text-xs text-gray-400">母数→最終ステップ</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
+              <p className="text-xs text-gray-500 mb-1">最終到達</p>
+              <p className="text-2xl font-bold text-blue-600">{(result.steps[result.steps.length - 1]?.reached ?? 0).toLocaleString('ja-JP')}</p>
+              <p className="text-xs text-gray-400">人</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
+              <p className="text-xs text-gray-500 mb-1">ステップ数</p>
+              <p className="text-2xl font-bold text-purple-600">{result.steps.length}</p>
+              <p className="text-xs text-gray-400">コンバージョン</p>
             </div>
           </div>
 
-          {/* Funnel visualization */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-6">ファネル可視化</h3>
-            <div className="space-y-3">
-              {/* Base row: total cohort */}
-              <div className="flex items-center gap-4">
-                <div className="w-36 text-right flex-shrink-0">
-                  <p className="text-xs font-medium text-gray-600">母数（友だち追加）</p>
-                </div>
-                <div className="flex-1 relative h-10 flex items-center">
-                  <div className="h-10 rounded-md flex items-center justify-center" style={{ width: '100%', backgroundColor: '#e5e7eb' }}>
-                    <span className="text-sm font-bold text-gray-700">{result.total.toLocaleString('ja-JP')} 人</span>
-                  </div>
-                </div>
-                <div className="w-20 flex-shrink-0" />
-              </div>
+          {/* L-step style funnel table */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700">ファネル分析</h3>
+              <span className="text-xs text-gray-400">{result.period.from} 〜 {result.period.to}</span>
+            </div>
 
-              {result.steps.map((step, idx) => {
-                const widthPct = maxReached > 0 ? Math.max((step.reached / maxReached) * 100, 3) : 3
-                const barColor = idx === result.steps.length - 1 ? '#06C755'
-                  : step.rate >= 70 ? '#3b82f6'
-                  : step.rate >= 40 ? '#f97316'
-                  : '#ef4444'
-                return (
-                  <div key={idx} className="flex items-center gap-4">
-                    <div className="w-36 text-right flex-shrink-0">
-                      <p className="text-xs font-medium text-gray-700 leading-tight">{step.name}</p>
-                      <p className="text-xs text-gray-400">Step {idx + 1}</p>
-                    </div>
-                    <div className="flex-1 relative h-10 bg-gray-50 rounded-md overflow-hidden">
-                      <div
-                        className="h-full rounded-md flex items-center justify-end pr-2 transition-all duration-500"
-                        style={{ width: `${widthPct}%`, backgroundColor: barColor }}
-                      >
-                        <span className="text-xs font-bold text-white whitespace-nowrap">{step.reached.toLocaleString('ja-JP')}</span>
+            {/* Header row */}
+            <div className="grid grid-cols-[1fr_auto_auto_auto_2fr] gap-0 px-6 py-2 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500">
+              <div>コンバージョン名</div>
+              <div className="text-right w-20">到達人数</div>
+              <div className="text-right w-20">未到達</div>
+              <div className="text-right w-20">全体比</div>
+              <div className="pl-4">全体比グラフ</div>
+            </div>
+
+            {/* Base row */}
+            <div className="grid grid-cols-[1fr_auto_auto_auto_2fr] gap-0 px-6 py-3 border-b border-gray-100 items-center hover:bg-gray-50">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-gray-400 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">0</span>
+                  <span className="text-sm font-medium text-gray-700">計測開始（友だち追加）</span>
+                </div>
+              </div>
+              <div className="text-right w-20">
+                <button
+                  onClick={() => setModal({ title: '計測開始', count: result.total })}
+                  className="text-sm font-bold text-blue-600 hover:underline"
+                >{result.total.toLocaleString('ja-JP')}</button>
+              </div>
+              <div className="text-right w-20 text-sm text-gray-400">—</div>
+              <div className="text-right w-20 text-sm font-bold text-gray-700">100%</div>
+              <div className="pl-4">
+                <div className="h-5 rounded-sm" style={{ width: '100%', backgroundColor: '#06C755', opacity: 0.8 }} />
+              </div>
+            </div>
+
+            {/* Step rows */}
+            {result.steps.map((step, idx) => {
+              const barWidth = Math.max(step.totalRate, 1)
+              const barColor = idx === result.steps.length - 1 ? '#06C755'
+                : step.prevRate >= 70 ? '#3b82f6'
+                : step.prevRate >= 40 ? '#f97316'
+                : '#ef4444'
+
+              return (
+                <div key={idx}>
+                  {/* Conversion rate arrow between steps */}
+                  <div className="px-6 py-1 bg-gray-50 border-y border-gray-100 flex items-center gap-2">
+                    <span className="text-gray-400 text-xs">↓</span>
+                    <span className="text-xs font-semibold text-gray-600">
+                      {step.prevRate}%
+                    </span>
+                    <span className="text-xs text-gray-400">（前ステップからの移行率）</span>
+                  </div>
+
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_2fr] gap-0 px-6 py-3 border-b border-gray-100 items-center hover:bg-gray-50">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: barColor }}
+                        >{idx + 1}</span>
+                        <span className="text-sm font-medium text-gray-700">{step.name}</span>
                       </div>
                     </div>
-                    <div className="w-20 flex-shrink-0 text-right">
-                      <p className="text-sm font-bold text-gray-900">{step.rate}%</p>
-                      <p className="text-xs text-red-400">▼ {step.dropoff}%</p>
+                    <div className="text-right w-20">
+                      <button
+                        onClick={() => setModal({ title: step.name + '：到達', count: step.reached })}
+                        className="text-sm font-bold text-blue-600 hover:underline"
+                      >{step.reached.toLocaleString('ja-JP')}</button>
+                    </div>
+                    <div className="text-right w-20">
+                      <button
+                        onClick={() => setModal({ title: step.name + '：未到達', count: step.notReached })}
+                        className="text-sm font-bold text-red-400 hover:underline"
+                      >{step.notReached.toLocaleString('ja-JP')}</button>
+                    </div>
+                    <div className="text-right w-20">
+                      <span className="text-sm font-bold" style={{ color: barColor }}>{step.totalRate}%</span>
+                    </div>
+                    <div className="pl-4">
+                      <div className="h-5 rounded-sm bg-gray-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-sm transition-all duration-500"
+                          style={{ width: `${barWidth}%`, backgroundColor: barColor, opacity: 0.85 }}
+                        />
+                      </div>
                     </div>
                   </div>
-                )
-              })}
-            </div>
-
-            {/* Step detail table */}
-            {result.steps.length > 0 && (
-              <div className="mt-6 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="pb-2 text-left text-xs font-semibold text-gray-500">ステップ</th>
-                      <th className="pb-2 text-right text-xs font-semibold text-gray-500">到達人数</th>
-                      <th className="pb-2 text-right text-xs font-semibold text-gray-500">到達率</th>
-                      <th className="pb-2 text-right text-xs font-semibold text-gray-500">離脱率</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {result.steps.map((step, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="py-2 text-gray-700">{step.name}</td>
-                        <td className="py-2 text-right font-medium">{step.reached.toLocaleString('ja-JP')}</td>
-                        <td className="py-2 text-right text-blue-600 font-medium">{step.rate}%</td>
-                        <td className="py-2 text-right text-red-500">{step.dropoff}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                </div>
+              )
+            })}
           </div>
         </>
+      )}
+
+      {/* Modal */}
+      {modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setModal(null)}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-gray-900 mb-1">{modal.title}</h3>
+            <p className="text-3xl font-bold text-blue-600 mb-4">{modal.count.toLocaleString('ja-JP')} 人</p>
+            <p className="text-xs text-gray-400 mb-4">※ 詳細なユーザー一覧は友だち管理画面でご確認ください</p>
+            <button onClick={() => setModal(null)} className="w-full py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded-lg">閉じる</button>
+          </div>
+        </div>
       )}
     </div>
   )
