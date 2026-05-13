@@ -957,11 +957,8 @@ export default function ChatsPage() {
                         <div className="flex items-center gap-1 flex-shrink-0">
                           <button
                             onClick={(e) => { e.stopPropagation(); void handleTogglePin(chat) }}
-                            className={`p-1 rounded leading-none transition-colors text-base ${
-                              pinned
-                                ? 'text-orange-500 hover:text-orange-700 hover:bg-orange-100'
-                                : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'
-                            }`}
+                            className="p-1 rounded leading-none transition-all text-base hover:bg-gray-100"
+                            style={pinned ? { opacity: 1 } : { filter: 'grayscale(1)', opacity: 0.3 }}
                             title={pinned ? 'ピン解除' : 'ピン止め'}
                           >📌</button>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.className}`}>
