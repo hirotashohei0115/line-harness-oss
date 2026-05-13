@@ -39,7 +39,7 @@ interface ChatDetail extends Chat {
   messages?: ChatMessage[]
 }
 
-type StatusFilter = 'all' | 'unread' | 'in_progress' | 'resolved'
+type StatusFilter = 'all' | 'unread'
 
 const statusConfig: Record<Chat['status'], { label: string; className: string }> = {
   unread: { label: '未読', className: 'bg-red-100 text-red-700' },
@@ -50,8 +50,6 @@ const statusConfig: Record<Chat['status'], { label: string; className: string }>
 const statusFilters: { key: StatusFilter; label: string }[] = [
   { key: 'all', label: '全て' },
   { key: 'unread', label: '未読' },
-  { key: 'in_progress', label: '対応中' },
-  { key: 'resolved', label: '解決済' },
 ]
 
 function getMarkTextColor(bgColor: string): string {
@@ -400,8 +398,8 @@ export default function ChatsPage() {
     setLoading(true)
     setError('')
     try {
-      const params: { status?: string; accountId?: string } = {}
-      if (statusFilter !== 'all') params.status = statusFilter
+      const params: { unread?: boolean; accountId?: string } = {}
+      if (statusFilter === 'unread') params.unread = true
       if (selectedAccountId) params.accountId = selectedAccountId
       const [chatRes, friendRes] = await Promise.allSettled([
         api.chats.list(params),
@@ -452,8 +450,8 @@ export default function ChatsPage() {
 
   const silentLoadChats = useCallback(async () => {
     try {
-      const params: { status?: string; accountId?: string } = {}
-      if (statusFilter !== 'all') params.status = statusFilter
+      const params: { unread?: boolean; accountId?: string } = {}
+      if (statusFilter === 'unread') params.unread = true
       if (selectedAccountId) params.accountId = selectedAccountId
       const res = await api.chats.list(params)
       if (!res.success) return
@@ -488,8 +486,8 @@ export default function ChatsPage() {
       prevChatsRef.current = newChats
       setChats(newChats)
 
-      // Update tab title with unread count
-      const unread = newChats.filter(c => c.status === 'unread').length
+      // Update tab title with unread count (users with unread messages)
+      const unread = newChats.filter(c => (c.unreadCount ?? 0) > 0).length
       document.title = unread > 0 ? `(${unread}) LINE Harness` : 'LINE Harness'
     } catch { /* silent */ }
   }, [statusFilter, selectedAccountId])
@@ -1057,22 +1055,6 @@ export default function ChatsPage() {
                       className="px-3 py-1 min-h-[44px] lg:min-h-0 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
                     >
                       未読に戻す
-                    </button>
-                  )}
-                  {chatDetail.status !== 'in_progress' && (
-                    <button
-                      onClick={() => handleStatusUpdate('in_progress')}
-                      className="px-3 py-1 min-h-[44px] lg:min-h-0 text-xs font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 rounded-md transition-colors"
-                    >
-                      対応中にする
-                    </button>
-                  )}
-                  {chatDetail.status !== 'resolved' && (
-                    <button
-                      onClick={() => handleStatusUpdate('resolved')}
-                      className="px-3 py-1 min-h-[44px] lg:min-h-0 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
-                    >
-                      解決済にする
                     </button>
                   )}
                 </div>

@@ -443,11 +443,12 @@ export const api = {
       ),
   },
   chats: {
-    list: (params?: { status?: string; operatorId?: string; accountId?: string }) => {
+    list: (params?: { status?: string; operatorId?: string; accountId?: string; unread?: boolean }) => {
       const query: Record<string, string> = {}
       if (params?.status) query.status = params.status
       if (params?.operatorId) query.operatorId = params.operatorId
       if (params?.accountId) query.lineAccountId = params.accountId
+      if (params?.unread) query.unread = 'true'
       return fetchApi<ApiResponse<Chat[]>>(
         '/api/chats?' + new URLSearchParams(query),
       )

@@ -82,6 +82,7 @@ chats.get('/api/chats', async (c) => {
     const status = c.req.query('status') ?? undefined;
     const operatorId = c.req.query('operatorId') ?? undefined;
     const lineAccountId = c.req.query('lineAccountId') ?? undefined;
+    const unreadOnly = c.req.query('unread') === 'true';
 
     // JOIN friends to get display_name and picture_url, plus unread message count
     let sql = `SELECT c.*, f.display_name, f.picture_url, f.line_user_id, f.contact_mark_id, f.is_pinned, f.pinned_at,
@@ -91,6 +92,9 @@ chats.get('/api/chats', async (c) => {
     const conditions: string[] = [];
     const bindings: unknown[] = [];
 
+    if (unreadOnly) {
+      conditions.push('(SELECT COUNT(*) FROM messages_log ml WHERE ml.friend_id = c.friend_id AND ml.direction = \'incoming\' AND ml.is_read = 0) > 0');
+    }
     if (status) {
       conditions.push('c.status = ?');
       bindings.push(status);
