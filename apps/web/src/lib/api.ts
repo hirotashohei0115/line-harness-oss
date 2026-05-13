@@ -405,6 +405,13 @@ export const api = {
       ),
     delete: (id: string) =>
       fetchApi<ApiResponse<null>>(`/api/templates/${id}`, { method: 'DELETE' }),
+    duplicate: (id: string) =>
+      fetchApi<ApiResponse<{ id: string; name: string }>>(`/api/templates/${id}/duplicate`, { method: 'POST' }),
+    patch: (id: string, data: Partial<{ name: string; category: string; messageType: string; messageContent: string }>) =>
+      fetchApi<ApiResponse<{ id: string; name: string; category: string; messageType: string; messageContent: string }>>(
+        `/api/templates/${id}`,
+        { method: 'PATCH', body: JSON.stringify(data) },
+      ),
   },
   automations: {
     list: (params?: { accountId?: string }) => {

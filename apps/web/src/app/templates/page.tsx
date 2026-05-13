@@ -71,6 +71,11 @@ export default function TemplatesPage() {
   })
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editContent, setEditContent] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -145,6 +150,39 @@ export default function TemplatesPage() {
     }
   }
 
+  const handleDuplicate = async (id: string) => {
+    try {
+      await api.templates.duplicate(id)
+      load()
+    } catch {
+      setError('複製に失敗しました')
+    }
+  }
+
+  const handleEditOpen = (template: Template) => {
+    setEditingTemplate(template)
+    setEditName(template.name)
+    setEditContent(template.messageContent)
+    setEditError('')
+  }
+
+  const handleEditSave = async () => {
+    if (!editingTemplate) return
+    if (!editName.trim()) { setEditError('テンプレート名を入力してください'); return }
+    if (!editContent.trim()) { setEditError('メッセージ内容を入力してください'); return }
+    setEditSaving(true)
+    setEditError('')
+    try {
+      await api.templates.patch(editingTemplate.id, { name: editName.trim(), messageContent: editContent.trim() })
+      setEditingTemplate(null)
+      load()
+    } catch {
+      setEditError('保存に失敗しました')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
   return (
     <div>
       <Header
@@ -195,6 +233,53 @@ export default function TemplatesPage() {
               {cat}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editingTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingTemplate(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-sm font-semibold text-gray-800 mb-4">テンプレートを編集</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">テンプレート名 <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">メッセージ内容 <span className="text-red-500">*</span></label>
+                <textarea
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                  rows={6}
+                  value={editContent}
+                  onChange={e => setEditContent(e.target.value)}
+                />
+              </div>
+              {editError && <p className="text-xs text-red-600">{editError}</p>}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleEditSave}
+                  disabled={editSaving}
+                  className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50"
+                  style={{ backgroundColor: '#06C755' }}
+                >
+                  {editSaving ? '保存中...' : '保存'}
+                </button>
+                <button
+                  onClick={() => setEditingTemplate(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -340,12 +425,26 @@ export default function TemplatesPage() {
 
                   {/* Actions */}
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => handleDelete(template.id)}
-                      className="px-3 py-1 text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                    >
-                      削除
-                    </button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => handleEditOpen(template)}
+                        className="px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                      >
+                        編集
+                      </button>
+                      <button
+                        onClick={() => handleDuplicate(template.id)}
+                        className="px-3 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                      >
+                        複製
+                      </button>
+                      <button
+                        onClick={() => handleDelete(template.id)}
+                        className="px-3 py-1 text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                      >
+                        削除
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
