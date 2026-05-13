@@ -149,9 +149,16 @@ export default function CrossAnalysisForm({ initial }: Props) {
     return []
   }
 
-  const colTotals = result ? result.rows[0]?.cells.map((_, ci) =>
-    result.rows.reduce((sum, row) => sum + row.cells[ci].count, 0)
-  ) : []
+  // 列合計: APIから直接受け取った値（軸2グループの全ユーザー数）を優先
+  const colTotals = result
+    ? (result.colTotals
+        ? result.colTotals.map((c) => c.count)
+        : result.rows[0]?.cells.map((_, ci) =>
+            result.rows.reduce((sum, row) => sum + row.cells[ci].count, 0)
+          ) ?? [])
+    : []
+  // 列ヘッダー用グループ名リスト（colTotalsから取得）
+  const axis2ColHeaders = result?.colTotals ?? result?.rows[0]?.cells ?? []
   const grandTotal = result ? result.rows.reduce((sum, row) => sum + row.total, 0) : 0
 
   const exportCSV = () => {
@@ -292,12 +299,12 @@ export default function CrossAnalysisForm({ initial }: Props) {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr>
-                  <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold text-gray-600">
+                  <th className="border border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold text-gray-600 min-w-[120px]">
                     {result.axis1Label} ＼ {result.axis2Label}
                   </th>
-                  {result.rows[0]?.cells.map((c, ci) => (
+                  {axis2ColHeaders.map((c, ci) => (
                     <th key={ci} className="border border-gray-200 bg-blue-50 px-3 py-2 text-center text-xs font-semibold text-blue-700 min-w-[80px]">
-                      {c.group}
+                      {c.group || `グループ${ci + 1}`}
                     </th>
                   ))}
                   <th className="border border-gray-200 bg-gray-100 px-3 py-2 text-center text-xs font-semibold text-gray-600 min-w-[80px]">合計</th>
@@ -306,11 +313,13 @@ export default function CrossAnalysisForm({ initial }: Props) {
               <tbody>
                 {result.rows.map((row, ri) => (
                   <tr key={ri} className="hover:bg-gray-50">
-                    <td className="border border-gray-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700">{row.group}</td>
+                    <td className="border border-gray-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700">
+                      {row.group || `グループ${ri + 1}`}
+                    </td>
                     {row.cells.map((cell, ci) => (
                       <td key={ci} className="border border-gray-200 px-3 py-2 text-center">
                         <button
-                          onClick={() => setModalCell({ axis1: row.group, axis2: cell.group, count: cell.count })}
+                          onClick={() => setModalCell({ axis1: row.group || `グループ${ri + 1}`, axis2: cell.group || `グループ${ci + 1}`, count: cell.count })}
                           className={`text-sm font-medium hover:underline ${cell.count > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
                           {cell.count}
                         </button>
@@ -320,8 +329,8 @@ export default function CrossAnalysisForm({ initial }: Props) {
                   </tr>
                 ))}
                 <tr className="bg-gray-50">
-                  <td className="border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600">列合計</td>
-                  {colTotals?.map((t, ci) => (
+                  <td className="border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600">列合計（軸2）</td>
+                  {colTotals.map((t, ci) => (
                     <td key={ci} className="border border-gray-200 px-3 py-2 text-center text-sm font-bold text-gray-700">{t}</td>
                   ))}
                   <td className="border border-gray-200 bg-gray-100 px-3 py-2 text-center text-sm font-bold text-gray-900">{grandTotal}</td>

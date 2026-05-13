@@ -145,9 +145,19 @@ crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
         const count = await countCell(c.env.DB, fromTs, toTs, g1, g2);
         cells.push({ group: g2.name, count });
       }
+      // 行合計 = 軸1グループの条件のみ満たすユーザー数（軸2条件は無視）
       const total = await countCell(c.env.DB, fromTs, toTs, g1, null);
       rows.push({ group: g1.name, total, cells });
     }
+
+    // 列合計 = 軸2グループの条件のみ満たすユーザー数（軸1条件は無視）
+    const allGroup: Group = { name: '', conditions: [] };
+    const colTotals = await Promise.all(
+      axis2.groups.map(async (g2) => ({
+        group: g2.name,
+        count: await countCell(c.env.DB, fromTs, toTs, allGroup, g2),
+      }))
+    );
 
     return c.json({
       success: true,
@@ -157,6 +167,7 @@ crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
         axis1Label: axis1.label,
         axis2Label: axis2.label,
         rows,
+        colTotals,
       },
     });
   } catch (err) {

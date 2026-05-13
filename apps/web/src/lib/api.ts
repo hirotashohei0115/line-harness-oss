@@ -87,6 +87,7 @@ export type CrossRunResult = {
   axis1Label: string
   axis2Label: string
   rows: { group: string; total: number; cells: { group: string; count: number }[] }[]
+  colTotals?: { group: string; count: number }[]
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
