@@ -327,6 +327,7 @@ export default function ChatsPage() {
   const [advancedSearchIds, setAdvancedSearchIds] = useState<string[] | null>(null)
   const [filterFriendIdSet, setFilterFriendIdSet] = useState<Set<string> | null>(null)
   const [showTagFilter, setShowTagFilter] = useState(false)
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   const handleTogglePin = async (chat: Chat) => {
@@ -693,78 +694,107 @@ export default function ChatsPage() {
             ))}
           </div>
 
-          {/* Search & Sort & Filter */}
-          <div className="px-3 py-2 border-b border-gray-100 space-y-1.5">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="名前で検索..."
-              className="w-full text-xs border border-gray-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500"
-            />
-            <input
-              type="text"
-              value={advancedSearch}
-              onChange={e => setAdvancedSearch(e.target.value)}
-              placeholder="電話/郵便番号/住所で検索..."
-              className="w-full text-xs border border-gray-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500"
-            />
-            <select
-              value={sortOrder}
-              onChange={e => setSortOrder(e.target.value as 'newest' | 'oldest' | 'name')}
-              className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
-            >
-              <option value="newest">最終メッセージ（新しい順）</option>
-              <option value="oldest">最終メッセージ（古い順）</option>
-              <option value="name">名前（あいうえお順）</option>
-            </select>
-            {/* Tag filter */}
-            <div className="relative">
-              <button
-                onClick={() => setShowTagFilter(v => !v)}
-                className={`w-full text-xs border rounded-md px-2.5 py-1.5 text-left flex items-center justify-between bg-white focus:outline-none focus:ring-1 focus:ring-green-500 ${filterTagIds.length > 0 ? 'border-green-400 text-green-700 font-medium' : 'border-gray-300 text-gray-400'}`}
-              >
-                <span>{filterTagIds.length > 0 ? `タグ: ${filterTagIds.length}件選択中` : 'タグで絞り込み...'}</span>
-                <span className="text-gray-400 text-[10px]">▾</span>
-              </button>
-              {showTagFilter && (
-                <div className="absolute top-full left-0 right-0 mt-0.5 z-20 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
-                  {allTags.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-gray-400">タグがありません</p>
-                  ) : (
-                    allTags.map(tag => (
-                      <label key={tag.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filterTagIds.includes(tag.id)}
-                          onChange={() => setFilterTagIds(prev => prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id])}
-                          className="rounded accent-green-500"
-                        />
-                        <span className="text-xs text-gray-700">{tag.name}</span>
-                      </label>
-                    ))
-                  )}
-                  {filterTagIds.length > 0 && (
-                    <button
-                      onClick={() => { setFilterTagIds([]); setShowTagFilter(false) }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 border-t border-gray-100"
-                    >クリア</button>
-                  )}
-                </div>
-              )}
-            </div>
-            {/* Mark filter */}
-            <select
-              value={filterMarkId ?? ''}
-              onChange={e => setFilterMarkId(e.target.value || null)}
-              className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
-            >
-              <option value="">対応マークで絞り込み...</option>
-              {allMarks.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
+          {/* Filter toggle button */}
+          {(() => {
+            const activeCount = [
+              searchQuery.trim() !== '',
+              advancedSearch.trim() !== '',
+              sortOrder !== 'newest',
+              filterTagIds.length > 0,
+              filterMarkId !== null,
+            ].filter(Boolean).length
+            return (
+              <div className="border-b border-gray-100">
+                <button
+                  onClick={() => setShowFilterPanel(v => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    {showFilterPanel ? '✕ 閉じる' : '🔍 絞り込み'}
+                    {!showFilterPanel && activeCount > 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">
+                        絞り込み中 ({activeCount})
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-gray-300 text-[10px]">{showFilterPanel ? '▲' : '▼'}</span>
+                </button>
+                {showFilterPanel && (
+                  <div className="px-3 pb-2 pt-1 space-y-1.5 bg-gray-50">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      placeholder="名前で検索..."
+                      className="w-full text-xs border border-gray-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
+                    />
+                    <input
+                      type="text"
+                      value={advancedSearch}
+                      onChange={e => setAdvancedSearch(e.target.value)}
+                      placeholder="電話/郵便番号/住所で検索..."
+                      className="w-full text-xs border border-gray-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
+                    />
+                    <select
+                      value={sortOrder}
+                      onChange={e => setSortOrder(e.target.value as 'newest' | 'oldest' | 'name')}
+                      className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
+                    >
+                      <option value="newest">最終メッセージ（新しい順）</option>
+                      <option value="oldest">最終メッセージ（古い順）</option>
+                      <option value="name">名前（あいうえお順）</option>
+                    </select>
+                    {/* Tag filter */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowTagFilter(v => !v)}
+                        className={`w-full text-xs border rounded-md px-2.5 py-1.5 text-left flex items-center justify-between bg-white focus:outline-none focus:ring-1 focus:ring-green-500 ${filterTagIds.length > 0 ? 'border-green-400 text-green-700 font-medium' : 'border-gray-300 text-gray-400'}`}
+                      >
+                        <span>{filterTagIds.length > 0 ? `タグ: ${filterTagIds.length}件選択中` : 'タグで絞り込み...'}</span>
+                        <span className="text-gray-400 text-[10px]">▾</span>
+                      </button>
+                      {showTagFilter && (
+                        <div className="absolute top-full left-0 right-0 mt-0.5 z-20 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                          {allTags.length === 0 ? (
+                            <p className="px-3 py-2 text-xs text-gray-400">タグがありません</p>
+                          ) : (
+                            allTags.map(tag => (
+                              <label key={tag.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={filterTagIds.includes(tag.id)}
+                                  onChange={() => setFilterTagIds(prev => prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id])}
+                                  className="rounded accent-green-500"
+                                />
+                                <span className="text-xs text-gray-700">{tag.name}</span>
+                              </label>
+                            ))
+                          )}
+                          {filterTagIds.length > 0 && (
+                            <button
+                              onClick={() => { setFilterTagIds([]); setShowTagFilter(false) }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 border-t border-gray-100"
+                            >クリア</button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {/* Mark filter */}
+                    <select
+                      value={filterMarkId ?? ''}
+                      onChange={e => setFilterMarkId(e.target.value || null)}
+                      className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
+                    >
+                      <option value="">対応マークで絞り込み...</option>
+                      {allMarks.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Chat List */}
           <div className="flex-1 overflow-y-auto">
