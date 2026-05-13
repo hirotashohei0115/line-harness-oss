@@ -146,11 +146,11 @@ chats.get('/api/chats/unread-count', async (c) => {
     let row: { count: number } | null;
     if (lineAccountId) {
       row = await c.env.DB
-        .prepare(`SELECT COUNT(*) as count FROM chats c JOIN friends f ON c.friend_id = f.id WHERE c.status = 'unread' AND f.line_account_id = ?`)
+        .prepare(`SELECT COUNT(*) as count FROM messages_log ml JOIN friends f ON ml.friend_id = f.id WHERE ml.is_read = 0 AND ml.direction = 'incoming' AND f.line_account_id = ?`)
         .bind(lineAccountId).first<{ count: number }>();
     } else {
       row = await c.env.DB
-        .prepare(`SELECT COUNT(*) as count FROM chats WHERE status = 'unread'`)
+        .prepare(`SELECT COUNT(*) as count FROM messages_log WHERE is_read = 0 AND direction = 'incoming'`)
         .first<{ count: number }>();
     }
     return c.json({ success: true, data: { count: row?.count ?? 0 } });
