@@ -1,26 +1,18 @@
 import { Hono } from 'hono';
 import type { Env } from '../index.js';
 
-interface Condition {
-  type: 'tag' | 'contact_mark' | 'repair_method' | 'delivery_store';
-  ids: string[];
-}
+type AxisType = 'tag' | 'contact_mark';
 
-interface Group {
-  name: string;
-  conditions: Condition[];
-}
-
-interface AxisDef {
-  label: string;
-  groups: Group[];
+interface AxisConfig {
+  type: AxisType;
+  itemIds: string[];
 }
 
 interface RunRequest {
   name?: string;
   period?: { from?: string; to?: string };
-  axis1: AxisDef;
-  axis2: AxisDef;
+  axis1: AxisConfig;
+  axis2: AxisConfig;
 }
 
 interface CrossAnalysisRow {
@@ -28,90 +20,77 @@ interface CrossAnalysisRow {
   name: string;
   axis1_label: string;
   axis2_label: string;
-  axis1_groups: string;
-  axis2_groups: string;
+  axis1_groups: string; // JSON: AxisConfig
+  axis2_groups: string; // JSON: AxisConfig
   created_at: string;
   updated_at: string;
 }
 
 const crossAnalysisRoutes = new Hono<Env>();
 
+const TYPE_LABEL: Record<AxisType, string> = {
+  tag: 'タグ',
+  contact_mark: '対応マーク',
+};
+
 function serializeDefinition(row: CrossAnalysisRow) {
+  let axis1: AxisConfig = { type: 'tag', itemIds: [] };
+  let axis2: AxisConfig = { type: 'contact_mark', itemIds: [] };
+  try { axis1 = JSON.parse(row.axis1_groups) as AxisConfig; } catch { /* legacy */ }
+  try { axis2 = JSON.parse(row.axis2_groups) as AxisConfig; } catch { /* legacy */ }
   return {
     id: row.id,
     name: row.name,
-    axis1Label: row.axis1_label,
-    axis2Label: row.axis2_label,
-    axis1Groups: JSON.parse(row.axis1_groups) as Group[],
-    axis2Groups: JSON.parse(row.axis2_groups) as Group[],
+    axis1Type: axis1.type ?? 'tag',
+    axis1ItemIds: axis1.itemIds ?? [],
+    axis2Type: axis2.type ?? 'contact_mark',
+    axis2ItemIds: axis2.itemIds ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-function buildConditionSQL(cond: Condition): { sql: string; params: unknown[] } {
-  const { type, ids } = cond;
-  if (ids.length === 0) return { sql: '0=1', params: [] };
-
+function buildItemCondition(type: AxisType, itemId: string): { sql: string; params: unknown[] } {
   if (type === 'tag') {
-    const ph = ids.map(() => '?').join(',');
     return {
-      sql: `EXISTS (SELECT 1 FROM friend_tags _ft WHERE _ft.friend_id = f.id AND _ft.tag_id IN (${ph}))`,
-      params: ids,
+      sql: `EXISTS (SELECT 1 FROM friend_tags _ft WHERE _ft.friend_id = f.id AND _ft.tag_id = ?)`,
+      params: [itemId],
     };
   }
-  if (type === 'contact_mark') {
-    const ph = ids.map(() => '?').join(',');
-    return { sql: `f.contact_mark_id IN (${ph})`, params: ids };
-  }
-  if (type === 'repair_method') {
-    const ph = ids.map(() => '?').join(',');
-    return {
-      sql: `EXISTS (SELECT 1 FROM repair_quotes _rq WHERE _rq.friend_id = f.id AND _rq.request_type IN (${ph}))`,
-      params: ids,
-    };
-  }
-  if (type === 'delivery_store') {
-    const parts = ids.map(() => `_mo.delivery_store LIKE ?`).join(' OR ');
-    return {
-      sql: `EXISTS (SELECT 1 FROM mail_orders _mo WHERE _mo.friend_id = f.id AND (${parts}))`,
-      params: ids.map((id) => `%${id}%`),
-    };
-  }
-  return { sql: '0=1', params: [] };
+  return { sql: `f.contact_mark_id = ?`, params: [itemId] };
 }
 
-function buildGroupSQL(group: Group): { sql: string; params: unknown[] } {
-  if (group.conditions.length === 0) return { sql: '1=1', params: [] };
-  const parts = group.conditions.map(buildConditionSQL);
-  return {
-    sql: `(${parts.map((p) => p.sql).join(' OR ')})`,
-    params: parts.flatMap((p) => p.params),
-  };
-}
-
-async function countCell(
+async function countUsers(
   db: D1Database,
   fromTs: string,
   toTs: string,
-  g1: Group,
-  g2: Group | null,
+  cond1?: { sql: string; params: unknown[] },
+  cond2?: { sql: string; params: unknown[] },
 ): Promise<number> {
-  const { sql: sql1, params: p1 } = buildGroupSQL(g1);
-  const baseParams: unknown[] = [fromTs, toTs, ...p1];
-  let whereSql = `f.created_at >= ? AND f.created_at <= ? AND ${sql1}`;
-
-  if (g2) {
-    const { sql: sql2, params: p2 } = buildGroupSQL(g2);
-    whereSql += ` AND ${sql2}`;
-    baseParams.push(...p2);
-  }
-
+  const conditions = ['f.created_at >= ?', 'f.created_at <= ?'];
+  const params: unknown[] = [fromTs, toTs];
+  if (cond1) { conditions.push(cond1.sql); params.push(...cond1.params); }
+  if (cond2) { conditions.push(cond2.sql); params.push(...cond2.params); }
   const row = await db
-    .prepare(`SELECT COUNT(DISTINCT f.id) as count FROM friends f WHERE ${whereSql}`)
-    .bind(...baseParams)
+    .prepare(`SELECT COUNT(DISTINCT f.id) as count FROM friends f WHERE ${conditions.join(' AND ')}`)
+    .bind(...params)
     .first<{ count: number }>();
   return row?.count ?? 0;
+}
+
+async function getItemNames(
+  db: D1Database,
+  type: AxisType,
+  itemIds: string[],
+): Promise<{ id: string; name: string }[]> {
+  if (itemIds.length === 0) return [];
+  const ph = itemIds.map(() => '?').join(',');
+  const table = type === 'tag' ? 'tags' : 'contact_marks';
+  const result = await db
+    .prepare(`SELECT id, name FROM ${table} WHERE id IN (${ph})`)
+    .bind(...itemIds)
+    .all<{ id: string; name: string }>();
+  return itemIds.map((id) => result.results.find((r) => r.id === id) ?? { id, name: id });
 }
 
 // GET /api/cross-analyses
@@ -135,38 +114,47 @@ crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
     const to = body.period?.to ?? new Date().toISOString().slice(0, 10);
     const fromTs = `${from}T00:00:00`;
     const toTs = `${to}T23:59:59`;
-
     const { axis1, axis2 } = body;
-    const rows = [];
 
-    for (const g1 of axis1.groups) {
-      const cells = [];
-      for (const g2 of axis2.groups) {
-        const count = await countCell(c.env.DB, fromTs, toTs, g1, g2);
-        cells.push({ group: g2.name, count });
+    const [axis1Items, axis2Items] = await Promise.all([
+      getItemNames(c.env.DB, axis1.type, axis1.itemIds),
+      getItemNames(c.env.DB, axis2.type, axis2.itemIds),
+    ]);
+
+    // Cells: axis1 × axis2 intersection
+    const cells: Record<string, Record<string, number>> = {};
+    for (const a1Id of axis1.itemIds) {
+      cells[a1Id] = {};
+      for (const a2Id of axis2.itemIds) {
+        cells[a1Id][a2Id] = await countUsers(
+          c.env.DB, fromTs, toTs,
+          buildItemCondition(axis1.type, a1Id),
+          buildItemCondition(axis2.type, a2Id),
+        );
       }
-      // 行合計 = 軸1グループの条件のみ満たすユーザー数（軸2条件は無視）
-      const total = await countCell(c.env.DB, fromTs, toTs, g1, null);
-      rows.push({ group: g1.name, total, cells });
     }
 
-    // 列合計 = 軸2グループの条件のみ満たすユーザー数（軸1条件は無視）
-    const allGroup: Group = { name: '', conditions: [] };
-    const colTotals = await Promise.all(
-      axis2.groups.map(async (g2) => ({
-        group: g2.name,
-        count: await countCell(c.env.DB, fromTs, toTs, allGroup, g2),
-      }))
-    );
+    // Row totals (axis1 condition only, regardless of axis2)
+    const rowTotals: Record<string, number> = {};
+    for (const a1Id of axis1.itemIds) {
+      rowTotals[a1Id] = await countUsers(c.env.DB, fromTs, toTs, buildItemCondition(axis1.type, a1Id));
+    }
+
+    // Col totals (axis2 condition only, regardless of axis1)
+    const colTotals: Record<string, number> = {};
+    for (const a2Id of axis2.itemIds) {
+      colTotals[a2Id] = await countUsers(c.env.DB, fromTs, toTs, undefined, buildItemCondition(axis2.type, a2Id));
+    }
 
     return c.json({
       success: true,
       data: {
         name: body.name ?? 'クロス分析',
         period: { from, to },
-        axis1Label: axis1.label,
-        axis2Label: axis2.label,
-        rows,
+        axis1Items,
+        axis2Items,
+        cells,
+        rowTotals,
         colTotals,
       },
     });
@@ -179,13 +167,18 @@ crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
 // POST /api/cross-analyses
 crossAnalysisRoutes.post('/api/cross-analyses', async (c) => {
   try {
-    const body = await c.req.json<{ name: string; axis1: AxisDef; axis2: AxisDef }>();
+    const body = await c.req.json<{ name: string; axis1: AxisConfig; axis2: AxisConfig }>();
     if (!body.name) return c.json({ success: false, error: 'name is required' }, 400);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await c.env.DB
       .prepare('INSERT INTO cross_analysis_definitions (id, name, axis1_label, axis2_label, axis1_groups, axis2_groups, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, body.name, body.axis1.label, body.axis2.label, JSON.stringify(body.axis1.groups), JSON.stringify(body.axis2.groups), now, now)
+      .bind(
+        id, body.name,
+        TYPE_LABEL[body.axis1.type], TYPE_LABEL[body.axis2.type],
+        JSON.stringify(body.axis1), JSON.stringify(body.axis2),
+        now, now,
+      )
       .run();
     const row = await c.env.DB.prepare('SELECT * FROM cross_analysis_definitions WHERE id = ?').bind(id).first<CrossAnalysisRow>();
     return c.json({ success: true, data: serializeDefinition(row!) }, 201);
@@ -211,18 +204,25 @@ crossAnalysisRoutes.get('/api/cross-analyses/:id', async (c) => {
 crossAnalysisRoutes.patch('/api/cross-analyses/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const body = await c.req.json<Partial<{ name: string; axis1: AxisDef; axis2: AxisDef }>>();
+    const body = await c.req.json<Partial<{ name: string; axis1: AxisConfig; axis2: AxisConfig }>>();
     const existing = await c.env.DB.prepare('SELECT * FROM cross_analysis_definitions WHERE id = ?').bind(id).first<CrossAnalysisRow>();
     if (!existing) return c.json({ success: false, error: 'Not found' }, 404);
+    let existingAxis1: AxisConfig = { type: 'tag', itemIds: [] };
+    let existingAxis2: AxisConfig = { type: 'contact_mark', itemIds: [] };
+    try { existingAxis1 = JSON.parse(existing.axis1_groups) as AxisConfig; } catch { /* legacy */ }
+    try { existingAxis2 = JSON.parse(existing.axis2_groups) as AxisConfig; } catch { /* legacy */ }
     const now = new Date().toISOString();
-    const name = body.name ?? existing.name;
-    const axis1Label = body.axis1?.label ?? existing.axis1_label;
-    const axis2Label = body.axis2?.label ?? existing.axis2_label;
-    const axis1Groups = body.axis1?.groups ? JSON.stringify(body.axis1.groups) : existing.axis1_groups;
-    const axis2Groups = body.axis2?.groups ? JSON.stringify(body.axis2.groups) : existing.axis2_groups;
+    const newAxis1 = body.axis1 ?? existingAxis1;
+    const newAxis2 = body.axis2 ?? existingAxis2;
     await c.env.DB
       .prepare('UPDATE cross_analysis_definitions SET name=?, axis1_label=?, axis2_label=?, axis1_groups=?, axis2_groups=?, updated_at=? WHERE id=?')
-      .bind(name, axis1Label, axis2Label, axis1Groups, axis2Groups, now, id).run();
+      .bind(
+        body.name ?? existing.name,
+        TYPE_LABEL[newAxis1.type], TYPE_LABEL[newAxis2.type],
+        JSON.stringify(newAxis1), JSON.stringify(newAxis2),
+        now, id,
+      )
+      .run();
     const updated = await c.env.DB.prepare('SELECT * FROM cross_analysis_definitions WHERE id = ?').bind(id).first<CrossAnalysisRow>();
     return c.json({ success: true, data: serializeDefinition(updated!) });
   } catch (err) {

@@ -66,17 +66,13 @@ export type FunnelAnalyzeResult = {
   steps: { name: string; reached: number; rate: number; dropoff: number }[]
 }
 
-export type CrossCondition = { type: 'tag' | 'contact_mark' | 'repair_method' | 'delivery_store'; ids: string[] }
-export type CrossGroup = { name: string; conditions: CrossCondition[] }
-export type CrossAxisDef = { label: string; groups: CrossGroup[] }
-
 export type CrossAnalysis = {
   id: string
   name: string
-  axis1Label: string
-  axis2Label: string
-  axis1Groups: CrossGroup[]
-  axis2Groups: CrossGroup[]
+  axis1Type: 'tag' | 'contact_mark'
+  axis1ItemIds: string[]
+  axis2Type: 'tag' | 'contact_mark'
+  axis2ItemIds: string[]
   createdAt: string
   updatedAt: string
 }
@@ -84,10 +80,11 @@ export type CrossAnalysis = {
 export type CrossRunResult = {
   name: string
   period: { from: string; to: string }
-  axis1Label: string
-  axis2Label: string
-  rows: { group: string; total: number; cells: { group: string; count: number }[] }[]
-  colTotals?: { group: string; count: number }[]
+  axis1Items: { id: string; name: string }[]
+  axis2Items: { id: string; name: string }[]
+  cells: Record<string, Record<string, number>>
+  rowTotals: Record<string, number>
+  colTotals: Record<string, number>
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
@@ -210,12 +207,12 @@ export const api = {
   crossAnalyses: {
     list: () => fetchApi<ApiResponse<CrossAnalysis[]>>('/api/cross-analyses'),
     get: (id: string) => fetchApi<ApiResponse<CrossAnalysis>>(`/api/cross-analyses/${id}`),
-    create: (data: { name: string; axis1: CrossAxisDef; axis2: CrossAxisDef }) =>
+    create: (data: { name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds: string[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds: string[] } }) =>
       fetchApi<ApiResponse<CrossAnalysis>>('/api/cross-analyses', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: string, data: { name?: string; axis1?: CrossAxisDef; axis2?: CrossAxisDef }) =>
+    update: (id: string, data: Partial<{ name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds: string[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds: string[] } }>) =>
       fetchApi<ApiResponse<CrossAnalysis>>(`/api/cross-analyses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) => fetchApi<ApiResponse<null>>(`/api/cross-analyses/${id}`, { method: 'DELETE' }),
-    run: (data: { name?: string; period?: { from: string; to: string }; axis1: CrossAxisDef; axis2: CrossAxisDef }) =>
+    run: (data: { name?: string; period?: { from: string; to: string }; axis1: { type: 'tag' | 'contact_mark'; itemIds: string[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds: string[] } }) =>
       fetchApi<ApiResponse<CrossRunResult>>('/api/cross-analyses/run', { method: 'POST', body: JSON.stringify(data) }),
   },
   scenarios: {

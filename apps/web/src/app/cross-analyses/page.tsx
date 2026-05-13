@@ -72,8 +72,8 @@ export default function CrossAnalysesPage() {
                       {item.name}
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{item.axis1Label}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{item.axis2Label}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{item.axis1Type === 'tag' ? 'タグ' : '対応マーク'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{item.axis2Type === 'tag' ? 'タグ' : '対応マーク'}</td>
                   <td className="px-4 py-3 text-sm text-gray-400 hidden sm:table-cell">{new Date(item.createdAt).toLocaleDateString('ja-JP')}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center gap-2 justify-end">
