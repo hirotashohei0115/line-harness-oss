@@ -84,7 +84,7 @@ chats.get('/api/chats', async (c) => {
     const lineAccountId = c.req.query('lineAccountId') ?? undefined;
 
     // JOIN friends to get display_name and picture_url
-    let sql = `SELECT c.*, f.display_name, f.picture_url, f.line_user_id, f.contact_mark_id
+    let sql = `SELECT c.*, f.display_name, f.picture_url, f.line_user_id, f.contact_mark_id, f.is_pinned, f.pinned_at
                FROM chats c
                LEFT JOIN friends f ON c.friend_id = f.id`;
     const conditions: string[] = [];
@@ -106,7 +106,7 @@ chats.get('/api/chats', async (c) => {
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
-    sql += ' ORDER BY c.last_message_at DESC';
+    sql += ' ORDER BY COALESCE(f.is_pinned, 0) DESC, f.pinned_at DESC, c.last_message_at DESC';
 
     const stmt = bindings.length > 0
       ? c.env.DB.prepare(sql).bind(...bindings)
@@ -127,6 +127,8 @@ chats.get('/api/chats', async (c) => {
         createdAt: ch.created_at,
         updatedAt: ch.updated_at,
         contactMarkId: (ch as unknown as Record<string, unknown>).contact_mark_id as string | null ?? null,
+        isPinned: Boolean((ch as Record<string, unknown>).is_pinned),
+        pinnedAt: (ch as Record<string, unknown>).pinned_at as string | null,
       })),
     });
   } catch (err) {

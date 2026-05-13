@@ -29,6 +29,8 @@ function serializeFriend(row: DbFriend) {
     metadata: JSON.parse(row.metadata || '{}'),
     refCode: (row as unknown as Record<string, unknown>).ref_code as string | null,
     contactMarkId: (row as unknown as Record<string, unknown>).contact_mark_id as string | null,
+    isPinned: Boolean((row as unknown as Record<string, unknown>).is_pinned),
+    pinnedAt: (row as unknown as Record<string, unknown>).pinned_at as string | null,
     userId: row.user_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -53,6 +55,8 @@ friends.get('/api/friends', async (c) => {
     const tagId = c.req.query('tagId');
     const lineAccountId = c.req.query('lineAccountId');
     const markId = c.req.query('markId');
+    const tagIdsParam = c.req.query('tagIds')
+    const tagIds = tagIdsParam ? tagIdsParam.split(',').filter(Boolean) : []
 
     const db = c.env.DB;
 
@@ -70,6 +74,11 @@ friends.get('/api/friends', async (c) => {
     if (markId) {
       conditions.push('f.contact_mark_id = ?');
       binds.push(markId);
+    }
+    if (tagIds.length > 0) {
+      const ph = tagIds.map(() => '?').join(',')
+      conditions.push(`EXISTS (SELECT 1 FROM friend_tags ft WHERE ft.friend_id = f.id AND ft.tag_id IN (${ph}))`)
+      binds.push(...tagIds)
     }
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -153,6 +162,30 @@ friends.get('/api/friends/ref-stats', async (c) => {
   }
 });
 
+// GET /api/friends/search?q=keyword — cross-table search
+friends.get('/api/friends/search', async (c) => {
+  try {
+    const q = c.req.query('q') ?? ''
+    if (!q.trim()) return c.json({ success: true, data: [] })
+    const like = `%${q.trim()}%`
+    const result = await c.env.DB
+      .prepare(`
+        SELECT DISTINCT f.id FROM friends f
+        LEFT JOIN mail_orders mo ON mo.friend_id = f.id
+        WHERE f.display_name LIKE ?
+           OR mo.phone LIKE ?
+           OR mo.postal_code LIKE ?
+           OR mo.address LIKE ?
+      `)
+      .bind(like, like, like, like)
+      .all<{ id: string }>()
+    return c.json({ success: true, data: result.results.map((r) => r.id) })
+  } catch (err) {
+    console.error('GET /api/friends/search error:', err)
+    return c.json({ success: false, error: 'Internal server error' }, 500)
+  }
+})
+
 // GET /api/friends/:id - get single friend with tags
 friends.get('/api/friends/:id', async (c) => {
   try {
@@ -180,6 +213,30 @@ friends.get('/api/friends/:id', async (c) => {
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
 });
+
+// PATCH /api/friends/:id/pin — pin/unpin a friend
+friends.patch('/api/friends/:id/pin', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const body = await c.req.json<{ pinned: boolean }>()
+    const now = jstNow()
+    if (body.pinned) {
+      await c.env.DB
+        .prepare('UPDATE friends SET is_pinned = 1, pinned_at = ? WHERE id = ?')
+        .bind(now, id)
+        .run()
+    } else {
+      await c.env.DB
+        .prepare('UPDATE friends SET is_pinned = 0, pinned_at = NULL WHERE id = ?')
+        .bind(id)
+        .run()
+    }
+    return c.json({ success: true, data: null })
+  } catch (err) {
+    console.error('PATCH /api/friends/:id/pin error:', err)
+    return c.json({ success: false, error: 'Internal server error' }, 500)
+  }
+})
 
 // POST /api/friends/:id/tags - add tag
 friends.post('/api/friends/:id/tags', async (c) => {
