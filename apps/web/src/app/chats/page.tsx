@@ -329,6 +329,9 @@ export default function ChatsPage() {
   const [showTagFilter, setShowTagFilter] = useState(false)
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
+  const prevChatsRef = useRef<Chat[]>([])
+  const isAtBottomRef = useRef(true)
+  const notifPermRef = useRef(false)
 
   const handleTogglePin = async (chat: Chat) => {
     const newPinned = !chat.isPinned
@@ -345,11 +348,34 @@ export default function ChatsPage() {
     } catch { /* silent */ }
   }
 
+  // Notification permission request
   useEffect(() => {
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    if (typeof window === 'undefined' || !('Notification' in window)) return
+    if (Notification.permission === 'granted') { notifPermRef.current = true; return }
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then(p => { notifPermRef.current = p === 'granted' })
+    }
+  }, [])
+
+  // Auto-scroll: always on open, conditional on poll
+  useEffect(() => {
+    const el = chatScrollRef.current
+    if (!el) return
+    if (isAtBottomRef.current) {
+      el.scrollTop = el.scrollHeight
     }
   }, [chatDetail?.messages])
+
+  // Track scroll position to decide auto-scroll
+  useEffect(() => {
+    const el = chatScrollRef.current
+    if (!el) return
+    const onScroll = () => {
+      isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [chatDetail?.id])
 
   useEffect(() => {
     const loadTemplates = async () => {
@@ -401,6 +427,65 @@ export default function ChatsPage() {
     }
   }, [])
 
+  const silentLoadMessages = useCallback(async (chatId: string) => {
+    try {
+      const res = await api.chats.get(chatId)
+      if (!res.success) return
+      const detail = res.data as unknown as ChatDetail
+      setChatDetail(prev => {
+        if (!prev || prev.id !== chatId) return prev
+        const prevLen = prev.messages?.length ?? 0
+        const newLen = detail.messages?.length ?? 0
+        if (prevLen === newLen) return prev
+        return { ...prev, messages: detail.messages }
+      })
+    } catch { /* silent */ }
+  }, [])
+
+  const silentLoadChats = useCallback(async () => {
+    try {
+      const params: { status?: string; accountId?: string } = {}
+      if (statusFilter !== 'all') params.status = statusFilter
+      if (selectedAccountId) params.accountId = selectedAccountId
+      const res = await api.chats.list(params)
+      if (!res.success) return
+      const newChats = res.data as unknown as Chat[]
+
+      // Browser notification for new messages (background tab only)
+      if (document.hidden && notifPermRef.current && prevChatsRef.current.length > 0) {
+        for (const nc of newChats) {
+          const prev = prevChatsRef.current.find(c => c.id === nc.id)
+          if (
+            prev &&
+            nc.status === 'unread' &&
+            nc.lastMessageAt &&
+            nc.lastMessageAt !== prev.lastMessageAt
+          ) {
+            const n = new Notification('新着メッセージ', {
+              body: `${nc.friendName}からメッセージが届きました`,
+              icon: '/favicon.ico',
+            })
+            const capturedId = nc.id
+            n.onclick = () => {
+              window.focus()
+              isAtBottomRef.current = true
+              setSelectedChatId(capturedId)
+              setSelectedFriendId(null)
+              n.close()
+            }
+          }
+        }
+      }
+
+      prevChatsRef.current = newChats
+      setChats(newChats)
+
+      // Update tab title with unread count
+      const unread = newChats.filter(c => c.status === 'unread').length
+      document.title = unread > 0 ? `(${unread}) LINE Harness` : 'LINE Harness'
+    } catch { /* silent */ }
+  }, [statusFilter, selectedAccountId])
+
   const loadRepairInfo = useCallback(async (friendId: string) => {
     try {
       const [quoteRes, attrRes, mailOrderRes] = await Promise.allSettled([
@@ -450,6 +535,15 @@ export default function ChatsPage() {
   useEffect(() => {
     loadAllTags()
   }, [loadAllTags])
+
+  // 5-second polling: chat list + open chat messages
+  useEffect(() => {
+    const id = setInterval(() => {
+      void silentLoadChats()
+      if (selectedChatId) void silentLoadMessages(selectedChatId)
+    }, 5000)
+    return () => clearInterval(id)
+  }, [silentLoadChats, silentLoadMessages, selectedChatId])
 
   useEffect(() => {
     api.marks.list().then((res) => {
@@ -505,6 +599,7 @@ export default function ChatsPage() {
   }, [chatDetail?.friendId, loadRepairInfo, loadFriendTags])
 
   const handleSelectChat = (chatId: string) => {
+    isAtBottomRef.current = true
     setSelectedChatId(chatId)
     setMessageContent('')
   }
@@ -820,15 +915,22 @@ export default function ChatsPage() {
                 {filteredChats.map((chat) => {
                   const statusInfo = statusConfig[chat.status]
                   const isSelected = selectedChatId === chat.id
+                  const pinned = Boolean(chat.isPinned)
                   return (
                     <div
                       key={chat.id}
                       onClick={() => { setSelectedFriendId(null); handleSelectChat(chat.id); }}
-                      className={`w-full text-left px-4 py-3 border-b border-gray-100 transition-colors cursor-pointer ${
-                        isSelected && !selectedFriendId ? 'bg-green-50' : 'hover:bg-gray-50'
+                      className={`w-full text-left py-3 border-b border-gray-100 transition-colors cursor-pointer flex ${
+                        isSelected && !selectedFriendId
+                          ? 'bg-green-50'
+                          : pinned
+                            ? 'bg-orange-50 hover:bg-orange-100'
+                            : 'hover:bg-gray-50'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
+                      {/* Pin indicator — left border */}
+                      <div className={`flex-shrink-0 w-1 rounded-r-sm self-stretch ${pinned ? 'bg-orange-400' : ''}`} />
+                      <div className="flex items-center gap-3 flex-1 px-3">
                         {chat.friendPictureUrl ? (
                           <img src={chat.friendPictureUrl} alt="" className="w-10 h-10 rounded-full flex-shrink-0" />
                         ) : (
@@ -855,8 +957,12 @@ export default function ChatsPage() {
                         <div className="flex items-center gap-1 flex-shrink-0">
                           <button
                             onClick={(e) => { e.stopPropagation(); void handleTogglePin(chat) }}
-                            className={`p-1 rounded leading-none hover:bg-gray-100 transition-colors text-base ${chat.isPinned ? 'text-yellow-400' : 'text-gray-200 hover:text-gray-400'}`}
-                            title={chat.isPinned ? 'ピン解除' : 'ピン止め'}
+                            className={`p-1 rounded leading-none transition-colors text-base ${
+                              pinned
+                                ? 'text-orange-500 hover:text-orange-700 hover:bg-orange-100'
+                                : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'
+                            }`}
+                            title={pinned ? 'ピン解除' : 'ピン止め'}
                           >📌</button>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.className}`}>
                             {statusInfo.label}
