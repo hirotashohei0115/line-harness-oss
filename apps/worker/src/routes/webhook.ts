@@ -851,21 +851,40 @@ async function handleEvent(
     const now = jstNow();
     const logId = crypto.randomUUID();
 
-    // 受信メッセージをログに記録
+    // ボタンタップ相当のキーワード判定（これらは is_read = 1 として扱う）
+    const MODEL_NUMBERS = new Set(['A2991','A2780','A2485','A2141','A3241','A3114','A2941','A1990','A1707','A3434','A3401','A3112','A3185','A2779','A2992','A2918','A2442','A3240','A3113','A2681','A2338','A2289','A2251','A2337','A2179','A2159','A1708','A1932','A1989','A1706','A1502','A2369']);
+    const INCH_SIZES = new Set(['13インチ','14インチ','15インチ','16インチ']);
+    const REPAIR_FLOW_KEYWORDS = new Set([
+      '見積もりを始める', '修理依頼をする', 'ご依頼の流れを教えて', 'よくある質問',
+      '店舗の場所は？', 'MacBook Air', 'MacBook Pro', 'その他',
+      'モデル名で選ぶ', '年式で選ぶ', 'わからない', 'その他の年式', 'その他・分からない',
+      '郵送で依頼する', '店舗に持込む', '質問・相談したい',
+      '来店予約する', '該当店舗なし', '電話/チャットで相談する',
+      '郵送修理に関する質問', '店頭修理に関する質問', '修理端末に関する質問', 'その他の質問',
+    ]);
+    const autoKeywords = ['料金', '機能', 'API', 'フォーム', 'ヘルプ', 'UUID', 'UUID連携について教えて', 'UUID連携を確認', '配信時間', '導入支援を希望します', 'アカウント連携を見る', '体験を完了する', 'BAN対策を見る', '連携確認'];
+    const isTimeCommand = /(?:配信時間|配信|届けて|通知)[はを]?\s*\d{1,2}\s*時/.test(incomingText);
+    const isYearInput = /^(\d{4})年$/.test(incomingText);
+    const isStoreShortName = (STORES as { shortName: string }[]).some(s => s.shortName === incomingText);
+    const isFaqQuestion = Object.values(CONSULT_FAQS).some(cat => cat.questions.some(faq => faq.q === incomingText));
+    const isSymptomName = !!(await db.prepare('SELECT 1 FROM repair_symptoms WHERE name = ? LIMIT 1').bind(incomingText).first());
+    const isAutoKeyword = autoKeywords.some(k => incomingText === k)
+      || REPAIR_FLOW_KEYWORDS.has(incomingText)
+      || MODEL_NUMBERS.has(incomingText)
+      || INCH_SIZES.has(incomingText)
+      || isYearInput || isStoreShortName || isFaqQuestion || isSymptomName || isTimeCommand;
+
+    // 受信メッセージをログに記録（フリーテキストのみ未読、ボタンタップ相当は既読）
     await db
       .prepare(
         `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
-         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 0, ?)`,
+         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, ?, ?)`,
       )
-      .bind(logId, friend.id, incomingText, now)
+      .bind(logId, friend.id, incomingText, isAutoKeyword ? 1 : 0, now)
       .run();
 
     // チャットを作成/更新（全メッセージ対象 — ボタンタップ含む）
     await upsertChatOnMessage(db, friend.id);
-
-    const autoKeywords = ['料金', '機能', 'API', 'フォーム', 'ヘルプ', 'UUID', 'UUID連携について教えて', 'UUID連携を確認', '配信時間', '導入支援を希望します', 'アカウント連携を見る', '体験を完了する', 'BAN対策を見る', '連携確認'];
-    const isAutoKeyword = autoKeywords.some(k => incomingText === k);
-    const isTimeCommand = /(?:配信時間|配信|届けて|通知)[はを]?\s*\d{1,2}\s*時/.test(incomingText);
 
     // 配信時間設定: 「配信時間は○時」「○時に届けて」等のパターンを検出
     const timeMatch = incomingText.match(/(?:配信時間|配信|届けて|通知)[はを]?\s*(\d{1,2})\s*時/);
@@ -955,8 +974,6 @@ async function handleEvent(
     }
 
     // ===== Repair flow: message button text matching =====
-    const MODEL_NUMBERS = new Set(['A2991','A2780','A2485','A2141','A3241','A3114','A2941','A1990','A1707','A3434','A3401','A3112','A3185','A2779','A2992','A2918','A2442','A3240','A3113','A2681','A2338','A2289','A2251','A2337','A2179','A2159','A1708','A1932','A1989','A1706','A1502','A2369']);
-    const INCH_SIZES = new Set(['13インチ','14インチ','15インチ','16インチ']);
     const CONSULT_CATEGORY_MAP: Record<string, string> = { '郵送修理に関する質問':'mail','店頭修理に関する質問':'store','修理端末に関する質問':'device','その他の質問':'other' };
 
     // リッチメニュー: 見積もりを始める
@@ -1322,7 +1339,7 @@ async function handleEvent(
     const params = new URLSearchParams(event.postback.data);
     const action = params.get('action');
 
-    // postbackをmessages_logに保存してチャット画面に表示する
+    // postbackをmessages_logに保存してチャット画面に表示する（ボタンタップは常に既読）
     {
       const displayText = event.postback.displayText;
       const actionLabels: Record<string, () => string> = {
@@ -1345,7 +1362,7 @@ async function handleEvent(
       const now = jstNow();
       await db.prepare(
         `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
-         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 0, ?)`,
+         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 1, ?)`,
       ).bind(crypto.randomUUID(), friend.id, logContent, now).run();
       await upsertChatOnMessage(db, friend.id);
     }
