@@ -1,15 +1,49 @@
 import type { Context, Next } from 'hono';
-import { verify } from 'hono/jwt';
 import { getStaffByApiKey } from '@line-crm/db';
 import type { Env } from '../index.js';
 
-interface StaffAccountJWT {
-  sub: string;
-  email: string;
-  name: string;
-  role: 'admin' | 'staff';
-  assignedStores?: string[];
-  exp: number;
+// Web Crypto API を使った HMAC-SHA256 JWT 検証（ライブラリ依存なし）
+async function verifyJWT(token: string, secret: string): Promise<Record<string, unknown> | null> {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [headerB64, payloadB64, sigB64] = parts;
+    const signingInput = `${headerB64}.${payloadB64}`;
+
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify'],
+    );
+
+    // base64url → Uint8Array
+    const b64 = sigB64.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64.padEnd(b64.length + (4 - (b64.length % 4)) % 4, '=');
+    const sigBytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0));
+
+    const valid = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      sigBytes,
+      new TextEncoder().encode(signingInput),
+    );
+    if (!valid) return null;
+
+    // Decode payload (UTF-8 aware)
+    const pb64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
+    const pp = pb64.padEnd(pb64.length + (4 - (pb64.length % 4)) % 4, '=');
+    const payloadBytes = Uint8Array.from(atob(pp), c => c.charCodeAt(0));
+    const payload = JSON.parse(new TextDecoder().decode(payloadBytes)) as Record<string, unknown>;
+
+    // Check expiry
+    if (typeof payload.exp === 'number' && payload.exp < Math.floor(Date.now() / 1000)) return null;
+
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 export async function authMiddleware(c: Context<Env>, next: Next): Promise<Response | void> {
@@ -44,18 +78,16 @@ export async function authMiddleware(c: Context<Env>, next: Next): Promise<Respo
 
   // 1) JWT from staff_accounts (email+password login)
   const secret = c.env.JWT_SECRET ?? 'fallback-secret';
-  try {
-    const payload = await verify(token, secret) as StaffAccountJWT;
-    if (payload?.sub && payload?.role) {
-      c.set('staff', {
-        id: payload.sub,
-        name: payload.name,
-        role: payload.role as 'admin' | 'staff',
-        assignedStores: payload.assignedStores,
-      });
-      return next();
-    }
-  } catch { /* not a JWT — fall through to API key check */ }
+  const jwtPayload = await verifyJWT(token, secret);
+  if (jwtPayload?.sub && jwtPayload?.role) {
+    c.set('staff', {
+      id: jwtPayload.sub as string,
+      name: (jwtPayload.name as string) ?? '',
+      role: jwtPayload.role as 'admin' | 'staff',
+      assignedStores: jwtPayload.assignedStores as string[] | undefined,
+    });
+    return next();
+  }
 
   // 2) API key from staff_members table (backward compat)
   const staffMember = await getStaffByApiKey(c.env.DB, token);
