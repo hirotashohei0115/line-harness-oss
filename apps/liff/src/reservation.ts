@@ -139,13 +139,16 @@ function renderStep1() {
 
 function getDates(): { dateStr: string; label: string; dayIdx: number }[] {
   const dates = [];
-  const now = new Date();
-  const jstOffset = 9 * 60 * 60 * 1000;
-  const jstNow = new Date(now.getTime() + jstOffset);
-  // Start from tomorrow
+  // Use JST-based "today" by calculating from UTC + 9h offset
+  const nowMs = Date.now() + 9 * 60 * 60 * 1000;
+  const jstToday = new Date(nowMs);
+  const baseYear = jstToday.getUTCFullYear();
+  const baseMonth = jstToday.getUTCMonth();
+  const baseDay = jstToday.getUTCDate();
+
   for (let i = 1; i <= 30; i++) {
-    const d = new Date(jstNow);
-    d.setDate(d.getDate() + i);
+    // Always construct from UTC noon to avoid DST edge cases
+    const d = new Date(Date.UTC(baseYear, baseMonth, baseDay + i, 3, 0, 0));
     const y = d.getUTCFullYear();
     const m = String(d.getUTCMonth() + 1).padStart(2, '0');
     const day = String(d.getUTCDate()).padStart(2, '0');
@@ -194,34 +197,41 @@ async function renderStep2() {
     renderStep3();
   });
 
+  // Build date list before the async fetch so DOM is responsive
+  const dates = getDates();
+
   // Load store hours to check closed days
+  let closedDays = new Set<number>();
   try {
-    const res = await fetch(`${API_URL}/api/store-hours/${state.storeKey}`);
-    const data = await res.json() as { success: boolean; data: { day_of_week: number; is_closed: number }[] };
-    const closedDays = new Set(data.data.filter(h => h.is_closed).map(h => h.day_of_week));
-
-    const dateGrid = $('dateGrid');
-    if (!dateGrid) return;
-    const dates = getDates();
-    dateGrid.innerHTML = dates.map(d => {
-      const isClosed = closedDays.has(d.dayIdx);
-      const isSelected = state.date === d.dateStr;
-      return `<button class="date-btn${isSelected ? ' selected' : ''}${isClosed ? ' closed' : ''}" data-date="${d.dateStr}" ${isClosed ? 'disabled' : ''}>${d.label}</button>`;
-    }).join('');
-
-    dateGrid.querySelectorAll('.date-btn:not(.closed)').forEach(btn => {
-      btn.addEventListener('click', () => {
-        state.date = (btn as HTMLElement).dataset['date'] ?? '';
-        dateGrid.querySelectorAll('.date-btn').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        const nextBtn = $('step2Next') as HTMLButtonElement | null;
-        if (nextBtn) nextBtn.disabled = false;
-      });
-    });
-  } catch {
-    const dateGrid = $('dateGrid');
-    if (dateGrid) dateGrid.innerHTML = '<p class="res-error">営業時間の読み込みに失敗しました</p>';
+    const res = await fetch(`${API_URL}/api/store-hours/${encodeURIComponent(state.storeKey)}`);
+    if (res.ok) {
+      const data = await res.json() as { success: boolean; data: { day_of_week: number; is_closed: number }[] | null };
+      const hours = data?.data ?? [];
+      closedDays = new Set(hours.filter(h => h.is_closed).map(h => h.day_of_week));
+    }
+  } catch (err) {
+    console.error('[reservation] store-hours fetch failed:', err);
+    // Non-fatal: continue with no closed days rather than blocking the user
   }
+
+  const dateGrid = $('dateGrid');
+  if (!dateGrid) return;
+
+  dateGrid.innerHTML = dates.map(d => {
+    const isClosed = closedDays.has(d.dayIdx);
+    const isSelected = state.date === d.dateStr;
+    return `<button class="date-btn${isSelected ? ' selected' : ''}${isClosed ? ' closed' : ''}" data-date="${d.dateStr}" ${isClosed ? 'disabled' : ''}>${d.label}</button>`;
+  }).join('');
+
+  dateGrid.querySelectorAll('.date-btn:not(.closed)').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.date = (btn as HTMLElement).dataset['date'] ?? '';
+      dateGrid.querySelectorAll('.date-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      const nextBtn = $('step2Next') as HTMLButtonElement | null;
+      if (nextBtn) nextBtn.disabled = false;
+    });
+  });
 }
 
 async function renderStep3() {
