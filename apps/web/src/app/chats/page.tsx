@@ -1094,16 +1094,20 @@ export default function ChatsPage() {
                     const isOutgoing = msg.direction === 'outgoing'
 
                     // メッセージ表示の分岐
+                    const isFlex = msg.messageType === 'flex'
+                    const isImage = msg.messageType === 'image'
                     let bubbleContent: React.ReactNode
-                    if (msg.messageType === 'flex') {
+                    if (isFlex) {
                       bubbleContent = (
                         <div className="max-w-[300px]">
                           <FlexPreviewComponent content={msg.content} maxWidth={280} />
                         </div>
                       )
-                    } else if (msg.messageType === 'image') {
+                    } else if (isImage) {
                       const src = getImageSrc(msg.content)
-                      bubbleContent = src ? <img src={src} alt="" className="max-w-[200px] rounded" /> : <span>🖼️ [画像]</span>
+                      bubbleContent = src
+                        ? <img src={src} alt="送信された画像" className="block max-w-[220px] rounded-lg" />
+                        : <span className="text-sm text-gray-500">🖼️ [画像]</span>
                     } else {
                       bubbleContent = <span>{msg.content}</span>
                     }
@@ -1123,14 +1127,18 @@ export default function ChatsPage() {
                         )}
 
                         <div className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'}`}>
-                          {/* メッセージバブル */}
+                          {/* メッセージバブル — 画像/flexはパディングなし */}
                           <div
-                            className={`max-w-[320px] px-3 py-2 text-sm break-words whitespace-pre-wrap ${
+                            className={`max-w-[320px] text-sm break-words whitespace-pre-wrap ${
+                              isFlex || isImage ? '' : 'px-3 py-2'
+                            } ${
                               isOutgoing
                                 ? 'rounded-tl-2xl rounded-tr-md rounded-bl-2xl rounded-br-2xl text-white'
                                 : 'rounded-tl-md rounded-tr-2xl rounded-bl-2xl rounded-br-2xl bg-white text-gray-900'
+                            } ${
+                              (isFlex || isImage) ? 'bg-transparent' : ''
                             }`}
-                            style={isOutgoing ? { backgroundColor: '#06C755' } : undefined}
+                            style={isOutgoing && !isFlex && !isImage ? { backgroundColor: '#06C755' } : undefined}
                           >
                             {bubbleContent}
                           </div>
