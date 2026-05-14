@@ -1058,6 +1058,8 @@ async function handleEvent(
     // モデル特定方法
     if (incomingText === 'モデル名で選ぶ') {
       const productKey = (await getFriendAttribute(db, friend.id, 'repair_product_key')) ?? 'other';
+      // モデル名選択フローに入る際、前回セッションの年式を消去（その他・分からない の分岐判定に使うため）
+      await setFriendAttribute(db, friend.id, 'repair_year', '');
       try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildModelSelectFlex(productKey))]); } catch (err) { console.error('repair msg choose_model_method:', err); }
       return;
     }
@@ -1402,6 +1404,7 @@ async function handleEvent(
       const productKey = params.get('product_key')
         ?? (await getFriendAttribute(db, friend.id, 'repair_product_key'))
         ?? 'other';
+      await setFriendAttribute(db, friend.id, 'repair_year', '');
       try {
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildModelSelectFlex(productKey)),
