@@ -63,11 +63,15 @@ function getMarkTextColor(bgColor: string): string {
 const WORKER_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
 
 function getImageSrc(content: string): string | null {
+  // JSON形式: incoming {"messageId":"..."} or outgoing {"originalContentUrl":"..."}
   try {
     const parsed = JSON.parse(content)
     if (parsed.messageId) return `${WORKER_API_URL}/api/messages/${parsed.messageId}/content`
     return parsed.originalContentUrl || parsed.previewImageUrl || null
-  } catch { return null }
+  } catch { /* not JSON */ }
+  // プレーンURL: outgoing画像はoriginalContentUrlがそのまま保存される
+  if (content.startsWith('http')) return content
+  return null
 }
 
 function formatDatetime(iso: string | null): string {
