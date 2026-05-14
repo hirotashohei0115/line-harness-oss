@@ -1101,15 +1101,16 @@ async function handleEvent(
       return;
     }
 
-    // 「その他・分からない」: yearが設定済み → インチ不明, そうでなければ → モデル不明
+    // 「その他・分からない」: yearが設定済み → インチ不明（問い合わせテキスト）, そうでなければ → モデル不明（年式選択へ）
     if (incomingText === 'その他・分からない') {
       const yearStr = await getFriendAttribute(db, friend.id, 'repair_year');
       if (yearStr) {
         await setFriendAttribute(db, friend.id, 'repair_inch_size', 'その他・分からない');
+        try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch (err) { console.error('repair msg other inch:', err); }
       } else {
         await setFriendAttribute(db, friend.id, 'repair_model_name', 'その他・分からない');
+        try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildYearSelectFlex())]); } catch (err) { console.error('repair msg other model:', err); }
       }
-      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch (err) { console.error('repair msg other unknown:', err); }
       return;
     }
 
