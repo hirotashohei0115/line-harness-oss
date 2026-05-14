@@ -80,21 +80,27 @@ function ImageBubble({ content }: { content: string }) {
 
   useEffect(() => {
     if (!src) { setFailed(true); return }
-    let cancelled = false
-    let created: string | null = null
-    fetch(src)
-      .then(r => r.ok ? r.blob() : Promise.reject(r.status))
-      .then(blob => {
-        if (cancelled) return
-        created = URL.createObjectURL(blob)
-        setBlobUrl(created)
+    const controller = new AbortController()
+    let objectUrl: string | null = null
+
+    fetch(src, { signal: controller.signal })
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.blob()
       })
-      .catch(() => { if (!cancelled) setFailed(true) })
+      .then(blob => {
+        objectUrl = URL.createObjectURL(blob)
+        setBlobUrl(objectUrl)
+      })
+      .catch(err => {
+        if (err instanceof Error && err.name === 'AbortError') return
+        setFailed(true)
+      })
+
     return () => {
-      cancelled = true
-      if (created) URL.revokeObjectURL(created)
+      controller.abort()
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src])
 
   if (failed) return <span className="text-sm text-gray-400 px-3 py-2">🖼️ [画像]</span>
@@ -477,10 +483,13 @@ export default function ChatsPage() {
       const detail = res.data as unknown as ChatDetail
       setChatDetail(prev => {
         if (!prev || prev.id !== chatId) return prev
-        const prevLen = prev.messages?.length ?? 0
-        const newLen = detail.messages?.length ?? 0
-        if (prevLen === newLen) return prev
-        return { ...prev, messages: detail.messages }
+        const msgs = detail.messages ?? []
+        const prevMsgs = prev.messages ?? []
+        // 件数だけでなく最新メッセージIDで比較（件数が同じでも新着を検出）
+        const prevLastId = prevMsgs[prevMsgs.length - 1]?.id ?? ''
+        const newLastId = msgs[msgs.length - 1]?.id ?? ''
+        if (prevLastId === newLastId && prevMsgs.length === msgs.length) return prev
+        return { ...prev, messages: msgs }
       })
     } catch { /* silent */ }
   }, [])
