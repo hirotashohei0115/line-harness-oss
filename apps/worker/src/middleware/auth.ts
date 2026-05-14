@@ -20,7 +20,8 @@ export async function authMiddleware(c: Context<Env>, next: Next): Promise<Respo
     path === '/api/integrations/stripe/webhook' ||
     path.match(/^\/api\/webhooks\/incoming\/[^/]+\/receive$/) ||
     path.match(/^\/api\/forms\/[^/]+\/submit$/) ||
-    path.match(/^\/api\/forms\/[^/]+$/) // GET form definition (public for LIFF)
+    path.match(/^\/api\/forms\/[^/]+$/) || // GET form definition (public for LIFF)
+    path.match(/^\/api\/messages\/[^/]+\/content$/) // LINE content proxy — img src can't send auth headers
   ) {
     return next();
   }

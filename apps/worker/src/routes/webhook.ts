@@ -1336,6 +1336,22 @@ async function handleEvent(
     return;
   }
 
+  // 画像・動画・音声メッセージ → messages_log に messageId を保存してチャットに表示
+  if (event.type === 'message' && (event.message.type === 'image' || event.message.type === 'video' || event.message.type === 'audio')) {
+    const userId = event.source.type === 'user' ? event.source.userId : undefined;
+    if (!userId) return;
+    const friend = await getFriendByLineUserId(db, userId);
+    if (!friend) return;
+    const messageId = event.message.id;
+    const messageType = event.message.type as string;
+    await db.prepare(
+      `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
+       VALUES (?, ?, 'incoming', ?, ?, NULL, NULL, 0, ?)`
+    ).bind(crypto.randomUUID(), friend.id, messageType, JSON.stringify({ messageId }), jstNow()).run();
+    await upsertChatOnMessage(db, friend.id);
+    return;
+  }
+
   if (event.type === 'postback') {
     const userId =
       event.source.type === 'user' ? event.source.userId : undefined;

@@ -143,6 +143,35 @@ chats.get('/api/chats', async (c) => {
   }
 });
 
+// LINEコンテンツAPIプロキシ — 画像・動画・音声バイナリを返す（img src で直接使用可能）
+chats.get('/api/messages/:messageId/content', async (c) => {
+  try {
+    const messageId = c.req.param('messageId');
+    // マルチアカウント: DBのアカウントを順に試す（最初に成功したものを使用）
+    const accounts = await c.env.DB.prepare(`SELECT channel_access_token FROM line_accounts WHERE is_active = 1`).all<{ channel_access_token: string }>();
+    const tokens = [c.env.LINE_CHANNEL_ACCESS_TOKEN, ...accounts.results.map(a => a.channel_access_token)];
+    let lineRes: Response | null = null;
+    for (const token of tokens) {
+      const r = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (r.ok) { lineRes = r; break; }
+    }
+    if (!lineRes || !lineRes.ok) return c.json({ success: false, error: 'Content not found' }, 404);
+    const contentType = lineRes.headers.get('content-type') || 'image/jpeg';
+    const arrayBuffer = await lineRes.arrayBuffer();
+    return new Response(arrayBuffer, {
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400',
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/messages/:messageId/content error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 // Must be before /:id
 chats.get('/api/chats/unread-count', async (c) => {
   try {

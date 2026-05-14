@@ -60,6 +60,16 @@ function getMarkTextColor(bgColor: string): string {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#000000' : '#ffffff'
 }
 
+const WORKER_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
+
+function getImageSrc(content: string): string | null {
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed.messageId) return `${WORKER_API_URL}/api/messages/${parsed.messageId}/content`
+    return parsed.originalContentUrl || parsed.previewImageUrl || null
+  } catch { return null }
+}
+
 function formatDatetime(iso: string | null): string {
   if (!iso) return '-'
   return new Date(iso).toLocaleString('ja-JP', {
@@ -206,12 +216,8 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
       return <FlexPreviewComponent content={msg.content} maxWidth={260} />
     }
     if (msg.messageType === 'image') {
-      try {
-        const parsed = JSON.parse(msg.content)
-        return <img src={parsed.originalContentUrl || parsed.previewImageUrl} alt="" className="max-w-[200px] rounded" />
-      } catch {
-        return <span>🖼️ [画像]</span>
-      }
+      const src = getImageSrc(msg.content)
+      return src ? <img src={src} alt="" className="max-w-[200px] rounded" /> : <span>🖼️ [画像]</span>
     }
     return <span className="text-sm whitespace-pre-wrap break-words">{msg.content}</span>
   }
@@ -1096,14 +1102,8 @@ export default function ChatsPage() {
                         </div>
                       )
                     } else if (msg.messageType === 'image') {
-                      try {
-                        const parsed = JSON.parse(msg.content)
-                        bubbleContent = (
-                          <img src={parsed.originalContentUrl || parsed.previewImageUrl} alt="" className="max-w-[200px] rounded" />
-                        )
-                      } catch {
-                        bubbleContent = <span>🖼️ [画像]</span>
-                      }
+                      const src = getImageSrc(msg.content)
+                      bubbleContent = src ? <img src={src} alt="" className="max-w-[200px] rounded" /> : <span>🖼️ [画像]</span>
                     } else {
                       bubbleContent = <span>{msg.content}</span>
                     }
