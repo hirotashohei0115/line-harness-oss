@@ -60,13 +60,21 @@ reservationRoutes.get('/api/reservations/slots', async (c) => {
   const date = c.req.query('date') ?? '';
   if (!storeKey || !date) return c.json({ success: false, error: 'storeKey and date required' }, 400);
 
-  const dateObj = new Date(date + 'T00:00:00+09:00');
-  const dayOfWeek = dateObj.getDay();
+  // Parse YYYY-MM-DD directly with Date.UTC to avoid local-timezone getDay() mismatches
+  const dateParts = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateParts) return c.json({ success: false, error: 'Invalid date format (expected YYYY-MM-DD)' }, 400);
+  const dayOfWeek = new Date(Date.UTC(+dateParts[1], +dateParts[2] - 1, +dateParts[3])).getUTCDay();
 
   const hours = await getStoreHours(c.env.DB, storeKey);
   const dayHours = hours.find((h) => h.day_of_week === dayOfWeek);
 
-  if (!dayHours || dayHours.is_closed) {
+  if (!dayHours) {
+    // No hours config for this store yet — return all default slots rather than blocking the user
+    const defaultSlots = generateTimeSlots('10:00', '19:00');
+    return c.json({ success: true, data: { slots: defaultSlots } });
+  }
+
+  if (dayHours.is_closed) {
     return c.json({ success: true, data: { slots: [] } });
   }
 

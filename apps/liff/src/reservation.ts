@@ -80,11 +80,22 @@ async function fetchRepairInfo(lineUserId: string) {
 }
 
 async function fetchSlots(storeKey: string, date: string): Promise<string[]> {
+  const url = `${API_URL}/api/reservations/slots?storeKey=${encodeURIComponent(storeKey)}&date=${encodeURIComponent(date)}`;
   try {
-    const res = await fetch(`${API_URL}/api/reservations/slots?storeKey=${storeKey}&date=${date}`);
-    const data = await res.json() as { success: boolean; data: { slots: string[] } };
-    return data.data?.slots ?? [];
-  } catch {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error('[reservation] fetchSlots non-ok:', res.status, url);
+      return [];
+    }
+    const data = await res.json() as { success: boolean; data?: { slots: string[] } | null };
+    const slots = data?.data?.slots;
+    if (!Array.isArray(slots)) {
+      console.error('[reservation] fetchSlots unexpected response:', JSON.stringify(data), url);
+      return [];
+    }
+    return slots;
+  } catch (err) {
+    console.error('[reservation] fetchSlots error:', err, url);
     return [];
   }
 }
@@ -270,9 +281,21 @@ async function renderStep3() {
     renderStep4();
   });
 
-  const slots = await fetchSlots(state.storeKey, state.date);
+  let slots: string[] = [];
+  let fetchFailed = false;
+  try {
+    slots = await fetchSlots(state.storeKey, state.date);
+  } catch {
+    fetchFailed = true;
+  }
+
   const timeGrid = $('timeGrid');
   if (!timeGrid) return;
+
+  if (fetchFailed) {
+    timeGrid.innerHTML = '<p class="no-slots">時間帯の読み込みに失敗しました。<br>戻って再度お試しください。</p>';
+    return;
+  }
 
   if (slots.length === 0) {
     timeGrid.innerHTML = '<p class="no-slots">この日は予約可能な時間帯がありません。<br>別の日付をお選びください。</p>';
