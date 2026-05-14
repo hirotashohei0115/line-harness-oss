@@ -63,15 +63,43 @@ function getMarkTextColor(bgColor: string): string {
 const WORKER_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
 
 function getImageSrc(content: string): string | null {
-  // JSON形式: incoming {"messageId":"..."} or outgoing {"originalContentUrl":"..."}
   try {
     const parsed = JSON.parse(content)
     if (parsed.messageId) return `${WORKER_API_URL}/api/messages/${parsed.messageId}/content`
     return parsed.originalContentUrl || parsed.previewImageUrl || null
   } catch { /* not JSON */ }
-  // プレーンURL: outgoing画像はoriginalContentUrlがそのまま保存される
   if (content.startsWith('http')) return content
   return null
+}
+
+// JS fetch → blob URL で表示（<img src> のクロスオリジン問題を回避）
+function ImageBubble({ content }: { content: string }) {
+  const src = getImageSrc(content)
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!src) { setFailed(true); return }
+    let cancelled = false
+    let created: string | null = null
+    fetch(src)
+      .then(r => r.ok ? r.blob() : Promise.reject(r.status))
+      .then(blob => {
+        if (cancelled) return
+        created = URL.createObjectURL(blob)
+        setBlobUrl(created)
+      })
+      .catch(() => { if (!cancelled) setFailed(true) })
+    return () => {
+      cancelled = true
+      if (created) URL.revokeObjectURL(created)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src])
+
+  if (failed) return <span className="text-sm text-gray-400 px-3 py-2">🖼️ [画像]</span>
+  if (!blobUrl) return <span className="text-xs text-gray-400 px-3 py-2">読み込み中...</span>
+  return <img src={blobUrl} alt="送信された画像" className="block max-w-[220px] rounded-lg" />
 }
 
 function formatDatetime(iso: string | null): string {
@@ -220,8 +248,7 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
       return <FlexPreviewComponent content={msg.content} maxWidth={260} />
     }
     if (msg.messageType === 'image') {
-      const src = getImageSrc(msg.content)
-      return src ? <img src={src} alt="" className="max-w-[200px] rounded" /> : <span>🖼️ [画像]</span>
+      return <ImageBubble content={msg.content} />
     }
     return <span className="text-sm whitespace-pre-wrap break-words">{msg.content}</span>
   }
@@ -1108,10 +1135,7 @@ export default function ChatsPage() {
                         </div>
                       )
                     } else if (isImage) {
-                      const src = getImageSrc(msg.content)
-                      bubbleContent = src
-                        ? <img src={src} alt="送信された画像" className="block max-w-[220px] rounded-lg" />
-                        : <span className="text-sm text-gray-500">🖼️ [画像]</span>
+                      bubbleContent = <ImageBubble content={msg.content} />
                     } else {
                       bubbleContent = <span>{msg.content}</span>
                     }
