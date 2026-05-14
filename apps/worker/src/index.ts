@@ -53,9 +53,10 @@ export type Env = {
     X_HARNESS_URL?: string;  // Optional: X Harness API URL for account linking
     CHATWORK_API_TOKEN?: string;
     CHATWORK_ROOM_ID?: string;
+    JWT_SECRET?: string;
   };
   Variables: {
-    staff: { id: string; name: string; role: 'owner' | 'admin' | 'staff' };
+    staff: { id: string; name: string; role: 'owner' | 'admin' | 'staff'; assignedStores?: string[] };
   };
 };
 

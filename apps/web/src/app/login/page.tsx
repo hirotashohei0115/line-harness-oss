@@ -2,8 +2,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
+
 export default function LoginPage() {
-  const [apiKey, setApiKey] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
@@ -12,34 +15,24 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
-
     try {
-      // Validate by calling a simple endpoint
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
-      const res = await fetch(`${apiUrl}/api/friends/count`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
+      const res = await fetch(`${API_URL}/api/staff/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       })
-
-      if (res.ok) {
-        localStorage.setItem('lh_api_key', apiKey)
-        // Fetch staff profile for name/role display
-        try {
-          const profileRes = await fetch(`${apiUrl}/api/staff/me`, {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          })
-          if (profileRes.ok) {
-            const profileData = await profileRes.json()
-            if (profileData.success && profileData.data) {
-              localStorage.setItem('lh_staff_name', profileData.data.name)
-              localStorage.setItem('lh_staff_role', profileData.data.role)
-            }
-          }
-        } catch {
-          // Profile fetch is best-effort
+      const data = await res.json()
+      if (res.ok && data.success) {
+        localStorage.setItem('lh_api_key', data.data.token)
+        localStorage.setItem('lh_staff_name', data.data.staff.name)
+        localStorage.setItem('lh_staff_role', data.data.staff.role)
+        localStorage.setItem('lh_staff_id', data.data.staff.id)
+        if (data.data.staff.assignedStores) {
+          localStorage.setItem('lh_assigned_stores', JSON.stringify(data.data.staff.assignedStores))
         }
         router.push('/')
       } else {
-        setError('APIキーが正しくありません')
+        setError(data.error || 'ログインに失敗しました')
       }
     } catch {
       setError('接続に失敗しました')
@@ -59,26 +52,36 @@ export default function LoginPage() {
           <p className="text-sm text-gray-500 mt-1">管理画面にログイン</p>
         </div>
 
-        <form onSubmit={handleLogin}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
             <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="APIキーを入力"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="example@e-m-p.co.jp"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
               autoFocus
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">パスワード</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="パスワードを入力"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              required
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-red-600 mb-4">{error}</p>
-          )}
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button
             type="submit"
-            disabled={loading || !apiKey}
+            disabled={loading || !email || !password}
             className="w-full py-3 text-white font-medium rounded-lg transition-opacity hover:opacity-90 disabled:opacity-50"
             style={{ backgroundColor: '#06C755' }}
           >

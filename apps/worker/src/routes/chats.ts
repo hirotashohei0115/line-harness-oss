@@ -84,6 +84,11 @@ chats.get('/api/chats', async (c) => {
     const lineAccountId = c.req.query('lineAccountId') ?? undefined;
     const unreadOnly = c.req.query('unread') === 'true';
 
+    // スタッフの担当店舗フィルタリング
+    const currentStaff = c.get('staff');
+    const assignedStores = currentStaff?.assignedStores;
+    const isStoreFiltered = assignedStores && assignedStores.length > 0 && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
+
     // JOIN friends to get display_name and picture_url, plus unread message count
     let sql = `SELECT c.*, f.display_name, f.picture_url, f.line_user_id, f.contact_mark_id, f.is_pinned, f.pinned_at,
                  (SELECT COUNT(*) FROM messages_log ml WHERE ml.friend_id = c.friend_id AND ml.direction = 'incoming' AND ml.is_read = 0) as unread_count
@@ -106,6 +111,16 @@ chats.get('/api/chats', async (c) => {
     if (lineAccountId) {
       conditions.push('f.line_account_id = ?');
       bindings.push(lineAccountId);
+    }
+    if (isStoreFiltered) {
+      // 担当店舗に紐づくユーザーのみ: mail_orders.delivery_store OR repair_quotes.request_type=store
+      const storePlaceholders = assignedStores!.map(() => '?').join(',');
+      conditions.push(`c.friend_id IN (
+        SELECT DISTINCT friend_id FROM mail_orders WHERE delivery_store IN (${storePlaceholders})
+        UNION
+        SELECT DISTINCT friend_id FROM repair_quotes WHERE request_type = 'store'
+      )`);
+      assignedStores!.forEach(s => bindings.push(s));
     }
 
     if (conditions.length > 0) {

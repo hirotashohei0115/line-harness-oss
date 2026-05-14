@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { sign } from 'hono/jwt';
 import {
   getStaffMembers,
   getStaffById,
@@ -11,6 +12,25 @@ import {
 import type { StaffMember } from '@line-crm/db';
 import { requireRole } from '../middleware/role-guard.js';
 import type { Env } from '../index.js';
+
+// ---- パスワードハッシュ (SHA-256) ----
+async function hashPassword(password: string): Promise<string> {
+  const data = new TextEncoder().encode(password);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+interface StaffAccount {
+  id: string;
+  email: string;
+  password_hash: string;
+  name: string;
+  role: 'admin' | 'staff';
+  assigned_stores: string | null;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+}
 
 const staff = new Hono<Env>();
 
@@ -216,6 +236,133 @@ staff.post('/api/staff/:id/regenerate-key', requireRole('owner'), async (c) => {
     return c.json({ success: true, data: { apiKey: newKey } });
   } catch (err) {
     console.error('POST /api/staff/:id/regenerate-key error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// ========== staff_accounts (email+password+JWT) ==========
+
+// POST /api/staff/login — 認証不要
+staff.post('/api/staff/login', async (c) => {
+  try {
+    const { email, password } = await c.req.json<{ email: string; password: string }>();
+    if (!email || !password) return c.json({ success: false, error: 'email and password required' }, 400);
+
+    const account = await c.env.DB.prepare(
+      `SELECT * FROM staff_accounts WHERE email = ? AND is_active = 1`
+    ).bind(email).first<StaffAccount>();
+
+    if (!account) return c.json({ success: false, error: 'メールアドレスまたはパスワードが正しくありません' }, 401);
+
+    const inputHash = await hashPassword(password);
+    if (inputHash !== account.password_hash) {
+      return c.json({ success: false, error: 'メールアドレスまたはパスワードが正しくありません' }, 401);
+    }
+
+    const secret = c.env.JWT_SECRET ?? 'fallback-secret';
+    const assignedStores: string[] = account.assigned_stores ? JSON.parse(account.assigned_stores) : [];
+    const payload = {
+      sub: account.id,
+      email: account.email,
+      name: account.name,
+      role: account.role,
+      assignedStores,
+      exp: Math.floor(Date.now() / 1000) + 86400, // 24時間
+    };
+    const token = await sign(payload, secret);
+
+    return c.json({
+      success: true,
+      data: { token, staff: { id: account.id, name: account.name, role: account.role, assignedStores } },
+    });
+  } catch (err) {
+    console.error('POST /api/staff/login error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// POST /api/staff/logout — クライアント側でトークンを削除するだけ
+staff.post('/api/staff/logout', async (c) => {
+  return c.json({ success: true, data: null });
+});
+
+// GET /api/staff/accounts — admin のみ
+staff.get('/api/staff/accounts', async (c) => {
+  try {
+    const accounts = await c.env.DB.prepare(
+      `SELECT id, email, name, role, assigned_stores, is_active, created_at FROM staff_accounts ORDER BY created_at ASC`
+    ).all<Omit<StaffAccount, 'password_hash'>>();
+    return c.json({
+      success: true,
+      data: accounts.results.map(a => ({
+        ...a,
+        assignedStores: a.assigned_stores ? JSON.parse(a.assigned_stores) : [],
+        isActive: Boolean(a.is_active),
+      })),
+    });
+  } catch (err) {
+    console.error('GET /api/staff/accounts error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// POST /api/staff/accounts — admin のみ
+staff.post('/api/staff/accounts', async (c) => {
+  try {
+    const body = await c.req.json<{ email: string; password: string; name: string; role?: 'admin' | 'staff'; assignedStores?: string[] }>();
+    if (!body.email || !body.password || !body.name) {
+      return c.json({ success: false, error: 'email, password, name required' }, 400);
+    }
+    const passwordHash = await hashPassword(body.password);
+    const id = crypto.randomUUID();
+    const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(' ', 'T');
+    await c.env.DB.prepare(
+      `INSERT INTO staff_accounts (id, email, password_hash, name, role, assigned_stores, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`
+    ).bind(id, body.email, passwordHash, body.name, body.role ?? 'staff',
+      body.assignedStores ? JSON.stringify(body.assignedStores) : null, now, now
+    ).run();
+    return c.json({ success: true, data: { id, email: body.email, name: body.name, role: body.role ?? 'staff' } }, 201);
+  } catch (err: unknown) {
+    const msg = String(err);
+    if (msg.includes('UNIQUE')) return c.json({ success: false, error: 'このメールアドレスは既に使用されています' }, 409);
+    console.error('POST /api/staff/accounts error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// PATCH /api/staff/accounts/:id — admin のみ
+staff.patch('/api/staff/accounts/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const body = await c.req.json<{ name?: string; role?: 'admin' | 'staff'; assignedStores?: string[]; isActive?: boolean; password?: string }>();
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    if (body.name !== undefined) { sets.push('name = ?'); vals.push(body.name); }
+    if (body.role !== undefined) { sets.push('role = ?'); vals.push(body.role); }
+    if (body.assignedStores !== undefined) { sets.push('assigned_stores = ?'); vals.push(JSON.stringify(body.assignedStores)); }
+    if (body.isActive !== undefined) { sets.push('is_active = ?'); vals.push(body.isActive ? 1 : 0); }
+    if (body.password) { sets.push('password_hash = ?'); vals.push(await hashPassword(body.password)); }
+    if (sets.length === 0) return c.json({ success: false, error: 'No fields to update' }, 400);
+    const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(' ', 'T');
+    sets.push('updated_at = ?'); vals.push(now);
+    vals.push(id);
+    await c.env.DB.prepare(`UPDATE staff_accounts SET ${sets.join(', ')} WHERE id = ?`)
+      .bind(...vals).run();
+    return c.json({ success: true, data: null });
+  } catch (err) {
+    console.error('PATCH /api/staff/accounts/:id error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// DELETE /api/staff/accounts/:id — admin のみ
+staff.delete('/api/staff/accounts/:id', async (c) => {
+  try {
+    await c.env.DB.prepare(`DELETE FROM staff_accounts WHERE id = ?`).bind(c.req.param('id')).run();
+    return c.json({ success: true, data: null });
+  } catch (err) {
+    console.error('DELETE /api/staff/accounts/:id error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
 });
