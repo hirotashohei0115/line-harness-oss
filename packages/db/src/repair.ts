@@ -264,6 +264,7 @@ export interface RepairModelPriceRow {
   price: number | null;
   delivery_days: string | null;
   model_number: string;
+  inquiry_only?: boolean;
 }
 
 export async function getRepairModelPrice(
@@ -275,7 +276,8 @@ export async function getRepairModelPrice(
     .prepare(`SELECT price, delivery_days, model_number FROM repair_model_prices WHERE model_number = ? AND symptom = ? LIMIT 1`)
     .bind(modelNumber, symptom)
     .first<RepairModelPriceRow>();
-  return row ?? null;
+  if (!row) return null;
+  return { ...row, inquiry_only: row.price === null };
 }
 
 export async function getRepairPriceByYearInch(
@@ -285,13 +287,16 @@ export async function getRepairPriceByYearInch(
   inchSize: number,
   symptom: string,
 ): Promise<RepairModelPriceRow | null> {
+  // 同一条件で複数モデルある場合は最高価格を返す（NULLは最後）
   const row = await db
     .prepare(
       `SELECT price, delivery_days, model_number FROM repair_model_prices
        WHERE product_type = ? AND year = ? AND inch_size = ? AND symptom = ?
+       ORDER BY price DESC NULLS LAST
        LIMIT 1`,
     )
     .bind(productType, year, inchSize, symptom)
     .first<RepairModelPriceRow>();
-  return row ?? null;
+  if (!row) return null;
+  return { ...row, inquiry_only: row.price === null };
 }

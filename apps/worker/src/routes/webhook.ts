@@ -95,6 +95,9 @@ const PRIVACY_POLICY_URL = 'https://forms.gle/XXXXXXXXXXXXXXXX';
 const CONSULT_PHONE_TEXT =
   '【電話・LINE相談のご案内】\nお問い合わせありがとうございます！\n\nお急ぎの方は下記電話番号までご連絡ください\n👉070-1391-9861\n（受付時間：10時〜20時）\n\nLINEでのご相談をご希望の場合は\nこのままご質問・ご相談内容をご記入のうえご返信ください😆';
 
+const MISSING_MODEL_MESSAGE =
+  '該当機種が存在しない可能性がございますので、お見積りを作成するためにパソコンの底面に記載されているモデル番号(Aから始まる4桁の数字)をチャットにてお知らせください！';
+
 const CONSULTATION_REQUEST_MESSAGE =
   '下記項目について教えてください。\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n①機種や型番：\n　例、MacBook Air 2022 A2337\n②症状：\n　例、液晶割れ、画が映らない\n③ご要望：\n　例、修理費用が知りたい\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n\n上記３点について、ご回答をよろしくお願い致します。\nテクニカルスタッフが確認し、LINEにて折り返しご連絡させていただきます。\n営業時間外の場合（10:00~20:00以外）は翌営業日になる可能性がございます。\nあらかじめご了承いただけますと幸いです。';
 
@@ -1139,11 +1142,27 @@ async function handleEvent(
 
         if (modelName && modelName !== 'その他・分からない') {
           const row = await getRepairModelPrice(db, modelName, symptomName);
-          if (row) { priceFrom = row.price; deliveryDays = row.delivery_days; }
+          if (!row) {
+            try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: MISSING_MODEL_MESSAGE }]); } catch {}
+            return;
+          }
+          if (row.inquiry_only) {
+            try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch {}
+            return;
+          }
+          priceFrom = row.price; deliveryDays = row.delivery_days;
         } else if (yearStr && inchSize && inchSize !== 'その他・分からない') {
           const productType = productName.toLowerCase().includes('air') ? 'air' : productName.toLowerCase().includes('pro') ? 'pro' : 'other';
           const row = await getRepairPriceByYearInch(db, productType, parseInt(yearStr, 10), parseFloat(inchSize), symptomName);
-          if (row) { priceFrom = row.price; deliveryDays = row.delivery_days; resolvedModelName = row.model_number; }
+          if (!row) {
+            try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: MISSING_MODEL_MESSAGE }]); } catch {}
+            return;
+          }
+          if (row.inquiry_only) {
+            try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch {}
+            return;
+          }
+          priceFrom = row.price; deliveryDays = row.delivery_days; resolvedModelName = row.model_number;
         } else {
           const price = await getRepairPrice(db, productId, symptomId);
           if (price) { priceFrom = price.price_from; priceTo = price.price_to; deliveryFrom = price.delivery_days_from; deliveryTo = price.delivery_days_to; }
@@ -1533,21 +1552,33 @@ async function handleEvent(
       if (modelName) {
         // Model number flow: look up by model_number + symptom name
         const row = await getRepairModelPrice(db, modelName, symptomName);
-        if (row) {
-          priceFrom = row.price;
-          deliveryDays = row.delivery_days;
+        if (!row) {
+          try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: MISSING_MODEL_MESSAGE }]); } catch {}
+          return;
         }
+        if (row.inquiry_only) {
+          try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch {}
+          return;
+        }
+        priceFrom = row.price;
+        deliveryDays = row.delivery_days;
       } else if (yearStr && inchSize) {
-        // Year+inch flow: look up by product_type + year + inch + symptom name
+        // Year+inch flow: MAX price among matching models (NULLS LAST)
         const productType = productName.toLowerCase().includes('air') ? 'air'
           : productName.toLowerCase().includes('pro') ? 'pro' : 'other';
         const inchFloat = parseFloat(inchSize);
         const row = await getRepairPriceByYearInch(db, productType, parseInt(yearStr, 10), inchFloat, symptomName);
-        if (row) {
-          priceFrom = row.price;
-          deliveryDays = row.delivery_days;
-          resolvedModelName = row.model_number;
+        if (!row) {
+          try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: MISSING_MODEL_MESSAGE }]); } catch {}
+          return;
         }
+        if (row.inquiry_only) {
+          try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch {}
+          return;
+        }
+        priceFrom = row.price;
+        deliveryDays = row.delivery_days;
+        resolvedModelName = row.model_number;
       } else {
         // Fallback: use generic repair_prices table
         const price = await getRepairPrice(db, productId, symptomId);
