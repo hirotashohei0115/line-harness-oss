@@ -95,6 +95,9 @@ const PRIVACY_POLICY_URL = 'https://forms.gle/XXXXXXXXXXXXXXXX';
 const CONSULT_PHONE_TEXT =
   '【電話・LINE相談のご案内】\nお問い合わせありがとうございます！\n\nお急ぎの方は下記電話番号までご連絡ください\n👉070-1391-9861\n（受付時間：10時〜20時）\n\nLINEでのご相談をご希望の場合は\nこのままご質問・ご相談内容をご記入のうえご返信ください😆';
 
+const CONSULTATION_REQUEST_MESSAGE =
+  '下記項目について教えてください。\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n①機種や型番：\n　例、MacBook Air 2022 A2337\n②症状：\n　例、液晶割れ、画が映らない\n③ご要望：\n　例、修理費用が知りたい\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n\n上記３点について、ご回答をよろしくお願い致します。\nテクニカルスタッフが確認し、LINEにて折り返しご連絡させていただきます。\n営業時間外の場合（10:00~20:00以外）は翌営業日になる可能性がございます。\nあらかじめご了承いただけますと幸いです。';
+
 const STORES = [
   {
     key: 'gotanda',
@@ -1045,8 +1048,7 @@ async function handleEvent(
       await setFriendAttribute(db, friend.id, 'repair_product_key', p.key);
       await addTagToFriend(db, friend.id, incomingText === 'MacBook Air' ? 'MacbookAir' : incomingText === 'MacBook Pro' ? 'MacbookPro' : 'その他');
       if (incomingText === 'その他') {
-        const consultText = `下記項目について教えてください。\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n①機種や型番：\n　例、MacBook Air 2022 A2337\n②症状：\n　例、液晶割れ、画が映らない\n③ご要望：\n　例、修理費用が知りたい\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n\n上記３点について、ご回答をよろしくお願い致します。\nテクニカルスタッフが確認し、LINEにて折り返しご連絡させていただきます。\n営業時間外の場合（10:00~20:00以外）は翌営業日になる可能性がございます。\nあらかじめご了承いただけますと幸いです。`;
-        try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: consultText }]); } catch (err) { console.error('repair msg other product:', err); }
+        try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch (err) { console.error('repair msg other product:', err); }
       } else {
         try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildModelMethodFlex(incomingText, p.key))]); } catch (err) { console.error('repair msg select_product:', err); }
       }
@@ -1064,8 +1066,7 @@ async function handleEvent(
       return;
     }
     if (incomingText === 'わからない') {
-      const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
-      try { const sf = await buildSymptomSelectFlex(db, productId); await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg skip_model:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch (err) { console.error('repair msg skip_model:', err); }
       return;
     }
 
@@ -1088,7 +1089,7 @@ async function handleEvent(
     }
     if (incomingText === 'その他の年式') {
       await setFriendAttribute(db, friend.id, 'repair_year', '0');
-      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildInchSelectFlex())]); } catch (err) { console.error('repair msg select_year_other:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch (err) { console.error('repair msg select_year_other:', err); }
       return;
     }
 
@@ -1103,13 +1104,12 @@ async function handleEvent(
     // 「その他・分からない」: yearが設定済み → インチ不明, そうでなければ → モデル不明
     if (incomingText === 'その他・分からない') {
       const yearStr = await getFriendAttribute(db, friend.id, 'repair_year');
-      const productId = (await getFriendAttribute(db, friend.id, 'repair_product_id')) ?? 'prod-oth-0001-0000-0000-000000000003';
       if (yearStr) {
         await setFriendAttribute(db, friend.id, 'repair_inch_size', 'その他・分からない');
       } else {
         await setFriendAttribute(db, friend.id, 'repair_model_name', 'その他・分からない');
       }
-      try { const sf = await buildSymptomSelectFlex(db, productId); await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', sf)]); } catch (err) { console.error('repair msg other unknown:', err); }
+      try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch (err) { console.error('repair msg other unknown:', err); }
       return;
     }
 
