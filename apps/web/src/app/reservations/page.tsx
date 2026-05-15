@@ -134,7 +134,7 @@ export default function ReservationsPage() {
                   <th className="text-left px-4 py-3 font-medium text-gray-600">店舗</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">お名前</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">電話番号</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">ご要望</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">機種・症状・ご要望</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">ステータス</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-600">操作</th>
                 </tr>
@@ -151,7 +151,7 @@ export default function ReservationsPage() {
                       <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{storeName}</td>
                       <td className="px-4 py-3 font-medium text-gray-900">{r.name} 様</td>
                       <td className="px-4 py-3 text-gray-600">{r.phone || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{r.notes || '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 max-w-sm text-xs" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.notes || '—'}</td>
                       <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         {r.status === 'pending' && (

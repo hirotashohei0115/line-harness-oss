@@ -97,12 +97,22 @@ reservationRoutes.get('/api/repair-info/:lineUserId', async (c) => {
   if (!friend) return c.json({ success: true, data: null });
 
   const attrRows = await c.env.DB
-    .prepare('SELECT key, value FROM friend_attributes WHERE friend_id = ? AND key IN (?, ?, ?, ?, ?)')
-    .bind(friend.id, 'repair_store', 'repair_model_name', 'repair_symptom_id', 'repair_product_name', 'repair_year')
+    .prepare('SELECT key, value FROM friend_attributes WHERE friend_id = ? AND key IN (?, ?, ?, ?, ?, ?)')
+    .bind(friend.id, 'repair_store', 'repair_model_name', 'repair_symptom_id', 'repair_product_name', 'repair_year', 'repair_inch_size')
     .all<{ key: string; value: string }>();
 
   const attrs: Record<string, string> = {};
   for (const row of attrRows.results) attrs[row.key] = row.value;
+
+  // Look up symptom name if we have an ID
+  let symptomName = '';
+  if (attrs['repair_symptom_id']) {
+    const sym = await c.env.DB
+      .prepare('SELECT name FROM repair_symptoms WHERE id = ? LIMIT 1')
+      .bind(attrs['repair_symptom_id'])
+      .first<{ name: string }>();
+    symptomName = sym?.name ?? '';
+  }
 
   return c.json({
     success: true,
@@ -112,6 +122,8 @@ reservationRoutes.get('/api/repair-info/:lineUserId', async (c) => {
       modelName: attrs['repair_model_name'] ?? '',
       productName: attrs['repair_product_name'] ?? '',
       year: attrs['repair_year'] ?? '',
+      inchSize: attrs['repair_inch_size'] ?? '',
+      symptomName,
     },
   });
 });

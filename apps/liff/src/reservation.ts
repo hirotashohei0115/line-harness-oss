@@ -69,10 +69,20 @@ function formatDateDisplay(dateStr: string): string {
   return `${y}年${Number(m)}月${Number(d)}日（${dayLabel}）`;
 }
 
-async function fetchRepairInfo(lineUserId: string) {
+interface RepairInfo {
+  name: string;
+  storeKey: string;
+  modelName: string;
+  productName: string;
+  year: string;
+  inchSize: string;
+  symptomName: string;
+}
+
+async function fetchRepairInfo(lineUserId: string): Promise<RepairInfo | null> {
   try {
     const res = await fetch(`${API_URL}/api/repair-info/${encodeURIComponent(lineUserId)}`);
-    const data = await res.json() as { success: boolean; data: { name: string; storeKey: string } | null };
+    const data = await res.json() as { success: boolean; data: RepairInfo | null };
     return data.data;
   } catch {
     return null;
@@ -499,6 +509,14 @@ export async function initReservation(): Promise<void> {
   const repairInfo = await fetchRepairInfo(profile.userId);
   if (repairInfo) {
     if (!state.storeKey && repairInfo.storeKey) state.storeKey = repairInfo.storeKey;
+    // Build device info string for notes pre-fill
+    const parts: string[] = [];
+    if (repairInfo.productName) parts.push(repairInfo.productName);
+    if (repairInfo.modelName && repairInfo.modelName !== 'その他・分からない') parts.push(repairInfo.modelName);
+    if (repairInfo.year && repairInfo.year !== '0' && repairInfo.year !== '') parts.push(`${repairInfo.year}年式`);
+    if (repairInfo.inchSize && repairInfo.inchSize !== 'その他・分からない') parts.push(`${repairInfo.inchSize}インチ`);
+    if (repairInfo.symptomName) parts.push(repairInfo.symptomName);
+    if (parts.length > 0) state.notes = parts.join(' ');
   }
 
   renderStep1();
