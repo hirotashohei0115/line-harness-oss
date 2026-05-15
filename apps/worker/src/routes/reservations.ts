@@ -187,12 +187,12 @@ reservationRoutes.post('/api/reservations', async (c) => {
     console.error('LINE confirmation send error:', err);
   }
 
-  // Chatwork notification
+  // Chatwork notification — await to ensure delivery before response (Worker keepalive)
   const cwToken = c.env.CHATWORK_API_TOKEN;
   const cwRoom = c.env.CHATWORK_ROOM_ID;
   if (cwToken && cwRoom) {
     const cwMsg = `[info][title]🏪 来店予約が入りました[/title]店舗：リペアマスター${storeName}\n日時：${dateDisplay}（${dayName}）${time}〜\nお名前：${name}様\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
-    sendChatworkMessage(cwToken, cwRoom, cwMsg).catch(() => {});
+    await sendChatworkMessage(cwToken, cwRoom, cwMsg);
   }
 
   return c.json({ success: true, data: reservation });
