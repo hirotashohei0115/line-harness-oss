@@ -191,7 +191,7 @@ reservationRoutes.post('/api/reservations', async (c) => {
   const cwToken = c.env.CHATWORK_API_TOKEN;
   const cwRoom = c.env.CHATWORK_ROOM_ID;
   if (cwToken && cwRoom) {
-    const cwMsg = `[info][title]📅 来店予約が入りました[/title]お名前：${name} 様\n店舗：リペアマスター${storeName}\n日時：${dateDisplay}（${dayName}）${time}〜${body.phone ? `\n電話番号：${body.phone}` : ''}${body.notes ? `\nご要望：${body.notes}` : ''}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app/reservations[/info]`;
+    const cwMsg = `[info][title]🏪 来店予約が入りました[/title]店舗：リペアマスター${storeName}\n日時：${dateDisplay}（${dayName}）${time}〜\nお名前：${name}様\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
     sendChatworkMessage(cwToken, cwRoom, cwMsg).catch(() => {});
   }
 

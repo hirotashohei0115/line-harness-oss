@@ -1256,12 +1256,6 @@ async function handleEvent(
           })),
         ]);
       } catch (err) { console.error('repair msg reservation:', err); }
-
-      // Chatwork通知: 来店予約ボタンタップ
-      if (chatworkApiToken && chatworkRoomId) {
-        const cwMsg = `[info][title]🏪 来店予約ボタンがタップされました[/title]ユーザー：${friend.display_name || userId}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app/reservations[/info]`;
-        sendChatworkMessage(chatworkApiToken, chatworkRoomId, cwMsg).catch(() => {});
-      }
       return;
     }
 
