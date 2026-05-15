@@ -39,7 +39,7 @@ function generateTimeSlots(openTime: string, closeTime: string): string[] {
   const [closeH, closeM] = closeTime.split(':').map(Number);
   const openTotal = openH * 60 + openM;
   const closeTotal = closeH * 60 + closeM;
-  for (let t = openTotal; t < closeTotal; t += 60) {
+  for (let t = openTotal; t < closeTotal; t += 30) {
     const h = Math.floor(t / 60).toString().padStart(2, '0');
     const m = (t % 60).toString().padStart(2, '0');
     slots.push(`${h}:${m}`);
