@@ -352,7 +352,7 @@ function renderStep4() {
           <input id="inputName" class="form-input" type="text" placeholder="山田太郎" value="${escapeHtml(state.name)}" />
         </div>
         <div class="form-group">
-          <label class="form-label">電話番号（任意）</label>
+          <label class="form-label">電話番号 <span class="required">*</span></label>
           <input id="inputPhone" class="form-input" type="tel" placeholder="090-1234-5678" value="${escapeHtml(state.phone)}" />
         </div>
         <div class="form-group">
@@ -382,6 +382,12 @@ function renderStep4() {
 
     if (!state.name) {
       state.error = 'お名前は必須です';
+      renderStep4();
+      return;
+    }
+
+    if (!state.phone) {
+      state.error = '電話番号を入力してください';
       renderStep4();
       return;
     }
