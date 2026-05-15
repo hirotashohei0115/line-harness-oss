@@ -490,7 +490,7 @@ export async function initReservation(): Promise<void> {
 
   // Check for pre-selected store from URL param
   const params = new URLSearchParams(window.location.search);
-  const storeFromUrl = params.get('store');
+  const storeFromUrl = params.get('storeKey') ?? params.get('store'); // support both for backward compat
   if (storeFromUrl && STORES.some(s => s.key === storeFromUrl)) {
     state.storeKey = storeFromUrl;
   }

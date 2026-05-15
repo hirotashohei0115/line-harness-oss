@@ -1220,7 +1220,7 @@ async function handleEvent(
         '盛岡店': 'morioka', '大分店': 'oita', '木津川店': 'kizugawa', '長岡店': 'nagaoka',
       }).find(([name]) => name === repairStore)?.[1] ?? '' : '';
       const reservationUrl = storeKey
-        ? `${STORE_RESERVATION_URL_GENERAL}&store=${storeKey}`
+        ? `${STORE_RESERVATION_URL_GENERAL}&storeKey=${storeKey}`
         : STORE_RESERVATION_URL_GENERAL;
       try {
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
