@@ -113,14 +113,35 @@ chats.get('/api/chats', async (c) => {
       bindings.push(lineAccountId);
     }
     if (isStoreFiltered) {
-      // 担当店舗に紐づくユーザーのみ: mail_orders.delivery_store OR repair_quotes.request_type=store
-      const storePlaceholders = assignedStores!.map(() => '?').join(',');
-      conditions.push(`c.friend_id IN (
-        SELECT DISTINCT friend_id FROM mail_orders WHERE delivery_store IN (${storePlaceholders})
-        UNION
-        SELECT DISTINCT friend_id FROM repair_quotes WHERE request_type = 'store'
-      )`);
-      assignedStores!.forEach(s => bindings.push(s));
+      const storeNames = assignedStores!;
+      // store_reservations uses short keys (gotanda, kinshicho...), map from store names
+      const STORE_NAME_TO_KEY: Record<string, string> = {
+        '五反田店': 'gotanda', '錦糸町店': 'kinshicho', '成田店': 'narita',
+        '幕張店': 'makuhari', '菖蒲店': 'shobu', '岐阜店': 'gifu',
+        '宇都宮店': 'utsunomiya', '青森店': 'aomori', '盛岡店': 'morioka',
+        '大分店': 'oita', '木津川店': 'kizugawa', '長岡店': 'nagaoka',
+      };
+      const storeKeys = storeNames.map(n => STORE_NAME_TO_KEY[n]).filter(Boolean);
+
+      const namePH = storeNames.map(() => '?').join(',');
+      const subQueries: string[] = [];
+
+      // 1. store_reservations (store_key)
+      if (storeKeys.length > 0) {
+        const keyPH = storeKeys.map(() => '?').join(',');
+        subQueries.push(`SELECT DISTINCT friend_id FROM store_reservations WHERE store_key IN (${keyPH})`);
+        storeKeys.forEach(k => bindings.push(k));
+      }
+
+      // 2. mail_orders (delivery_store = 日本語店舗名)
+      subQueries.push(`SELECT DISTINCT friend_id FROM mail_orders WHERE delivery_store IN (${namePH})`);
+      storeNames.forEach(s => bindings.push(s));
+
+      // 3. friend_attributes repair_store (store selection in chat/repair flow)
+      subQueries.push(`SELECT DISTINCT friend_id FROM friend_attributes WHERE key = 'repair_store' AND value IN (${namePH})`);
+      storeNames.forEach(s => bindings.push(s));
+
+      conditions.push(`c.friend_id IN (${subQueries.join(' UNION ')})`);
     }
 
     if (conditions.length > 0) {
