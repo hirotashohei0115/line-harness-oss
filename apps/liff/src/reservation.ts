@@ -87,10 +87,10 @@ async function fetchSlots(storeKey: string, date: string): Promise<string[]> {
       console.error('[reservation] fetchSlots non-ok:', res.status, url);
       return [];
     }
-    const data = await res.json() as { success: boolean; data?: { slots: string[] } | null };
-    const slots = data?.data?.slots;
+    const json = await res.json() as { success: boolean; data?: { slots: string[] } | null };
+    const slots = json.data?.slots;
     if (!Array.isArray(slots)) {
-      console.error('[reservation] fetchSlots unexpected response:', JSON.stringify(data), url);
+      console.error('[reservation] fetchSlots unexpected response:', JSON.stringify(json), url);
       return [];
     }
     return slots;
