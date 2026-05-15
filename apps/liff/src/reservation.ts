@@ -2,7 +2,7 @@ declare const liff: {
   getProfile(): Promise<{ userId: string; displayName: string }>;
 };
 
-const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:8787';
+const API_URL = 'https://macbook-repair-worker.empower-repair.workers.dev';
 
 const STORES = [
   { key: 'gotanda', name: '五反田店', fullName: 'リペアマスター五反田店' },
