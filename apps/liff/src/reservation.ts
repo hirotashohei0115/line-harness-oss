@@ -520,7 +520,7 @@ export async function initReservation(): Promise<void> {
     if (repairInfo.productName) parts.push(repairInfo.productName);
     if (repairInfo.modelName && repairInfo.modelName !== 'その他・分からない') parts.push(repairInfo.modelName);
     if (repairInfo.year && repairInfo.year !== '0' && repairInfo.year !== '') parts.push(`${repairInfo.year}年式`);
-    if (repairInfo.inchSize && repairInfo.inchSize !== 'その他・分からない') parts.push(`${repairInfo.inchSize}インチ`);
+    if (repairInfo.inchSize && repairInfo.inchSize !== 'その他・分からない') parts.push(repairInfo.inchSize.endsWith('インチ') ? repairInfo.inchSize : `${repairInfo.inchSize}インチ`);
     if (repairInfo.symptomName) parts.push(repairInfo.symptomName);
     if (parts.length > 0) state.notes = parts.join(' ');
   }
