@@ -1199,7 +1199,23 @@ async function handleEvent(
           ]);
         } else if (type === 'store') {
           await addTagToFriend(db, friend.id, '依頼する');
-          await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildStoreSelectFlex())]);
+          await addTagToFriend(db, friend.id, '店舗持込');
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
+            buildMessage('flex', JSON.stringify({
+              type: 'bubble',
+              body: {
+                type: 'box', layout: 'vertical', paddingAll: '20px', spacing: 'md',
+                contents: [
+                  { type: 'text', text: '来店予約フォーム', weight: 'bold', size: 'lg', color: '#1a1a1a' },
+                  { type: 'text', text: 'ご希望の日時を選択してご予約ください。予約完了後、LINEに確認メッセージをお送りします。', wrap: true, size: 'sm', color: '#555555' },
+                ],
+              },
+              footer: {
+                type: 'box', layout: 'vertical', paddingAll: '16px',
+                contents: [{ type: 'button', action: { type: 'uri', label: '来店予約をする', uri: STORE_RESERVATION_URL_GENERAL }, style: 'primary', height: 'sm', color: '#06C755' }],
+              },
+            })),
+          ]);
         } else {
           await addTagToFriend(db, friend.id, '依頼しない');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildConsultCategoryFlex())]);
@@ -1256,9 +1272,23 @@ async function handleEvent(
         await setFriendAttribute(db, friend.id, 'repair_store', store.shortName);
         const storeInfoText = `${store.shortName}での店頭修理をご希望ですね！✨\n下記店舗情報となります🙇‍♂️\n\n${store.name}\n住所：\n${store.zip}\n${store.address}\n電話番号：${store.tel}\n営業時間：${store.hours}\n\nご来店のご予約は下記のボタンからお進みください！`;
         try {
+          const storeReservationUrl = `${STORE_RESERVATION_URL_GENERAL}&storeKey=${store.key}`;
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             { type: 'text', text: storeInfoText },
-            buildMessage('flex', JSON.stringify({ type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'button', action: { type: 'message', label: '来店予約する', text: '来店予約する' }, style: 'primary', height: 'sm', color: '#00B900' }] } })),
+            buildMessage('flex', JSON.stringify({
+              type: 'bubble',
+              body: {
+                type: 'box', layout: 'vertical', paddingAll: '20px', spacing: 'md',
+                contents: [
+                  { type: 'text', text: '来店予約フォーム', weight: 'bold', size: 'lg', color: '#1a1a1a' },
+                  { type: 'text', text: 'ご希望の日時を選択してご予約ください。', wrap: true, size: 'sm', color: '#555555' },
+                ],
+              },
+              footer: {
+                type: 'box', layout: 'vertical', paddingAll: '16px',
+                contents: [{ type: 'button', action: { type: 'uri', label: '来店予約をする', uri: storeReservationUrl }, style: 'primary', height: 'sm', color: '#06C755' }],
+              },
+            })),
           ]);
         } catch (err) { console.error('repair msg select_store:', err); }
         return;
@@ -1723,16 +1753,22 @@ async function handleEvent(
         `営業時間：${store.hours}\n\n` +
         `ご来店のご予約は下記のボタンからお進みください！`;
 
+      const reservationUrlWithStore = `${STORE_RESERVATION_URL_GENERAL}&storeKey=${storeKey}`;
       try {
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           { type: 'text', text: storeInfoText },
           buildMessage('flex', JSON.stringify({
             type: 'bubble',
             body: {
-              type: 'box', layout: 'vertical', paddingAll: '20px',
+              type: 'box', layout: 'vertical', paddingAll: '20px', spacing: 'md',
               contents: [
-                { type: 'button', action: { type: 'message', label: '来店予約する', text: '来店予約する' }, style: 'primary', height: 'sm', color: '#00B900' },
+                { type: 'text', text: '来店予約フォーム', weight: 'bold', size: 'lg', color: '#1a1a1a' },
+                { type: 'text', text: 'ご希望の日時を選択してご予約ください。', wrap: true, size: 'sm', color: '#555555' },
               ],
+            },
+            footer: {
+              type: 'box', layout: 'vertical', paddingAll: '16px',
+              contents: [{ type: 'button', action: { type: 'uri', label: '来店予約をする', uri: reservationUrlWithStore }, style: 'primary', height: 'sm', color: '#06C755' }],
             },
           })),
         ]);
