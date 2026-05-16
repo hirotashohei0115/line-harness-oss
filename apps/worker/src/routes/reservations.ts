@@ -12,6 +12,7 @@ import {
 } from '@line-crm/db';
 import { LineClient } from '@line-crm/line-sdk';
 import { sendChatworkMessage, jstTimestamp } from '../lib/chatwork.js';
+import { createCalendarEvent, STORE_CALENDAR_IDS } from '../lib/google-calendar.js';
 import type { Env } from '../index.js';
 
 const reservationRoutes = new Hono<Env>();
@@ -193,6 +194,29 @@ reservationRoutes.post('/api/reservations', async (c) => {
   if (cwToken && cwRoom) {
     const cwMsg = `[info][title]🏪 来店予約が入りました[/title]店舗：リペアマスター${storeName}\n日時：${dateDisplay}（${dayName}）${time}〜\nお名前：${name}様\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
     await sendChatworkMessage(cwToken, cwRoom, cwMsg);
+  }
+
+  // Google Calendar event
+  try {
+    const calendarId = STORE_CALENDAR_IDS[storeKey];
+    if (calendarId && c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET && c.env.GOOGLE_REFRESH_TOKEN) {
+      // Build JST ISO datetime strings for start/end (1 hour slot)
+      const [hh, mm] = time.split(':').map(Number);
+      const startMs = Date.UTC(Number(y), Number(mo) - 1, Number(d), hh - 9, mm, 0);
+      const endMs = startMs + 60 * 60 * 1000;
+      const toIso = (ms: number) => new Date(ms).toISOString().replace('Z', '+09:00');
+      const startDateTime = toIso(startMs);
+      const endDateTime = toIso(endMs);
+
+      await createCalendarEvent(c.env, calendarId, {
+        title: `【来店予約】${name}様 - リペアマスター${storeName}`,
+        startDateTime,
+        endDateTime,
+        description: `お名前：${name}\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n店舗：リペアマスター${storeName}`,
+      });
+    }
+  } catch (err) {
+    console.error('Google Calendar event creation error:', err);
   }
 
   return c.json({ success: true, data: reservation });

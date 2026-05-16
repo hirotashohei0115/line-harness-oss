@@ -55,6 +55,9 @@ export type Env = {
     CHATWORK_API_TOKEN?: string;
     CHATWORK_ROOM_ID?: string;
     JWT_SECRET?: string;
+    GOOGLE_REFRESH_TOKEN?: string;
+    GOOGLE_CLIENT_ID?: string;
+    GOOGLE_CLIENT_SECRET?: string;
   };
   Variables: {
     staff: { id: string; name: string; role: 'owner' | 'admin' | 'staff'; assignedStores?: string[] };
