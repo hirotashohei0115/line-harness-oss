@@ -12,7 +12,7 @@ export const STORE_CALENDAR_IDS: Record<string, string> = {
   oita: '1c6dd28d46d8f4db9ed9899080770e6aa3ab1538eda6d280814518dc574bb7c9@group.calendar.google.com',
   gifu: 'daiwangifu2024@gmail.com',
   nagaoka: '7c091a61efb554fe43f6c253400cc2f45632be73848a3165b7d722d157ad7c93@group.calendar.google.com',
-  kizugawa: '',
+  kizugawa: 'daiwankizugawa@gmail.com',
 };
 
 async function getAccessToken(env: Env['Bindings']): Promise<string> {
