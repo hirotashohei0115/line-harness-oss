@@ -200,13 +200,11 @@ reservationRoutes.post('/api/reservations', async (c) => {
   try {
     const calendarId = STORE_CALENDAR_IDS[storeKey];
     if (calendarId && c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET && c.env.GOOGLE_REFRESH_TOKEN) {
-      // Build JST ISO datetime strings for start/end (1 hour slot)
+      // Build JST ISO datetime strings directly from date/time components
       const [hh, mm] = time.split(':').map(Number);
-      const startMs = Date.UTC(Number(y), Number(mo) - 1, Number(d), hh - 9, mm, 0);
-      const endMs = startMs + 60 * 60 * 1000;
-      const toIso = (ms: number) => new Date(ms).toISOString().replace('Z', '+09:00');
-      const startDateTime = toIso(startMs);
-      const endDateTime = toIso(endMs);
+      const startDateTime = `${date}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00+09:00`;
+      const endHh = hh + 1; // 1-hour slot; slots end by 20:30 so no midnight rollover
+      const endDateTime = `${date}T${String(endHh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00+09:00`;
 
       await createCalendarEvent(c.env, calendarId, {
         title: `【来店予約】${name}様 - リペアマスター${storeName}`,

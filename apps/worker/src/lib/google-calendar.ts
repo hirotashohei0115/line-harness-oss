@@ -16,6 +16,7 @@ export const STORE_CALENDAR_IDS: Record<string, string> = {
 };
 
 async function getAccessToken(env: Env['Bindings']): Promise<string> {
+  console.log('[Google Calendar] Refreshing access token...');
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -27,9 +28,12 @@ async function getAccessToken(env: Env['Bindings']): Promise<string> {
     }),
   });
   if (!res.ok) {
-    throw new Error(`Token refresh failed: ${res.status} ${await res.text()}`);
+    const body = await res.text();
+    console.error(`[Google Calendar] Token refresh failed: ${res.status} ${body}`);
+    throw new Error(`Token refresh failed: ${res.status} ${body}`);
   }
   const data = await res.json() as { access_token: string };
+  console.log('[Google Calendar] Access token obtained successfully');
   return data.access_token;
 }
 
@@ -43,32 +47,34 @@ export async function createCalendarEvent(
     description: string;
   },
 ): Promise<string | null> {
+  console.log(`[Google Calendar] Creating event on calendar: ${calendarId}`);
+  console.log(`[Google Calendar] Event: ${event.title} | ${event.startDateTime} ~ ${event.endDateTime}`);
   try {
     const accessToken = await getAccessToken(env);
-    const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          summary: event.title,
-          description: event.description,
-          start: { dateTime: event.startDateTime, timeZone: 'Asia/Tokyo' },
-          end: { dateTime: event.endDateTime, timeZone: 'Asia/Tokyo' },
-        }),
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        summary: event.title,
+        description: event.description,
+        start: { dateTime: event.startDateTime, timeZone: 'Asia/Tokyo' },
+        end: { dateTime: event.endDateTime, timeZone: 'Asia/Tokyo' },
+      }),
+    });
+    const responseText = await res.text();
     if (!res.ok) {
-      console.error(`Google Calendar API error: ${res.status} ${await res.text()}`);
+      console.error(`[Google Calendar] API error ${res.status}: ${responseText}`);
       return null;
     }
-    const data = await res.json() as { id: string };
+    const data = JSON.parse(responseText) as { id: string };
+    console.log(`[Google Calendar] Event created successfully: ${data.id}`);
     return data.id;
   } catch (err) {
-    console.error('createCalendarEvent error:', err);
+    console.error('[Google Calendar] createCalendarEvent error:', err);
     return null;
   }
 }
