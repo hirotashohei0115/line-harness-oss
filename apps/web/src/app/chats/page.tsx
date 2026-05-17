@@ -344,6 +344,7 @@ export default function ChatsPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
   const [messageContent, setMessageContent] = useState('')
+  const [pendingMessageType, setPendingMessageType] = useState('text')
   const [sending, setSending] = useState(false)
   const [notes, setNotes] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -674,8 +675,9 @@ export default function ChatsPage() {
     if (!selectedChatId || !messageContent.trim() || sending) return
     setSending(true)
     try {
-      await api.chats.send(selectedChatId, { content: messageContent.trim() })
+      await api.chats.send(selectedChatId, { content: messageContent.trim(), messageType: pendingMessageType })
       setMessageContent('')
+      setPendingMessageType('text')
       loadChatDetail(selectedChatId)
       loadChats()
     } catch {
@@ -1218,7 +1220,7 @@ export default function ChatsPage() {
                     {templates.map((t) => (
                       <button
                         key={t.id}
-                        onClick={() => { setMessageContent(t.messageContent); setShowTemplates(false) }}
+                        onClick={() => { setMessageContent(t.messageContent); setPendingMessageType(t.messageType || 'text'); setShowTemplates(false) }}
                         className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
                       >
                         <span className="font-medium text-gray-800">{t.name}</span>

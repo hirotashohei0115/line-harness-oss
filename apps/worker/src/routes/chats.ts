@@ -350,6 +350,15 @@ chats.post('/api/chats/:id/send', async (c) => {
     } else if (messageType === 'flex') {
       const contents = JSON.parse(body.content);
       await lineClient.pushFlexMessage(friend.line_user_id, extractFlexAltText(contents), contents);
+    } else if (messageType === 'image') {
+      await lineClient.pushMessage(friend.line_user_id, [{
+        type: 'image',
+        originalContentUrl: body.content,
+        previewImageUrl: body.content,
+      }]);
+    } else {
+      // Unknown type — fall back to text
+      await lineClient.pushTextMessage(friend.line_user_id, body.content);
     }
 
     // メッセージログに記録
