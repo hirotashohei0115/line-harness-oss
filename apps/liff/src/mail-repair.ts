@@ -15,6 +15,16 @@ declare const liff: {
 
 const API_URL = 'https://macbook-repair-worker.empower-repair.workers.dev';
 
+interface FormData {
+  lineUserId: string;
+  name: string;
+  postalCode: string;
+  address: string;
+  phone: string;
+  packagingKit: boolean;
+  deliveryStore: string;
+}
+
 function escapeHtml(str: string): string {
   const div = document.createElement('div');
   div.textContent = str;
@@ -56,6 +66,12 @@ function injectStyles(): void {
     }
     .mr-submit:active { opacity: 0.85; }
     .mr-submit:disabled { background: #bbb; cursor: not-allowed; }
+    .mr-back-btn {
+      width: 100%; padding: 13px; border: 1.5px solid #ccc; border-radius: 8px;
+      background: #fff; color: #555; font-size: 15px; font-weight: 600;
+      cursor: pointer; font-family: inherit; margin-top: 10px; transition: background 0.15s;
+    }
+    .mr-back-btn:active { background: #f5f5f5; }
     .mr-error { color: #e53e3e; font-size: 13px; margin: 8px 0; text-align: center; }
     .mr-success { text-align: center; padding: 48px 20px; }
     .mr-success .icon {
@@ -70,6 +86,21 @@ function injectStyles(): void {
       border-radius: 50%; animation: mr-spin 0.8s linear infinite; margin: 0 auto 16px;
     }
     @keyframes mr-spin { to { transform: rotate(360deg); } }
+    .mr-terms-box {
+      height: 320px; overflow-y: auto; border: 1.5px solid #e0e0e0; border-radius: 8px;
+      padding: 14px; background: #fafafa; font-size: 12px; color: #444; line-height: 1.75;
+      white-space: pre-wrap; margin-bottom: 16px;
+    }
+    .mr-terms-box h3 { font-size: 13px; font-weight: 700; color: #222; margin: 12px 0 4px; }
+    .mr-terms-box h3:first-child { margin-top: 0; }
+    .mr-checkbox-wrap {
+      display: flex; align-items: flex-start; gap: 10px; margin-bottom: 20px;
+      padding: 14px; background: #f0faf3; border-radius: 8px; border: 1.5px solid #b2dfb9;
+    }
+    .mr-checkbox-wrap input[type="checkbox"] {
+      width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; accent-color: #06C755; cursor: pointer;
+    }
+    .mr-checkbox-wrap label { font-size: 14px; font-weight: 600; color: #1a5c2e; cursor: pointer; line-height: 1.5; }
   `;
   document.head.appendChild(style);
 }
@@ -137,10 +168,106 @@ function renderForm(displayName: string): void {
         </div>
 
         <div id="mr-form-error"></div>
-        <button type="submit" class="mr-submit" id="mr-submit-btn">依頼を確定する</button>
+        <button type="submit" class="mr-submit" id="mr-submit-btn">次へ →</button>
       </form>
     </div>
   `;
+}
+
+const TERMS_TEXT = `【利用規約】
+ご利用規約
+1.修理サービス
+①当社の修理サービスはお客様からお預かりした機器等をお客様ご指摘の症状に対して復旧・改善するよう修理又はお客様ご指定の作業を承り行う事を目的とします。又、機器本体が購入時のような正常な状態になく経年劣化等による一定ダメージを受けている場合、分解によって端末の症状が悪化したり起動しなくなる可能性が考えられます。その場合、修理作業や部品状態に瑕疵または過失がある場合を除いて、お客様又は機器等の所有者に損害が生じたとしても、当店は一切の損害賠償義務を負わないものといたします。
+②当社は、機器等を確認し、当サービスの提供が可能かどうか診断いたします。当該診断については、当社で決定し、お客様は当該決定に対して異議を申し立てないものといたします。また、当サービスの提供が不可能と判断した場合は、診断費用（税込5,500円）及び返送料は、お客様の負担といたします。
+③パーツの取り寄せが必要となる修理において、当社がパーツの注文後に、お客様都合によりお申し込みキャンセルとなった場合は、キャンセル料として10,000円をお支払いいただきます。
+2.時間目安
+・提示する修理時間は当店実績をもとにした目安であり、機器の状態によっては修理時間が想定より長くなる場合があります。
+3.部品交換について
+①当サービスによる部品の交換を行った場合、当該交換後の機器から取り外した部品の所有権はすべて当社に帰属するものとし、当社にて処分することにお客様は異議を申し立てません。
+②当サービスによる部品はメーカー純正部品又はメーカー純正部品以外の汎用部品、リユース部品（再使用品）を使用します。
+4.保証と保管期限
+・修理完了後、交換した部品の不具合又は当社の作業内容の不備による不具合が発生した場合、90日以内にお客様からのお申し出があった場合に限り、無償で修理対応させていただきます。
+・交換した部品の動作に不具合又は当社の作業内容の不備による不具合とは別の原因で不具合が発生する場合には、再度、正規料金を頂いて対応いたします。
+・修理依頼品の保管期限は、修理完了連絡日より90日間とさせていただきます。修理完了連絡日より90日が経過しお客様との連絡が取れない場合、当社からお客様へ廃棄をする旨の通知を行った上、廃棄処分させていただきます。この廃棄処分によりお客様に損害が生じたとしても、当社は一切の損害賠償義務を負わないものといたします。
+・当サービスが原因でメーカーや販売店の保証が受けられなくなった場合や、作業時間の大幅な遅延等の原因でお客様に何らかの損害が生じた場合も、当社は一切責任を負わないものといたします。
+5.機器等の発送
+機器等の発送については、自己責任にて梱包・発送をお願いいたします。梱包・発送の方法がご不明な場合は、以下の当社のお問合せ窓口までお尋ね下さい。送料は当社からの返送費用も含めてお客様負担となります。
+【当社お問合せ窓口】
+・電話番号：070-1391-9861
+6.個人情報の取扱
+・取得した個人情報につきましては、修理サービス（サービスに関する情報提供・発送案内・ご注文に関するお知らせ等）以外には使用いたしません。
+
+【プライバシーポリシー】
+エンパワーメント株式会社では、パソコン（当該機器等の附属部品を含みます。）宅配修理サービス「リペアマスター」（以下、「当サービス」といいます。）の運営に際し、お客様のプライバシーを尊重し、個人情報に対して十分な配慮を行うと共に大切に保護し、適正な管理を行う為、以下のとおりプライバシーポリシーを定めます。
+
+1,法令等の遵守
+弊社は、お客様等の個人情報の取得、利用その他一切の取り扱いについて、個人情報の保護に関する法律、個人情報保護に関するガイドライン及びこのプライバシーポリシーを遵守します。
+
+2,個人情報利用目的
+お客様の個人情報は、原則として、当サービスに関する情報をご提供する目的や発送案内、ご注文に関するお知らせ、当社に対するご意見、ご要望に関する今後の改善、及び、問い合せに関するご回答等のために利用致します。
+
+3,第三者への情報提供
+お客様の個人情報は、以下の場合を除き第三者に開示、提供、譲渡、することは致しません。
+・当社の業務委託先（運送会社等）、業務遂行上必要な場合
+・法的拘束力がある第三者機関からの開示要求がある場合
+・お客様本人の同意があった場合
+
+4,個人情報の開示・訂正・削除について
+お客様ご自身の個人情報の開示・訂正・追加・削除・消去については、そのお客様からお申し出があった場合、ご本人確認の手続きをとらせていただいた上で、無料にて行わせていただきます。
+
+5,安全管理の実施
+当社は、個人情報への不正アクセス、個人情報の改竄及び漏洩等を防止するために適切な安全対策を行います。当社は、万が一個人情報の漏洩等があった場合は、速やかに適切な措置を講じます。
+
+6,個人情報に関するご連絡先／お問い合わせ先／苦情受付
+お客様等が個人情報の利用目的の通知、個人情報の開示、訂正、追加あるいは削除をご希望される場合、または個人情報の利用あるいは第三者への提供の停止を希望される場合は、下記にお問合せください。
+
+「お問合せ窓口」
+電話番号：070-1391-9861
+メールアドレス：info@repair-master.jp
+
+制定日：2025年5月23日`;
+
+function renderTerms(data: FormData, displayName: string): void {
+  injectStyles();
+  getApp().innerHTML = `
+    <div class="mr-page">
+      <div class="mr-header">
+        <h1>📋 利用規約・プライバシーポリシー</h1>
+        <p>${escapeHtml(displayName)} さん</p>
+      </div>
+      <div class="mr-body">
+        <div class="mr-terms-box" id="mr-terms-text">${escapeHtml(TERMS_TEXT)}</div>
+        <div class="mr-checkbox-wrap">
+          <input type="checkbox" id="mr-agree" />
+          <label for="mr-agree">利用規約およびプライバシーポリシーに同意する</label>
+        </div>
+        <div id="mr-terms-error"></div>
+        <button class="mr-submit" id="mr-confirm-btn" disabled>依頼を確定する</button>
+        <button class="mr-back-btn" id="mr-back-btn">← 戻る</button>
+      </div>
+    </div>
+  `;
+
+  const checkbox = document.getElementById('mr-agree') as HTMLInputElement;
+  const confirmBtn = document.getElementById('mr-confirm-btn') as HTMLButtonElement;
+  const backBtn = document.getElementById('mr-back-btn') as HTMLButtonElement;
+
+  checkbox.addEventListener('change', () => {
+    confirmBtn.disabled = !checkbox.checked;
+  });
+
+  confirmBtn.addEventListener('click', () => {
+    void handleSubmit(data, confirmBtn);
+  });
+
+  backBtn.addEventListener('click', () => {
+    renderForm(displayName);
+    const form = document.getElementById('mr-form');
+    form?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      void handleNext(data.lineUserId, displayName);
+    });
+  });
 }
 
 function renderSuccess(): void {
@@ -154,7 +281,6 @@ function renderSuccess(): void {
       </div>
     </div>
   `;
-  // LINE アプリ内なら3秒後に自動クローズ
   if (liff.isInClient()) {
     setTimeout(() => {
       try { liff.closeWindow(); } catch { /* ignore */ }
@@ -178,8 +304,12 @@ function showFormError(msg: string): void {
   if (el) el.innerHTML = `<p class="mr-error">${escapeHtml(msg)}</p>`;
 }
 
-async function handleSubmit(lineUserId: string): Promise<void> {
-  const btn = document.getElementById('mr-submit-btn') as HTMLButtonElement;
+function showTermsError(msg: string): void {
+  const el = document.getElementById('mr-terms-error');
+  if (el) el.innerHTML = `<p class="mr-error">${escapeHtml(msg)}</p>`;
+}
+
+async function handleNext(lineUserId: string, displayName: string): Promise<void> {
   const name = (document.getElementById('mr-name') as HTMLInputElement)?.value.trim();
   const postalCode = (document.getElementById('mr-postal') as HTMLInputElement)?.value.trim();
   const address = (document.getElementById('mr-address') as HTMLInputElement)?.value.trim();
@@ -194,6 +324,20 @@ async function handleSubmit(lineUserId: string): Promise<void> {
   if (!packagingKitRaw) { showFormError('梱包キットを選択してください'); return; }
   if (!deliveryStore) { showFormError('配送先店舗を選択してください'); return; }
 
+  const data: FormData = {
+    lineUserId,
+    name,
+    postalCode,
+    address,
+    phone,
+    packagingKit: packagingKitRaw === 'true',
+    deliveryStore,
+  };
+
+  renderTerms(data, displayName);
+}
+
+async function handleSubmit(data: FormData, btn: HTMLButtonElement): Promise<void> {
   btn.disabled = true;
   btn.textContent = '送信中...';
 
@@ -201,27 +345,19 @@ async function handleSubmit(lineUserId: string): Promise<void> {
     const res = await fetch(`${API_URL}/api/repair/mail-orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        lineUserId,
-        name,
-        postalCode,
-        address,
-        phone,
-        packagingKit: packagingKitRaw === 'true',
-        deliveryStore,
-      }),
+      body: JSON.stringify(data),
     });
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({})) as { error?: string };
-      throw new Error(data.error || `エラー（${res.status}）`);
+      const json = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(json.error || `エラー（${res.status}）`);
     }
 
     renderSuccess();
   } catch (err) {
     btn.disabled = false;
     btn.textContent = '依頼を確定する';
-    showFormError(err instanceof Error ? err.message : '送信に失敗しました');
+    showTermsError(err instanceof Error ? err.message : '送信に失敗しました');
   }
 }
 
@@ -235,7 +371,7 @@ export async function initMailRepair(): Promise<void> {
     const form = document.getElementById('mr-form');
     form?.addEventListener('submit', (e) => {
       e.preventDefault();
-      void handleSubmit(profile.userId);
+      void handleNext(profile.userId, profile.displayName);
     });
   } catch (err) {
     renderError(err instanceof Error ? err.message : 'プロフィール取得エラー');
