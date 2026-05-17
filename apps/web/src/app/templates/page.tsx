@@ -71,6 +71,7 @@ export default function TemplatesPage() {
   })
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
   const [editName, setEditName] = useState('')
   const [editContent, setEditContent] = useState('')
@@ -104,6 +105,19 @@ export default function TemplatesPage() {
     new Set(templates.map((t) => t.category).filter(Boolean))
   )
 
+  const handleImageFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      setImagePreview(dataUrl)
+      setForm(prev => ({ ...prev, messageContent: dataUrl }))
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
   const handleCreate = async () => {
     if (!form.name.trim()) {
       setFormError('テンプレート名を入力してください')
@@ -114,8 +128,14 @@ export default function TemplatesPage() {
       return
     }
     if (!form.messageContent.trim()) {
-      setFormError('メッセージ内容を入力してください')
+      setFormError(form.messageType === 'image' ? '画像を選択してください' : 'メッセージ内容を入力してください')
       return
+    }
+    if (form.messageType === 'flex') {
+      try { JSON.parse(form.messageContent) } catch {
+        setFormError('有効なJSON形式で入力してください')
+        return
+      }
     }
     setSaving(true)
     setFormError('')
@@ -129,6 +149,7 @@ export default function TemplatesPage() {
       if (res.success) {
         setShowCreate(false)
         setForm({ name: '', category: '', messageType: 'text', messageContent: '' })
+        setImagePreview(null)
         load()
       } else {
         setFormError(res.error)
@@ -313,23 +334,68 @@ export default function TemplatesPage() {
               <select
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
                 value={form.messageType}
-                onChange={(e) => setForm({ ...form, messageType: e.target.value })}
+                onChange={(e) => { setForm({ ...form, messageType: e.target.value, messageContent: '' }); setImagePreview(null) }}
               >
                 <option value="text">テキスト</option>
                 <option value="image">画像</option>
                 <option value="flex">Flex</option>
               </select>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">メッセージ内容 <span className="text-red-500">*</span></label>
-              <textarea
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
-                rows={4}
-                placeholder="メッセージ内容を入力してください"
-                value={form.messageContent}
-                onChange={(e) => setForm({ ...form, messageContent: e.target.value })}
-              />
-            </div>
+
+            {/* メッセージ内容（タイプ別） */}
+            {form.messageType === 'text' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">メッセージ内容 <span className="text-red-500">*</span></label>
+                <textarea
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                  rows={4}
+                  placeholder="メッセージ内容を入力してください"
+                  value={form.messageContent}
+                  onChange={(e) => setForm({ ...form, messageContent: e.target.value })}
+                />
+              </div>
+            )}
+
+            {form.messageType === 'flex' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Flex JSON <span className="text-red-500">*</span>
+                  <span className="ml-1 text-gray-400 font-normal">（bubbleまたはcarouselのJSONを入力）</span>
+                </label>
+                <textarea
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none font-mono"
+                  rows={8}
+                  placeholder={'{\n  "type": "bubble",\n  "body": { ... },\n  "footer": { ... }\n}'}
+                  value={form.messageContent}
+                  onChange={(e) => setForm({ ...form, messageContent: e.target.value })}
+                />
+                {form.messageContent && (() => {
+                  try { JSON.parse(form.messageContent); return <p className="text-xs text-green-600 mt-1">✓ 有効なJSON</p> }
+                  catch { return <p className="text-xs text-red-500 mt-1">⚠ JSONが無効です</p> }
+                })()}
+              </div>
+            )}
+
+            {form.messageType === 'image' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">画像 <span className="text-red-500">*</span></label>
+                {imagePreview ? (
+                  <div className="relative inline-block mb-2">
+                    <img src={imagePreview} alt="プレビュー" className="max-h-40 rounded-lg border border-gray-200" />
+                    <button
+                      type="button"
+                      onClick={() => { setImagePreview(null); setForm(prev => ({ ...prev, messageContent: '' })) }}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gray-600 text-white rounded-full text-xs flex items-center justify-center hover:bg-gray-800"
+                    >×</button>
+                  </div>
+                ) : null}
+                <label className="flex items-center gap-2 cursor-pointer w-fit px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                  📎 画像を選択
+                  <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={handleImageFileSelect} />
+                </label>
+                <p className="text-xs text-gray-400 mt-1">JPG / PNG / GIF（Base64として保存されます）</p>
+              </div>
+            )}
 
             {formError && <p className="text-xs text-red-600">{formError}</p>}
 
@@ -343,7 +409,7 @@ export default function TemplatesPage() {
                 {saving ? '作成中...' : '作成'}
               </button>
               <button
-                onClick={() => { setShowCreate(false); setFormError('') }}
+                onClick={() => { setShowCreate(false); setFormError(''); setImagePreview(null) }}
                 className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 キャンセル
