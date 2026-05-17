@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
 import Header from '@/components/layout/header'
 import CcPromptButton from '@/components/cc-prompt-button'
+import FlexPreviewComponent from '@/components/flex-preview'
 
 interface Template {
   id: string
@@ -26,6 +27,65 @@ interface CreateFormState {
   category: string
   messageType: string
   messageContent: string
+}
+
+function LinePreviewPanel({ messageType, content }: { messageType: string; content: string }) {
+  const hasContent = content.trim().length > 0
+
+  let messageEl: React.ReactNode = null
+  if (!hasContent) {
+    messageEl = <p className="text-xs text-center text-white/60 mt-8 px-2">メッセージを入力すると<br />プレビューが表示されます</p>
+  } else if (messageType === 'text') {
+    messageEl = (
+      <div className="flex justify-end">
+        <div className="max-w-[75%] px-3 py-2 text-sm text-white whitespace-pre-wrap break-words"
+             style={{ backgroundColor: '#06C755', borderRadius: '18px 4px 18px 18px' }}>
+          {content}
+        </div>
+      </div>
+    )
+  } else if (messageType === 'flex') {
+    let valid = true
+    try { JSON.parse(content) } catch { valid = false }
+    messageEl = valid
+      ? <div className="flex justify-end"><FlexPreviewComponent content={content} maxWidth={240} /></div>
+      : <p className="text-xs text-center text-red-300 mt-4 px-2">プレビューできません（JSONエラー）</p>
+  } else if (messageType === 'image') {
+    if (content.startsWith('data:image/') || content.startsWith('http')) {
+      messageEl = (
+        <div className="flex justify-end">
+          <img src={content} alt="プレビュー" className="max-w-[75%] rounded-xl" />
+        </div>
+      )
+    }
+  }
+
+  return (
+    <div className="sticky top-4 flex-shrink-0" style={{ width: '280px' }}>
+      <p className="text-xs font-medium text-gray-500 mb-2 text-center">プレビュー</p>
+      <div className="rounded-2xl overflow-hidden shadow-lg border-4 border-gray-800">
+        {/* Smartphone status bar */}
+        <div className="bg-gray-800 px-4 py-1.5 flex items-center justify-between">
+          <span className="text-white text-[10px]">9:41</span>
+          <div className="flex gap-1">
+            <div className="w-1 h-1 rounded-full bg-white" />
+            <div className="w-1 h-1 rounded-full bg-white" />
+            <div className="w-1 h-1 rounded-full bg-white" />
+          </div>
+        </div>
+        {/* LINE chat header */}
+        <div className="bg-gray-100 px-3 py-2 border-b border-gray-200 flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
+               style={{ backgroundColor: '#06C755' }}>H</div>
+          <span className="text-xs font-semibold text-gray-800 flex-1">LINE Harness</span>
+        </div>
+        {/* Chat body */}
+        <div className="p-3 space-y-2 min-h-[280px]" style={{ backgroundColor: '#B2C8BA' }}>
+          {messageEl}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function formatDate(iso: string): string {
@@ -260,9 +320,10 @@ export default function TemplatesPage() {
       {/* Edit modal */}
       {editingTemplate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingTemplate(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 p-6" onClick={e => e.stopPropagation()}>
             <h2 className="text-sm font-semibold text-gray-800 mb-4">テンプレートを編集</h2>
-            <div className="space-y-4">
+            <div className="flex gap-8 items-start">
+            <div className="flex-1 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">テンプレート名 <span className="text-red-500">*</span></label>
                 <input
@@ -300,6 +361,8 @@ export default function TemplatesPage() {
                 </button>
               </div>
             </div>
+            <LinePreviewPanel messageType={editingTemplate.messageType} content={editContent} />
+            </div>
           </div>
         </div>
       )}
@@ -308,7 +371,8 @@ export default function TemplatesPage() {
       {showCreate && (
         <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-sm font-semibold text-gray-800 mb-4">新規テンプレートを作成</h2>
-          <div className="space-y-4 max-w-lg">
+          <div className="flex gap-8 items-start">
+          <div className="flex-1 space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">テンプレート名 <span className="text-red-500">*</span></label>
               <input
@@ -415,6 +479,8 @@ export default function TemplatesPage() {
                 キャンセル
               </button>
             </div>
+          </div>
+          <LinePreviewPanel messageType={form.messageType} content={form.messageContent} />
           </div>
         </div>
       )}
