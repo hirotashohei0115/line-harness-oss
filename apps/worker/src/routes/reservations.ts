@@ -203,12 +203,22 @@ reservationRoutes.post('/api/reservations', async (c) => {
       // Fetch latest repair quote for this friend
       const quote = friend?.id
         ? await c.env.DB
-            .prepare('SELECT price, delivery_days FROM repair_quotes WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1')
+            .prepare('SELECT price_from, price_to, delivery_days_from, delivery_days_to FROM repair_quotes WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1')
             .bind(friend.id)
-            .first<{ price: number | null; delivery_days: number | null }>()
+            .first<{ price_from: number | null; price_to: number | null; delivery_days_from: number | null; delivery_days_to: number | null }>()
         : null;
-      const priceText = quote?.price != null ? `${quote.price.toLocaleString()}円` : '未見積もり';
-      const deliveryText = quote?.delivery_days != null ? `${quote.delivery_days}日` : '未定';
+      let priceText = '未見積もり';
+      if (quote?.price_from != null && quote.price_to != null) {
+        priceText = `${quote.price_from.toLocaleString()}〜${quote.price_to.toLocaleString()}円`;
+      } else if (quote?.price_from != null) {
+        priceText = `${quote.price_from.toLocaleString()}円〜`;
+      }
+      let deliveryText = '未定';
+      if (quote?.delivery_days_from != null && quote.delivery_days_to != null) {
+        deliveryText = `${quote.delivery_days_from}〜${quote.delivery_days_to}日`;
+      } else if (quote?.delivery_days_from != null) {
+        deliveryText = `${quote.delivery_days_from}日〜`;
+      }
 
       const [hh, mm] = time.split(':').map(Number);
       const startDateTime = `${date}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00+09:00`;

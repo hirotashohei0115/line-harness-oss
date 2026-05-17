@@ -160,23 +160,22 @@ function renderStep1() {
 
 function getDates(): { dateStr: string; label: string; dayIdx: number }[] {
   const dates = [];
-  // Use JST-based "today" by calculating from UTC + 9h offset
-  const nowMs = Date.now() + 9 * 60 * 60 * 1000;
-  const jstToday = new Date(nowMs);
-  const baseYear = jstToday.getUTCFullYear();
-  const baseMonth = jstToday.getUTCMonth();
-  const baseDay = jstToday.getUTCDate();
+  const now = new Date();
+  const jstOffset = 9 * 60; // minutes
+  // Adjust to JST regardless of device timezone
+  const jstDate = new Date(now.getTime() + (jstOffset - now.getTimezoneOffset()) * 60000);
 
-  for (let i = 0; i <= 30; i++) {
-    // Always construct from UTC noon to avoid DST edge cases
-    const d = new Date(Date.UTC(baseYear, baseMonth, baseDay + i, 3, 0, 0));
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
+  for (let i = 0; i < 31; i++) {
+    const d = new Date(jstDate);
+    d.setDate(jstDate.getDate() + i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dayIdx = d.getDay();
     dates.push({
       dateStr: `${y}-${m}-${day}`,
-      label: `${Number(m)}/${Number(day)}（${DAY_LABELS[d.getUTCDay()]}）`,
-      dayIdx: d.getUTCDay(),
+      label: `${Number(m)}/${Number(day)}（${DAY_LABELS[dayIdx]}）`,
+      dayIdx,
     });
   }
   return dates;
