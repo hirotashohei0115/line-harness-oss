@@ -134,10 +134,20 @@ crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
       }
     }
 
-    // Row totals (axis1 condition only, regardless of axis2)
+    // Row totals: axis1 AND (axis2_1 OR axis2_2 OR ...)
     const rowTotals: Record<string, number> = {};
+    const a2Conditions = axis2.itemIds.map((a2Id) => buildItemCondition(axis2.type, a2Id));
+    const a2OrSql = a2Conditions.map((c) => c.sql).join(' OR ');
+    const a2OrParams = a2Conditions.flatMap((c) => c.params);
     for (const a1Id of axis1.itemIds) {
-      rowTotals[a1Id] = await countUsers(c.env.DB, fromTs, toTs, buildItemCondition(axis1.type, a1Id));
+      const a1Cond = buildItemCondition(axis1.type, a1Id);
+      const conditions = ['f.created_at >= ?', 'f.created_at <= ?', a1Cond.sql, `(${a2OrSql})`];
+      const params: unknown[] = [fromTs, toTs, ...a1Cond.params, ...a2OrParams];
+      const row = await c.env.DB
+        .prepare(`SELECT COUNT(DISTINCT f.id) as count FROM friends f WHERE ${conditions.join(' AND ')}`)
+        .bind(...params)
+        .first<{ count: number }>();
+      rowTotals[a1Id] = row?.count ?? 0;
     }
 
     // Col totals (axis2 condition only, regardless of axis1)
