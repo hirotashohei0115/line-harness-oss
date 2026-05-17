@@ -345,6 +345,7 @@ export default function ChatsPage() {
   const [error, setError] = useState('')
   const [messageContent, setMessageContent] = useState('')
   const [pendingMessageType, setPendingMessageType] = useState('text')
+  const [pendingImage, setPendingImage] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [notes, setNotes] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -655,6 +656,8 @@ export default function ChatsPage() {
     isAtBottomRef.current = true
     setSelectedChatId(chatId)
     setMessageContent('')
+    setPendingImage(null)
+    setPendingMessageType('text')
     setReadConfirmed(false)
   }
 
@@ -672,12 +675,18 @@ export default function ChatsPage() {
   }
 
   const handleSendMessage = async () => {
-    if (!selectedChatId || !messageContent.trim() || sending) return
+    if (!selectedChatId || sending) return
+    if (!messageContent.trim() && !pendingImage) return
     setSending(true)
     try {
-      await api.chats.send(selectedChatId, { content: messageContent.trim(), messageType: pendingMessageType })
-      setMessageContent('')
-      setPendingMessageType('text')
+      if (pendingImage) {
+        await api.chats.send(selectedChatId, { content: pendingImage, messageType: 'image' })
+        setPendingImage(null)
+      } else {
+        await api.chats.send(selectedChatId, { content: messageContent.trim(), messageType: pendingMessageType })
+        setMessageContent('')
+        setPendingMessageType('text')
+      }
       loadChatDetail(selectedChatId)
       loadChats()
     } catch {
@@ -685,6 +694,15 @@ export default function ChatsPage() {
     } finally {
       setSending(false)
     }
+  }
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setPendingImage(reader.result as string)
+    reader.readAsDataURL(file)
+    e.target.value = ''
   }
 
   const handleStatusUpdate = async (newStatus: Chat['status']) => {
@@ -1232,7 +1250,22 @@ export default function ChatsPage() {
                 {showTemplates && templates.length === 0 && (
                   <p className="mb-2 text-xs text-gray-400 text-center">テンプレートがありません</p>
                 )}
+                {/* 画像プレビュー */}
+                {pendingImage && (
+                  <div className="mb-2 relative inline-block">
+                    <img src={pendingImage} alt="プレビュー" className="max-h-32 rounded-lg border border-gray-200" />
+                    <button
+                      onClick={() => setPendingImage(null)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-gray-600 text-white rounded-full text-xs flex items-center justify-center hover:bg-gray-800"
+                    >×</button>
+                  </div>
+                )}
                 <div className="flex items-start gap-2">
+                  {/* 📎 画像添付 */}
+                  <label className="flex-shrink-0 px-2 py-2 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mt-0.5 cursor-pointer" title="画像を添付">
+                    📎
+                    <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={handleImageSelect} />
+                  </label>
                   <button
                     onClick={() => setShowTemplates((v) => !v)}
                     className="flex-shrink-0 px-2 py-2 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mt-0.5"
@@ -1252,7 +1285,7 @@ export default function ChatsPage() {
                   />
                   <button
                     onClick={handleSendMessage}
-                    disabled={sending || !messageContent.trim()}
+                    disabled={sending || (!messageContent.trim() && !pendingImage)}
                     className="flex-shrink-0 px-4 py-2 text-sm font-medium text-white rounded-lg transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed mt-0.5"
                     style={{ backgroundColor: '#06C755' }}
                   >

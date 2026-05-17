@@ -351,11 +351,18 @@ chats.post('/api/chats/:id/send', async (c) => {
       const contents = JSON.parse(body.content);
       await lineClient.pushFlexMessage(friend.line_user_id, extractFlexAltText(contents), contents);
     } else if (messageType === 'image') {
-      await lineClient.pushMessage(friend.line_user_id, [{
-        type: 'image',
-        originalContentUrl: body.content,
-        previewImageUrl: body.content,
-      }]);
+      const isBase64 = body.content.startsWith('data:image/');
+      if (isBase64) {
+        // R2未設定のため、LINEにはテキスト通知のみ（管理画面では画像表示）
+        await lineClient.pushTextMessage(friend.line_user_id, '[画像が送信されました]');
+      } else {
+        // 外部URL（HTTPS）の場合は直接LINE画像メッセージとして送信
+        await lineClient.pushMessage(friend.line_user_id, [{
+          type: 'image',
+          originalContentUrl: body.content,
+          previewImageUrl: body.content,
+        }]);
+      }
     } else {
       // Unknown type — fall back to text
       await lineClient.pushTextMessage(friend.line_user_id, body.content);
