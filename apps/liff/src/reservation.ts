@@ -167,7 +167,7 @@ function getDates(): { dateStr: string; label: string; dayIdx: number }[] {
   const baseMonth = jstToday.getUTCMonth();
   const baseDay = jstToday.getUTCDate();
 
-  for (let i = 1; i <= 30; i++) {
+  for (let i = 0; i <= 30; i++) {
     // Always construct from UTC noon to avoid DST edge cases
     const d = new Date(Date.UTC(baseYear, baseMonth, baseDay + i, 3, 0, 0));
     const y = d.getUTCFullYear();

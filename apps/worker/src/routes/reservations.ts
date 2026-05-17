@@ -200,17 +200,26 @@ reservationRoutes.post('/api/reservations', async (c) => {
   try {
     const calendarId = STORE_CALENDAR_IDS[storeKey];
     if (calendarId && c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET && c.env.GOOGLE_REFRESH_TOKEN) {
-      // Build JST ISO datetime strings directly from date/time components
+      // Fetch latest repair quote for this friend
+      const quote = friend?.id
+        ? await c.env.DB
+            .prepare('SELECT price, delivery_days FROM repair_quotes WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1')
+            .bind(friend.id)
+            .first<{ price: number | null; delivery_days: number | null }>()
+        : null;
+      const priceText = quote?.price != null ? `${quote.price.toLocaleString()}円` : '未見積もり';
+      const deliveryText = quote?.delivery_days != null ? `${quote.delivery_days}日` : '未定';
+
       const [hh, mm] = time.split(':').map(Number);
       const startDateTime = `${date}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00+09:00`;
-      const endHh = hh + 1; // 1-hour slot; slots end by 20:30 so no midnight rollover
+      const endHh = hh + 1;
       const endDateTime = `${date}T${String(endHh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00+09:00`;
 
       await createCalendarEvent(c.env, calendarId, {
         title: `【来店予約】${name}様 - リペアマスター${storeName}`,
         startDateTime,
         endDateTime,
-        description: `お名前：${name}\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n店舗：リペアマスター${storeName}`,
+        description: `お名前：${name}\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n修理費用：${priceText}\n納期目安：${deliveryText}`,
       });
     }
   } catch (err) {
