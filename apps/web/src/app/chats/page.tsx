@@ -432,7 +432,7 @@ export default function ChatsPage() {
       try {
         const query = selectedAccountId ? `?accountId=${encodeURIComponent(selectedAccountId)}` : ''
         const res = await fetchApi<{ success: boolean; data: Template[] }>(`/api/templates${query}`)
-        if (res.success) setTemplates(res.data.filter((t) => t.messageType === 'text'))
+        if (res.success) setTemplates(res.data)
       } catch { /* silent */ }
     }
     loadTemplates()
