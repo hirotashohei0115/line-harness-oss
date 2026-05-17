@@ -345,6 +345,9 @@ chats.post('/api/chats/:id/send', async (c) => {
     const lineClient = new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN);
     const messageType = body.messageType ?? 'text';
 
+    // メッセージIDを先に確定（base64画像はURLに埋め込むため）
+    const logId = crypto.randomUUID();
+
     if (messageType === 'text') {
       await lineClient.pushTextMessage(friend.line_user_id, body.content);
     } else if (messageType === 'flex') {
@@ -353,8 +356,14 @@ chats.post('/api/chats/:id/send', async (c) => {
     } else if (messageType === 'image') {
       const isBase64 = body.content.startsWith('data:image/');
       if (isBase64) {
-        // R2未設定のため、LINEにはテキスト通知のみ（管理画面では画像表示）
-        await lineClient.pushTextMessage(friend.line_user_id, '[画像が送信されました]');
+        // Worker経由で画像を配信するURLを生成してLINEに送信
+        const workerOrigin = c.env.WORKER_URL || new URL(c.req.url).origin;
+        const imageUrl = `${workerOrigin}/api/images/${logId}`;
+        await lineClient.pushMessage(friend.line_user_id, [{
+          type: 'image',
+          originalContentUrl: imageUrl,
+          previewImageUrl: imageUrl,
+        }]);
       } else {
         // 外部URL（HTTPS）の場合は直接LINE画像メッセージとして送信
         await lineClient.pushMessage(friend.line_user_id, [{
@@ -364,12 +373,10 @@ chats.post('/api/chats/:id/send', async (c) => {
         }]);
       }
     } else {
-      // Unknown type — fall back to text
       await lineClient.pushTextMessage(friend.line_user_id, body.content);
     }
 
     // メッセージログに記録
-    const logId = crypto.randomUUID();
     await c.env.DB
       .prepare(`INSERT INTO messages_log (id, friend_id, direction, message_type, content, created_at) VALUES (?, ?, 'outgoing', ?, ?, ?)`)
       .bind(logId, friend.id, messageType, body.content, jstNow())
@@ -383,6 +390,38 @@ chats.post('/api/chats/:id/send', async (c) => {
     console.error('POST /api/chats/:id/send error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
+});
+
+// GET /api/images/:messageId — public, serves base64 image as binary for LINE
+chats.get('/api/images/:messageId', async (c) => {
+  const messageId = c.req.param('messageId');
+  const row = await c.env.DB
+    .prepare('SELECT content, message_type FROM messages_log WHERE id = ? LIMIT 1')
+    .bind(messageId)
+    .first<{ content: string; message_type: string }>();
+
+  if (!row || row.message_type !== 'image' || !row.content.startsWith('data:image/')) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  const commaIdx = row.content.indexOf(',');
+  const header = row.content.slice(0, commaIdx);         // "data:image/jpeg;base64"
+  const base64Data = row.content.slice(commaIdx + 1);    // "/9j/4AAQ..."
+  const mimeType = header.split(':')[1]?.split(';')[0] ?? 'image/jpeg';
+
+  const binaryStr = atob(base64Data);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+
+  return new Response(bytes, {
+    headers: {
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=86400',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
 });
 
 export { chats };

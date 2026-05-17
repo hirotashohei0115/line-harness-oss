@@ -68,7 +68,8 @@ export async function authMiddleware(c: Context<Env>, next: Next): Promise<Respo
     path.match(/^\/api\/webhooks\/incoming\/[^/]+\/receive$/) ||
     path.match(/^\/api\/forms\/[^/]+\/submit$/) ||
     path.match(/^\/api\/forms\/[^/]+$/) ||
-    path.match(/^\/api\/messages\/[^/]+\/content$/)
+    path.match(/^\/api\/messages\/[^/]+\/content$/) ||
+    path.match(/^\/api\/images\/[^/]+$/)
   ) {
     return next();
   }

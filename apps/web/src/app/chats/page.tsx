@@ -62,28 +62,37 @@ function getMarkTextColor(bgColor: string): string {
 
 const WORKER_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
 
-function getImageSrc(content: string): string | null {
+function getImageSrc(content: string): { type: 'dataurl' | 'url'; src: string } | null {
   try {
     const parsed = JSON.parse(content)
-    if (parsed.messageId) return `${WORKER_API_URL}/api/messages/${parsed.messageId}/content`
-    return parsed.originalContentUrl || parsed.previewImageUrl || null
+    if (parsed.messageId) return { type: 'url', src: `${WORKER_API_URL}/api/messages/${parsed.messageId}/content` }
+    const url = parsed.originalContentUrl || parsed.previewImageUrl
+    if (url) return { type: 'url', src: url }
   } catch { /* not JSON */ }
-  if (content.startsWith('http')) return content
+  if (content.startsWith('data:image/')) return { type: 'dataurl', src: content }
+  if (content.startsWith('http')) return { type: 'url', src: content }
   return null
 }
 
 // JS fetch → blob URL で表示（<img src> のクロスオリジン問題を回避）
 function ImageBubble({ content }: { content: string }) {
-  const src = getImageSrc(content)
+  const imgSrc = getImageSrc(content)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
+  // base64 data URLs can be displayed directly without fetch
+  if (imgSrc?.type === 'dataurl') {
+    return <img src={imgSrc.src} alt="送信された画像" className="block max-w-[220px] rounded-lg" />
+  }
+
+  // HTTP URLs: use blob URL to avoid CORS issues
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
-    if (!src) { setFailed(true); return }
+    if (!imgSrc) { setFailed(true); return }
     const controller = new AbortController()
     let objectUrl: string | null = null
 
-    fetch(src, { signal: controller.signal })
+    fetch(imgSrc.src, { signal: controller.signal })
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.blob()
@@ -101,7 +110,7 @@ function ImageBubble({ content }: { content: string }) {
       controller.abort()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [src])
+  }, [imgSrc?.src])
 
   if (failed) return <span className="text-sm text-gray-400 px-3 py-2">🖼️ [画像]</span>
   if (!blobUrl) return <span className="text-xs text-gray-400 px-3 py-2">読み込み中...</span>
