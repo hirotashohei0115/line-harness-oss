@@ -1288,7 +1288,24 @@ async function handleEvent(
         return;
       }
       if (incomingText === '該当店舗なし') {
-        try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: 'ご希望の店舗が見つからない場合は、お気軽にご相談ください。' }]); } catch (err) { console.error('repair msg no store:', err); }
+        try {
+          await replyAndLog(db, lineClient, event.replyToken, friend.id, [
+            buildMessage('flex', JSON.stringify({
+              type: 'bubble',
+              body: {
+                type: 'box', layout: 'vertical', paddingAll: '20px', spacing: 'md',
+                contents: [
+                  { type: 'text', text: '郵送修理のご案内', weight: 'bold', size: 'lg', color: '#1a1a1a' },
+                  { type: 'text', text: '近くに店舗がない場合は郵送での修理も承っております！全国どこからでもお気軽にご依頼ください。', wrap: true, size: 'sm', color: '#666666' },
+                ],
+              },
+              footer: {
+                type: 'box', layout: 'vertical', paddingAll: '16px',
+                contents: [{ type: 'button', action: { type: 'uri', label: '郵送修理ご依頼フォーム', uri: MAIL_REPAIR_FORM_URL }, style: 'primary', height: 'sm', color: '#06C755' }],
+              },
+            })),
+          ]);
+        } catch (err) { console.error('repair msg no store:', err); }
         return;
       }
     }
