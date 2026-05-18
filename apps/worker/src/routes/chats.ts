@@ -89,13 +89,17 @@ chats.get('/api/chats', async (c) => {
     const assignedStores = currentStaff?.assignedStores;
     const isStoreFiltered = assignedStores && assignedStores.length > 0 && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
 
-    // JOIN friends to get display_name and picture_url, plus unread message count
-    let sql = `SELECT c.*, f.display_name, f.picture_url, f.line_user_id, f.contact_mark_id, f.is_pinned, f.pinned_at,
+    // JOIN friends and staff_pins (per-staff pin state)
+    const staffId = currentStaff?.id ?? 'env-owner';
+    let sql = `SELECT c.*, f.display_name, f.picture_url, f.line_user_id, f.contact_mark_id,
+                 CASE WHEN sp.friend_id IS NOT NULL THEN 1 ELSE 0 END as is_pinned,
+                 sp.pinned_at,
                  (SELECT COUNT(*) FROM messages_log ml WHERE ml.friend_id = c.friend_id AND ml.direction = 'incoming' AND ml.is_read = 0) as unread_count
                FROM chats c
-               LEFT JOIN friends f ON c.friend_id = f.id`;
+               LEFT JOIN friends f ON c.friend_id = f.id
+               LEFT JOIN staff_pins sp ON sp.friend_id = c.friend_id AND sp.staff_id = ?`;
+    const bindings: unknown[] = [staffId];
     const conditions: string[] = [];
-    const bindings: unknown[] = [];
 
     if (unreadOnly) {
       conditions.push('(SELECT COUNT(*) FROM messages_log ml WHERE ml.friend_id = c.friend_id AND ml.direction = \'incoming\' AND ml.is_read = 0) > 0');
@@ -147,7 +151,7 @@ chats.get('/api/chats', async (c) => {
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
-    sql += ' ORDER BY COALESCE(f.is_pinned, 0) DESC, f.pinned_at DESC, c.last_message_at DESC';
+    sql += ' ORDER BY CASE WHEN sp.friend_id IS NOT NULL THEN 1 ELSE 0 END DESC, sp.pinned_at DESC, c.last_message_at DESC';
 
     const stmt = bindings.length > 0
       ? c.env.DB.prepare(sql).bind(...bindings)

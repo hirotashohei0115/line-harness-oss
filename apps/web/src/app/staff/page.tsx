@@ -78,7 +78,7 @@ export default function StaffPage() {
     setSaving(true)
     try {
       if (editTarget) {
-        const body: Record<string, unknown> = { name: form.name, role: form.role, assignedStores: form.assignedStores }
+        const body: Record<string, unknown> = { name: form.name, email: form.email, role: form.role, assignedStores: form.assignedStores }
         if (form.password) body.password = form.password
         await fetchApi(`/api/staff/accounts/${editTarget.id}`, { method: 'PATCH', body: JSON.stringify(body) })
       } else {
@@ -182,8 +182,7 @@ export default function StaffPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">メールアドレス <span className="text-red-500">*</span></label>
                 <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                  disabled={!!editTarget}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-50" />
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">

@@ -165,10 +165,11 @@ staff.post('/api/staff/accounts', requireRole('admin', 'owner'), async (c) => {
 staff.patch('/api/staff/accounts/:id', requireRole('admin', 'owner'), async (c) => {
   try {
     const id = c.req.param('id');
-    const body = await c.req.json<{ name?: string; role?: 'admin' | 'staff'; assignedStores?: string[]; isActive?: boolean; password?: string }>();
+    const body = await c.req.json<{ name?: string; email?: string; role?: 'admin' | 'staff'; assignedStores?: string[]; isActive?: boolean; password?: string }>();
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (body.name !== undefined) { sets.push('name = ?'); vals.push(body.name); }
+    if (body.email !== undefined) { sets.push('email = ?'); vals.push(body.email); }
     if (body.role !== undefined) { sets.push('role = ?'); vals.push(body.role); }
     if (body.assignedStores !== undefined) { sets.push('assigned_stores = ?'); vals.push(JSON.stringify(body.assignedStores)); }
     if (body.isActive !== undefined) { sets.push('is_active = ?'); vals.push(body.isActive ? 1 : 0); }

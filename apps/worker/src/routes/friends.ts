@@ -214,21 +214,22 @@ friends.get('/api/friends/:id', async (c) => {
   }
 });
 
-// PATCH /api/friends/:id/pin — pin/unpin a friend
+// PATCH /api/friends/:id/pin — pin/unpin a friend (per-staff via staff_pins table)
 friends.patch('/api/friends/:id/pin', async (c) => {
   try {
-    const id = c.req.param('id')
+    const friendId = c.req.param('id')
     const body = await c.req.json<{ pinned: boolean }>()
+    const staffId = c.get('staff')?.id ?? 'env-owner'
     const now = jstNow()
     if (body.pinned) {
       await c.env.DB
-        .prepare('UPDATE friends SET is_pinned = 1, pinned_at = ? WHERE id = ?')
-        .bind(now, id)
+        .prepare('INSERT OR REPLACE INTO staff_pins (id, staff_id, friend_id, pinned_at) VALUES (?, ?, ?, ?)')
+        .bind(crypto.randomUUID(), staffId, friendId, now)
         .run()
     } else {
       await c.env.DB
-        .prepare('UPDATE friends SET is_pinned = 0, pinned_at = NULL WHERE id = ?')
-        .bind(id)
+        .prepare('DELETE FROM staff_pins WHERE staff_id = ? AND friend_id = ?')
+        .bind(staffId, friendId)
         .run()
     }
     return c.json({ success: true, data: null })
