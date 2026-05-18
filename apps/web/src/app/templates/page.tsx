@@ -21,6 +21,7 @@ const messageTypeLabels: Record<string, string> = {
   image: '画像',
   flex: 'Flex',
   store_card: '店舗案内カード（Flex）',
+  custom_flex: 'カスタムFlex',
 }
 
 interface CreateFormState {
@@ -112,6 +113,208 @@ function buildStoreCardJson(f: StoreCardFields): string {
   }
 
   return JSON.stringify(bubble, null, 2)
+}
+
+// ===== Custom Flex Visual Editor =====
+
+interface FlexPart {
+  id: string
+  type: 'text' | 'image' | 'button' | 'separator' | 'spacer'
+  text?: string
+  size?: string
+  color?: string
+  bold?: boolean
+  align?: string
+  url?: string
+  aspectRatio?: string
+  label?: string
+  style?: string
+}
+
+interface FlexEditorSettings { bgColor: string }
+
+const FLEX_PART_LABELS: Record<string, string> = {
+  text: 'テキスト', image: '画像', button: 'ボタン', separator: '区切り線', spacer: '余白',
+}
+
+function buildCustomFlexJson(parts: FlexPart[], settings: FlexEditorSettings): string {
+  const spacerH: Record<string, string> = { sm: '10px', md: '20px', lg: '30px', xl: '40px' }
+  const contents = parts.map(p => {
+    if (p.type === 'text') return { type: 'text', text: p.text || 'テキスト', size: p.size || 'md', color: p.color || '#333333', weight: p.bold ? 'bold' : 'regular', align: p.align || 'start', wrap: true }
+    if (p.type === 'image') return { type: 'image', url: p.url || 'https://via.placeholder.com/400x200', size: p.size || 'full', aspectRatio: p.aspectRatio || '20:13', aspectMode: 'cover' }
+    if (p.type === 'button') return { type: 'button', action: { type: 'uri', label: p.label || 'ボタン', uri: p.url || 'https://example.com' }, style: p.style || 'primary', ...(!p.style || p.style === 'primary' ? { color: p.color || '#06C755' } : {}) }
+    if (p.type === 'separator') return { type: 'separator' }
+    return { type: 'box', layout: 'vertical', height: spacerH[p.size || 'md'] || '20px', contents: [] }
+  }).filter(Boolean)
+  const bubble: Record<string, unknown> = { type: 'bubble', body: { type: 'box', layout: 'vertical', contents } }
+  if (settings.bgColor && settings.bgColor.toUpperCase() !== '#FFFFFF') {
+    bubble.styles = { body: { backgroundColor: settings.bgColor } }
+  }
+  return JSON.stringify(bubble, null, 2)
+}
+
+function PartSettings({ part, onUpdate }: { part: FlexPart; onUpdate: (u: Partial<FlexPart>) => void }) {
+  const inp = 'w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-500'
+  const sel = 'text-xs border border-gray-200 rounded px-1 py-0.5'
+
+  if (part.type === 'text') return (
+    <div className="space-y-1.5">
+      <textarea rows={2} value={part.text || ''} onChange={e => onUpdate({ text: e.target.value })}
+        placeholder="テキストを入力" className={`${inp} resize-none`} />
+      <div className="flex flex-wrap gap-1.5 items-center">
+        <select value={part.size || 'md'} onChange={e => onUpdate({ size: e.target.value })} className={sel}>
+          {['sm','md','lg','xl','xxl'].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={part.align || 'start'} onChange={e => onUpdate({ align: e.target.value })} className={sel}>
+          <option value="start">左</option><option value="center">中央</option><option value="end">右</option>
+        </select>
+        <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+          <input type="checkbox" checked={!!part.bold} onChange={e => onUpdate({ bold: e.target.checked })} className="rounded" />太字
+        </label>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-gray-500">色</span>
+          <input type="color" value={part.color || '#333333'} onChange={e => onUpdate({ color: e.target.value })}
+            className="w-6 h-6 p-0 border rounded cursor-pointer" />
+        </div>
+      </div>
+    </div>
+  )
+  if (part.type === 'image') return (
+    <div className="space-y-1.5">
+      <input type="text" value={part.url || ''} onChange={e => onUpdate({ url: e.target.value })}
+        placeholder="画像URL" className={inp} />
+      <div className="flex gap-1.5">
+        <select value={part.size || 'full'} onChange={e => onUpdate({ size: e.target.value })} className={sel}>
+          {['full','lg','md','sm'].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={part.aspectRatio || '20:13'} onChange={e => onUpdate({ aspectRatio: e.target.value })} className={sel}>
+          {['20:13','1:1','4:3'].map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </div>
+    </div>
+  )
+  if (part.type === 'button') return (
+    <div className="space-y-1.5">
+      <input type="text" value={part.label || ''} onChange={e => onUpdate({ label: e.target.value })} placeholder="ラベル" className={inp} />
+      <input type="text" value={part.url || ''} onChange={e => onUpdate({ url: e.target.value })} placeholder="URL" className={inp} />
+      <div className="flex gap-1.5 items-center">
+        <select value={part.style || 'primary'} onChange={e => onUpdate({ style: e.target.value })} className={sel}>
+          <option value="primary">primary</option>
+          <option value="secondary">secondary</option>
+          <option value="link">link</option>
+        </select>
+        {(!part.style || part.style === 'primary') && (
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-gray-500">色</span>
+            <input type="color" value={part.color || '#06C755'} onChange={e => onUpdate({ color: e.target.value })}
+              className="w-6 h-6 p-0 border rounded cursor-pointer" />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+  if (part.type === 'separator') return <div className="border-t border-gray-300 mx-1" />
+  return (
+    <select value={part.size || 'md'} onChange={e => onUpdate({ size: e.target.value })} className={sel}>
+      {['sm','md','lg','xl'].map(s => <option key={s} value={s}>{s}</option>)}
+    </select>
+  )
+}
+
+function FlexVisualEditor({ parts, setParts, settings, setSettings }: {
+  parts: FlexPart[]
+  setParts: React.Dispatch<React.SetStateAction<FlexPart[]>>
+  settings: FlexEditorSettings
+  setSettings: React.Dispatch<React.SetStateAction<FlexEditorSettings>>
+}) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+
+  const addPart = (type: FlexPart['type']) => {
+    const defaults: Record<string, Partial<FlexPart>> = {
+      text: { text: '', size: 'md', color: '#333333', bold: false, align: 'start' },
+      image: { url: '', size: 'full', aspectRatio: '20:13' },
+      button: { label: '', url: '', style: 'primary', color: '#06C755' },
+      separator: {}, spacer: { size: 'md' },
+    }
+    setParts(prev => [...prev, { id: crypto.randomUUID(), type, ...defaults[type] } as FlexPart])
+  }
+
+  const removePart = (id: string) => setParts(prev => prev.filter(p => p.id !== id))
+  const updatePart = (id: string, updates: Partial<FlexPart>) =>
+    setParts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p))
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault()
+    if (dragIndex === null || dragIndex === targetIndex) { setDragIndex(null); return }
+    setParts(prev => {
+      const next = [...prev]
+      const [item] = next.splice(dragIndex, 1)
+      next.splice(targetIndex, 0, item)
+      return next
+    })
+    setDragIndex(null)
+  }
+
+  return (
+    <div className="flex gap-3">
+      {/* Left: Add buttons + global settings */}
+      <div className="w-28 flex-shrink-0 space-y-1.5">
+        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">パーツ追加</p>
+        {(['text','image','button','separator','spacer'] as FlexPart['type'][]).map(type => (
+          <button key={type} type="button" onClick={() => addPart(type)}
+            className="w-full py-1.5 text-[11px] border border-dashed border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 hover:text-green-700 transition-colors text-gray-600">
+            ＋ {FLEX_PART_LABELS[type]}
+          </button>
+        ))}
+        <div className="pt-3 mt-1 border-t border-gray-200 space-y-2">
+          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">全体設定</p>
+          <div>
+            <label className="text-[10px] text-gray-500 block mb-0.5">背景色</label>
+            <div className="flex items-center gap-1.5">
+              <input type="color" value={settings.bgColor}
+                onChange={e => setSettings(p => ({ ...p, bgColor: e.target.value }))}
+                className="w-8 h-6 p-0 border rounded cursor-pointer" />
+              <span className="text-[10px] text-gray-400 font-mono">{settings.bgColor}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right: Canvas */}
+      <div className="flex-1 border border-gray-200 rounded-lg bg-gray-50 overflow-hidden">
+        <div className="px-3 py-1.5 border-b border-gray-200 bg-white flex items-center justify-between">
+          <p className="text-[10px] font-semibold text-gray-500 uppercase">キャンバス</p>
+          {parts.length > 0 && (
+            <span className="text-[10px] text-gray-400">{parts.length} パーツ</span>
+          )}
+        </div>
+        <div className="p-2 space-y-1.5 min-h-[240px]">
+          {parts.length === 0 && (
+            <div className="flex items-center justify-center h-52">
+              <p className="text-xs text-gray-400 text-center">左のボタンでパーツを追加</p>
+            </div>
+          )}
+          {parts.map((part, index) => (
+            <div key={part.id} draggable
+              onDragStart={() => setDragIndex(index)}
+              onDragEnd={() => setDragIndex(null)}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => handleDrop(e, index)}
+              className={`bg-white border rounded-lg p-2 transition-all ${dragIndex === index ? 'opacity-40 border-green-300' : 'border-gray-200 hover:border-gray-300'}`}
+            >
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="text-gray-400 cursor-grab text-sm select-none" title="ドラッグで並び替え">⠿</span>
+                <span className="text-[10px] font-semibold text-gray-500 flex-1">{FLEX_PART_LABELS[part.type]}</span>
+                <button type="button" onClick={() => removePart(part.id)}
+                  className="text-gray-300 hover:text-red-400 text-sm leading-none transition-colors">×</button>
+              </div>
+              <PartSettings part={part} onUpdate={updates => updatePart(part.id, updates)} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function LinePreviewPanel({ messageType, content }: { messageType: string; content: string }) {
@@ -218,6 +421,8 @@ export default function TemplatesPage() {
   const [formError, setFormError] = useState('')
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [storeCard, setStoreCard] = useState<StoreCardFields>(defaultStoreCard)
+  const [customFlexParts, setCustomFlexParts] = useState<FlexPart[]>([])
+  const [customFlexSettings, setCustomFlexSettings] = useState<FlexEditorSettings>({ bgColor: '#ffffff' })
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
   const [editName, setEditName] = useState('')
   const [editContent, setEditContent] = useState('')
@@ -229,6 +434,12 @@ export default function TemplatesPage() {
     if (form.messageType !== 'store_card') return
     setForm(prev => ({ ...prev, messageContent: buildStoreCardJson(storeCard) }))
   }, [storeCard, form.messageType])
+
+  // Sync custom flex parts/settings → form.messageContent
+  useEffect(() => {
+    if (form.messageType !== 'custom_flex') return
+    setForm(prev => ({ ...prev, messageContent: buildCustomFlexJson(customFlexParts, customFlexSettings) }))
+  }, [customFlexParts, customFlexSettings, form.messageType])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -292,6 +503,8 @@ export default function TemplatesPage() {
     }
     if (form.messageType === 'store_card') {
       if (!storeCard.storeName.trim()) { setFormError('店舗名を入力してください'); return }
+    } else if (form.messageType === 'custom_flex') {
+      if (customFlexParts.length === 0) { setFormError('パーツを1つ以上追加してください'); return }
     } else if (!form.messageContent.trim()) {
       setFormError(form.messageType === 'image' ? '画像を選択してください' : 'メッセージ内容を入力してください')
       return
@@ -304,8 +517,12 @@ export default function TemplatesPage() {
     }
     setSaving(true)
     setFormError('')
-    const saveType = form.messageType === 'store_card' ? 'flex' : form.messageType
-    const saveContent = form.messageType === 'store_card' ? buildStoreCardJson(storeCard) : form.messageContent
+    const saveType = (form.messageType === 'store_card' || form.messageType === 'custom_flex') ? 'flex' : form.messageType
+    const saveContent = form.messageType === 'store_card'
+      ? buildStoreCardJson(storeCard)
+      : form.messageType === 'custom_flex'
+        ? buildCustomFlexJson(customFlexParts, customFlexSettings)
+        : form.messageContent
     try {
       const res = await api.templates.create({
         name: form.name,
@@ -318,6 +535,8 @@ export default function TemplatesPage() {
         setForm({ name: '', category: '', messageType: 'text', messageContent: '' })
         setImagePreview(null)
         setStoreCard(defaultStoreCard)
+        setCustomFlexParts([])
+        setCustomFlexSettings({ bgColor: '#ffffff' })
         load()
       } else {
         setFormError(res.error)
@@ -506,12 +725,19 @@ export default function TemplatesPage() {
               <select
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
                 value={form.messageType}
-                onChange={(e) => { setForm({ ...form, messageType: e.target.value, messageContent: '' }); setImagePreview(null); setStoreCard(defaultStoreCard) }}
+                onChange={(e) => {
+                  setForm({ ...form, messageType: e.target.value, messageContent: '' })
+                  setImagePreview(null)
+                  setStoreCard(defaultStoreCard)
+                  setCustomFlexParts([])
+                  setCustomFlexSettings({ bgColor: '#ffffff' })
+                }}
               >
                 <option value="text">テキスト</option>
                 <option value="image">画像</option>
                 <option value="flex">Flex（JSON直接入力）</option>
                 <option value="store_card">店舗案内カード（Flex）</option>
+                <option value="custom_flex">カスタムFlex（ビジュアルエディタ）</option>
               </select>
             </div>
 
@@ -648,6 +874,15 @@ export default function TemplatesPage() {
               </div>
             )}
 
+            {form.messageType === 'custom_flex' && (
+              <FlexVisualEditor
+                parts={customFlexParts}
+                setParts={setCustomFlexParts}
+                settings={customFlexSettings}
+                setSettings={setCustomFlexSettings}
+              />
+            )}
+
             {form.messageType === 'image' && (
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">画像 <span className="text-red-500">*</span></label>
@@ -681,7 +916,7 @@ export default function TemplatesPage() {
                 {saving ? '作成中...' : '作成'}
               </button>
               <button
-                onClick={() => { setShowCreate(false); setFormError(''); setImagePreview(null) }}
+                onClick={() => { setShowCreate(false); setFormError(''); setImagePreview(null); setCustomFlexParts([]); setCustomFlexSettings({ bgColor: '#ffffff' }) }}
                 className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 キャンセル
@@ -689,7 +924,7 @@ export default function TemplatesPage() {
             </div>
           </div>
           <LinePreviewPanel
-            messageType={form.messageType === 'store_card' ? 'flex' : form.messageType}
+            messageType={(form.messageType === 'store_card' || form.messageType === 'custom_flex') ? 'flex' : form.messageType}
             content={form.messageContent}
           />
           </div>
