@@ -75,14 +75,16 @@ function getImageSrc(content: string): { type: 'dataurl' | 'url'; src: string } 
 }
 
 // JS fetch → blob URL で表示（<img src> のクロスオリジン問題を回避）
-function ImageBubble({ content }: { content: string }) {
+function ImageBubble({ content, onClick }: { content: string; onClick?: () => void }) {
   const imgSrc = getImageSrc(content)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
+  const imgClass = `block max-w-[220px] rounded-lg${onClick ? ' cursor-pointer hover:opacity-90 transition-opacity' : ''}`
+
   // base64 data URLs can be displayed directly without fetch
   if (imgSrc?.type === 'dataurl') {
-    return <img src={imgSrc.src} alt="送信された画像" className="block max-w-[220px] rounded-lg" />
+    return <img src={imgSrc.src} alt="送信された画像" className={imgClass} onClick={onClick} />
   }
 
   // HTTP URLs: use blob URL to avoid CORS issues
@@ -114,7 +116,74 @@ function ImageBubble({ content }: { content: string }) {
 
   if (failed) return <span className="text-sm text-gray-400 px-3 py-2">🖼️ [画像]</span>
   if (!blobUrl) return <span className="text-xs text-gray-400 px-3 py-2">読み込み中...</span>
-  return <img src={blobUrl} alt="送信された画像" className="block max-w-[220px] rounded-lg" />
+  return <img src={blobUrl} alt="送信された画像" className={imgClass} onClick={onClick} />
+}
+
+function ImageZoomModal({ content, onClose }: { content: string; onClose: () => void }) {
+  const imgSrc = getImageSrc(content)
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  useEffect(() => {
+    if (imgSrc?.type !== 'url') return
+    const controller = new AbortController()
+    let objectUrl: string | null = null
+    fetch(imgSrc.src, { signal: controller.signal })
+      .then(r => r.blob())
+      .then(blob => { objectUrl = URL.createObjectURL(blob); setBlobUrl(objectUrl) })
+      .catch(() => {})
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [imgSrc?.src, imgSrc?.type])
+
+  const displaySrc = imgSrc?.type === 'dataurl' ? imgSrc.src : blobUrl
+
+  const handleDownload = () => {
+    if (!displaySrc) return
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const a = document.createElement('a')
+    a.href = displaySrc
+    a.download = `image_${ts}.jpg`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 text-xl leading-none"
+        aria-label="閉じる"
+      >×</button>
+      <div className="flex flex-col items-center gap-4" onClick={e => e.stopPropagation()}>
+        {displaySrc ? (
+          <img
+            src={displaySrc}
+            alt="拡大表示"
+            style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain' }}
+            className="rounded-lg shadow-2xl"
+          />
+        ) : (
+          <div className="text-white/60 text-sm">読み込み中...</div>
+        )}
+        <button
+          onClick={handleDownload}
+          disabled={!displaySrc}
+          className="px-5 py-2 bg-white text-gray-800 text-sm font-medium rounded-lg hover:bg-gray-100 disabled:opacity-50 shadow"
+        >
+          ⬇ ダウンロード
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function formatDatetime(iso: string | null): string {
@@ -215,6 +284,7 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
   const [sending, setSending] = useState(false)
   const [messages, setMessages] = useState<MessageLog[]>([])
   const [loadingMessages, setLoadingMessages] = useState(true)
+  const [zoomedImageContent, setZoomedImageContent] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -263,13 +333,14 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
       return <FlexPreviewComponent content={msg.content} maxWidth={260} />
     }
     if (msg.messageType === 'image') {
-      return <ImageBubble content={msg.content} />
+      return <ImageBubble content={msg.content} onClick={() => setZoomedImageContent(msg.content)} />
     }
     return <span className="text-sm whitespace-pre-wrap break-words">{msg.content}</span>
   }
 
   return (
     <div className="flex flex-col h-full">
+      {zoomedImageContent && <ImageZoomModal content={zoomedImageContent} onClose={() => setZoomedImageContent(null)} />}
       <div className="px-4 py-4 border-b border-gray-200 flex items-center gap-3">
         <button onClick={onBack} className="lg:hidden text-gray-400 hover:text-gray-600">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -383,6 +454,7 @@ export default function ChatsPage() {
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [readConfirmed, setReadConfirmed] = useState(false)
   const [readingAll, setReadingAll] = useState(false)
+  const [zoomedImageContent, setZoomedImageContent] = useState<string | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const prevChatsRef = useRef<Chat[]>([])
   const isAtBottomRef = useRef(true)
@@ -854,6 +926,7 @@ export default function ChatsPage() {
 
   return (
     <div>
+      {zoomedImageContent && <ImageZoomModal content={zoomedImageContent} onClose={() => setZoomedImageContent(null)} />}
       <Header title="オペレーターチャット" />
 
       {/* Error */}
@@ -1173,7 +1246,7 @@ export default function ChatsPage() {
                         </div>
                       )
                     } else if (isImage) {
-                      bubbleContent = <ImageBubble content={msg.content} />
+                      bubbleContent = <ImageBubble content={msg.content} onClick={() => setZoomedImageContent(msg.content)} />
                     } else {
                       bubbleContent = <span>{msg.content}</span>
                     }
