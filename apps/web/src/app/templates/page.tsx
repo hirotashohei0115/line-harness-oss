@@ -20,6 +20,7 @@ const messageTypeLabels: Record<string, string> = {
   text: 'テキスト',
   image: '画像',
   flex: 'Flex',
+  store_card: '店舗案内カード（Flex）',
 }
 
 interface CreateFormState {
@@ -27,6 +28,90 @@ interface CreateFormState {
   category: string
   messageType: string
   messageContent: string
+}
+
+interface StoreCardFields {
+  headerImageUrl: string
+  storeName: string
+  address: string
+  phone: string
+  hours: string
+  buttonText: string
+  buttonUrl: string
+}
+
+const defaultStoreCard: StoreCardFields = {
+  headerImageUrl: '',
+  storeName: '',
+  address: '',
+  phone: '',
+  hours: '',
+  buttonText: '',
+  buttonUrl: '',
+}
+
+function buildStoreCardJson(f: StoreCardFields): string {
+  const infoRows = [
+    f.address ? { label: '住所', value: f.address } : null,
+    f.phone   ? { label: '電話', value: f.phone }   : null,
+    f.hours   ? { label: '営業', value: f.hours }   : null,
+  ].filter(Boolean) as { label: string; value: string }[]
+
+  const bubble: Record<string, unknown> = {
+    type: 'bubble',
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      contents: [
+        { type: 'text', text: f.storeName || '店舗名', weight: 'bold', size: 'xl', wrap: true },
+        {
+          type: 'box',
+          layout: 'vertical',
+          margin: 'lg',
+          spacing: 'sm',
+          contents: infoRows.map(row => ({
+            type: 'box',
+            layout: 'baseline',
+            spacing: 'sm',
+            contents: [
+              { type: 'text', text: row.label, color: '#aaaaaa', size: 'sm', flex: 1 },
+              { type: 'text', text: row.value, wrap: true, color: '#666666', size: 'sm', flex: 5 },
+            ],
+          })),
+        },
+      ],
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      contents: [
+        {
+          type: 'button',
+          style: 'primary',
+          height: 'sm',
+          color: '#06C755',
+          action: {
+            type: 'uri',
+            label: f.buttonText || 'ボタン',
+            uri: f.buttonUrl || 'https://example.com',
+          },
+        },
+      ],
+    },
+  }
+
+  if (f.headerImageUrl) {
+    bubble.hero = {
+      type: 'image',
+      url: f.headerImageUrl,
+      size: 'full',
+      aspectRatio: '20:13',
+      aspectMode: 'cover',
+    }
+  }
+
+  return JSON.stringify(bubble, null, 2)
 }
 
 function LinePreviewPanel({ messageType, content }: { messageType: string; content: string }) {
@@ -132,11 +217,18 @@ export default function TemplatesPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [storeCard, setStoreCard] = useState<StoreCardFields>(defaultStoreCard)
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
   const [editName, setEditName] = useState('')
   const [editContent, setEditContent] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
+
+  // Sync store card fields → form.messageContent (real-time JSON generation)
+  useEffect(() => {
+    if (form.messageType !== 'store_card') return
+    setForm(prev => ({ ...prev, messageContent: buildStoreCardJson(storeCard) }))
+  }, [storeCard, form.messageType])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -178,6 +270,17 @@ export default function TemplatesPage() {
     e.target.value = ''
   }
 
+  const handleStoreCardImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setStoreCard(prev => ({ ...prev, headerImageUrl: reader.result as string }))
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
   const handleCreate = async () => {
     if (!form.name.trim()) {
       setFormError('テンプレート名を入力してください')
@@ -187,7 +290,9 @@ export default function TemplatesPage() {
       setFormError('カテゴリを入力してください')
       return
     }
-    if (!form.messageContent.trim()) {
+    if (form.messageType === 'store_card') {
+      if (!storeCard.storeName.trim()) { setFormError('店舗名を入力してください'); return }
+    } else if (!form.messageContent.trim()) {
       setFormError(form.messageType === 'image' ? '画像を選択してください' : 'メッセージ内容を入力してください')
       return
     }
@@ -199,17 +304,20 @@ export default function TemplatesPage() {
     }
     setSaving(true)
     setFormError('')
+    const saveType = form.messageType === 'store_card' ? 'flex' : form.messageType
+    const saveContent = form.messageType === 'store_card' ? buildStoreCardJson(storeCard) : form.messageContent
     try {
       const res = await api.templates.create({
         name: form.name,
         category: form.category,
-        messageType: form.messageType,
-        messageContent: form.messageContent,
+        messageType: saveType,
+        messageContent: saveContent,
       })
       if (res.success) {
         setShowCreate(false)
         setForm({ name: '', category: '', messageType: 'text', messageContent: '' })
         setImagePreview(null)
+        setStoreCard(defaultStoreCard)
         load()
       } else {
         setFormError(res.error)
@@ -398,11 +506,12 @@ export default function TemplatesPage() {
               <select
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
                 value={form.messageType}
-                onChange={(e) => { setForm({ ...form, messageType: e.target.value, messageContent: '' }); setImagePreview(null) }}
+                onChange={(e) => { setForm({ ...form, messageType: e.target.value, messageContent: '' }); setImagePreview(null); setStoreCard(defaultStoreCard) }}
               >
                 <option value="text">テキスト</option>
                 <option value="image">画像</option>
-                <option value="flex">Flex</option>
+                <option value="flex">Flex（JSON直接入力）</option>
+                <option value="store_card">店舗案内カード（Flex）</option>
               </select>
             </div>
 
@@ -437,6 +546,105 @@ export default function TemplatesPage() {
                   try { JSON.parse(form.messageContent); return <p className="text-xs text-green-600 mt-1">✓ 有効なJSON</p> }
                   catch { return <p className="text-xs text-red-500 mt-1">⚠ JSONが無効です</p> }
                 })()}
+              </div>
+            )}
+
+            {form.messageType === 'store_card' && (
+              <div className="space-y-3 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                <p className="text-xs font-semibold text-blue-700">店舗案内カード設定</p>
+
+                {/* ① ヘッダー画像 */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">ヘッダー画像URL</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="https://example.com/image.jpg"
+                    value={storeCard.headerImageUrl}
+                    onChange={e => setStoreCard(prev => ({ ...prev, headerImageUrl: e.target.value }))}
+                  />
+                  <div className="mt-1">
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 border border-gray-300 rounded px-2 py-1 hover:bg-gray-50 bg-white">
+                      📎 画像をアップロード（Base64）
+                      <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={handleStoreCardImageSelect} />
+                    </label>
+                    {storeCard.headerImageUrl && (
+                      <img src={storeCard.headerImageUrl} alt="header" className="mt-1 max-h-20 rounded border border-gray-200" />
+                    )}
+                  </div>
+                </div>
+
+                {/* ② 店舗名 */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">店舗名 <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="リペアマスター五反田店"
+                    value={storeCard.storeName}
+                    onChange={e => setStoreCard(prev => ({ ...prev, storeName: e.target.value }))}
+                  />
+                </div>
+
+                {/* ③ 住所 */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">住所</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="〒141-0022 東京都品川区東五反田1-1-1"
+                    value={storeCard.address}
+                    onChange={e => setStoreCard(prev => ({ ...prev, address: e.target.value }))}
+                  />
+                </div>
+
+                {/* ④ 電話番号 */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">電話番号</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="03-1234-5678"
+                    value={storeCard.phone}
+                    onChange={e => setStoreCard(prev => ({ ...prev, phone: e.target.value }))}
+                  />
+                </div>
+
+                {/* ⑤ 営業時間 */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">営業時間</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="10:00〜20:00"
+                    value={storeCard.hours}
+                    onChange={e => setStoreCard(prev => ({ ...prev, hours: e.target.value }))}
+                  />
+                </div>
+
+                {/* ⑥ ボタンテキスト */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">ボタンテキスト</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="来店予約をする"
+                    value={storeCard.buttonText}
+                    onChange={e => setStoreCard(prev => ({ ...prev, buttonText: e.target.value }))}
+                  />
+                </div>
+
+                {/* ⑦ ボタンURL */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">ボタンURL</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="https://liff.line.me/..."
+                    value={storeCard.buttonUrl}
+                    onChange={e => setStoreCard(prev => ({ ...prev, buttonUrl: e.target.value }))}
+                  />
+                </div>
               </div>
             )}
 
@@ -480,7 +688,10 @@ export default function TemplatesPage() {
               </button>
             </div>
           </div>
-          <LinePreviewPanel messageType={form.messageType} content={form.messageContent} />
+          <LinePreviewPanel
+            messageType={form.messageType === 'store_card' ? 'flex' : form.messageType}
+            content={form.messageContent}
+          />
           </div>
         </div>
       )}
