@@ -761,6 +761,15 @@ async function handleEvent(
         .bind(lineAccountId, friend.id).run();
     }
 
+    // チャット一覧に表示するため chats エントリを作成
+    await upsertChatOnMessage(db, friend.id);
+
+    // 友達追加を incoming メッセージとして記録（未読バッジ・チャット一覧表示のため）
+    await db.prepare(
+      `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
+       VALUES (?, ?, 'incoming', 'text', '【友達追加】', NULL, NULL, 0, ?)`
+    ).bind(crypto.randomUUID(), friend.id, jstNow()).run();
+
     // 機種選択Flex（新規・再フォロー共通で送信）
     try {
       await replyAndLog(db, lineClient, event.replyToken, friend.id, [
