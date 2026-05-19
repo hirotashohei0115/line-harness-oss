@@ -36,7 +36,7 @@ function detectLiffId(): string {
   const params = new URLSearchParams(window.location.search);
   const fromParam = params.get('liffId');
   if (fromParam) return fromParam;
-  return '2010008850-nbdSiIe2';
+  return '2010126656-iMP2b4Jw';
 }
 const LIFF_ID = detectLiffId();
 const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:8787';

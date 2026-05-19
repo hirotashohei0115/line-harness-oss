@@ -89,8 +89,8 @@ webhook.post('/webhook', async (c) => {
 
 // ---- Repair Flow Constants ----
 
-const MAIL_REPAIR_FORM_URL = 'https://liff.line.me/2010008850-nbdSiIe2?page=mail-repair';
-const STORE_RESERVATION_URL_GENERAL = 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation';
+const MAIL_REPAIR_FORM_URL = 'https://liff.line.me/2010126656-iMP2b4Jw?page=mail-repair';
+const STORE_RESERVATION_URL_GENERAL = 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation';
 const PRIVACY_POLICY_URL = 'https://forms.gle/XXXXXXXXXXXXXXXX';
 const CONSULT_PHONE_TEXT =
   '【電話・LINE相談のご案内】\nお問い合わせありがとうございます！\n\nお急ぎの方は下記電話番号までご連絡ください\n👉070-1391-9861\n（受付時間：10時〜20時）\n\nLINEでのご相談をご希望の場合は\nこのままご質問・ご相談内容をご記入のうえご返信ください😆';
@@ -110,7 +110,7 @@ const STORES = [
     address: '東京都品川区西五反田1丁目33-10 西五反田サインタワー9F',
     tel: '0120-025-088',
     hours: '10:00~20:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'kinshicho',
@@ -120,7 +120,7 @@ const STORES = [
     address: '東京都墨田区錦糸3丁目3-3 錦糸ビル内3階',
     tel: '03-5637-8797',
     hours: '10:00~19:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'narita',
@@ -130,7 +130,7 @@ const STORES = [
     address: '千葉県成田市ウイング土屋24 イオンモール成田店内1F',
     tel: '070-1595-6404',
     hours: '10:00~20:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'makuhari',
@@ -140,7 +140,7 @@ const STORES = [
     address: '千葉県千葉市花見川区幕張町4丁目417-25 イトーヨーカドー幕張店内1F',
     tel: '070-3209-9235',
     hours: '10:00~19:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'shobu',
@@ -150,7 +150,7 @@ const STORES = [
     address: '埼玉県久喜市菖蒲町菖蒲6005-1 モラージュ菖蒲内1F',
     tel: '070-1271-7186',
     hours: '10:00~19:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'gifu',
@@ -160,7 +160,7 @@ const STORES = [
     address: '岐阜県本巣市三橋1100 モレラ岐阜2F',
     tel: '070-3131-6181',
     hours: '10:00~19:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'utsunomiya',
@@ -170,7 +170,7 @@ const STORES = [
     address: '栃木県宇都宮市陽東6丁目2-1 ベルモール内2F ダイワンテレコム内',
     tel: '070-1307-5363',
     hours: '10:00~19:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'aomori',
@@ -180,7 +180,7 @@ const STORES = [
     address: '青森県青森市緑3丁目9-2 サンロード青森内2F',
     tel: '070-3209-7849',
     hours: '10:00~19:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'morioka',
@@ -190,7 +190,7 @@ const STORES = [
     address: '岩手県盛岡市盛岡駅前通1-44 フェザン本館内1F',
     tel: '080-3918-7346',
     hours: '10:00~19:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'oita',
@@ -200,7 +200,7 @@ const STORES = [
     address: '大分県大分市玉沢楠本755-1 トキハわさだタウン3街区1階',
     tel: '070-1261-6924',
     hours: '10:00~18:30',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'kizugawa',
@@ -210,7 +210,7 @@ const STORES = [
     address: '京都府木津川市州見台1丁目1-1-1 ガーデンモール木津川1階',
     tel: '070-6922-8143',
     hours: '10:00~20:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
   {
     key: 'nagaoka',
@@ -220,7 +220,7 @@ const STORES = [
     address: '新潟県長岡市千秋2丁目278 リバーサイド千秋2階',
     tel: '070-3229-5869',
     hours: '10:00~20:00',
-    reservationUrl: 'https://liff.line.me/2010008850-nbdSiIe2?page=reservation',
+    reservationUrl: 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation',
   },
 ] as const;
 
