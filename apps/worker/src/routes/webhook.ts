@@ -850,8 +850,23 @@ async function handleEvent(
       event.source.type === 'user' ? event.source.userId : undefined;
     if (!userId) return;
 
-    const friend = await getFriendByLineUserId(db, userId);
-    if (!friend) return;
+    let friend = await getFriendByLineUserId(db, userId);
+    if (!friend) {
+      // User exists on LINE but not in DB (e.g. migrated from another tool)
+      let profile;
+      try { profile = await lineClient.getProfile(userId); } catch { /* ignore */ }
+      friend = await upsertFriend(db, {
+        lineUserId: userId,
+        displayName: profile?.displayName ?? null,
+        pictureUrl: profile?.pictureUrl ?? null,
+        statusMessage: profile?.statusMessage ?? null,
+      });
+      if (lineAccountId) {
+        await db.prepare('UPDATE friends SET line_account_id = ? WHERE id = ? AND line_account_id IS NULL')
+          .bind(lineAccountId, friend.id).run();
+      }
+      console.log(`Auto-registered friend from message: ${userId} (${profile?.displayName ?? 'unknown'})`);
+    }
 
     const incomingText = textMessage.text;
     const now = jstNow();
@@ -1422,8 +1437,22 @@ async function handleEvent(
   if (event.type === 'message' && (event.message.type === 'image' || event.message.type === 'video' || event.message.type === 'audio')) {
     const userId = event.source.type === 'user' ? event.source.userId : undefined;
     if (!userId) return;
-    const friend = await getFriendByLineUserId(db, userId);
-    if (!friend) return;
+    let friend = await getFriendByLineUserId(db, userId);
+    if (!friend) {
+      let profile;
+      try { profile = await lineClient.getProfile(userId); } catch { /* ignore */ }
+      friend = await upsertFriend(db, {
+        lineUserId: userId,
+        displayName: profile?.displayName ?? null,
+        pictureUrl: profile?.pictureUrl ?? null,
+        statusMessage: profile?.statusMessage ?? null,
+      });
+      if (lineAccountId) {
+        await db.prepare('UPDATE friends SET line_account_id = ? WHERE id = ? AND line_account_id IS NULL')
+          .bind(lineAccountId, friend.id).run();
+      }
+      console.log(`Auto-registered friend from media message: ${userId}`);
+    }
     const messageId = event.message.id;
     const messageType = event.message.type as string;
     await db.prepare(
@@ -1439,8 +1468,22 @@ async function handleEvent(
       event.source.type === 'user' ? event.source.userId : undefined;
     if (!userId) return;
 
-    const friend = await getFriendByLineUserId(db, userId);
-    if (!friend) return;
+    let friend = await getFriendByLineUserId(db, userId);
+    if (!friend) {
+      let profile;
+      try { profile = await lineClient.getProfile(userId); } catch { /* ignore */ }
+      friend = await upsertFriend(db, {
+        lineUserId: userId,
+        displayName: profile?.displayName ?? null,
+        pictureUrl: profile?.pictureUrl ?? null,
+        statusMessage: profile?.statusMessage ?? null,
+      });
+      if (lineAccountId) {
+        await db.prepare('UPDATE friends SET line_account_id = ? WHERE id = ? AND line_account_id IS NULL')
+          .bind(lineAccountId, friend.id).run();
+      }
+      console.log(`Auto-registered friend from postback: ${userId}`);
+    }
 
     const params = new URLSearchParams(event.postback.data);
     const action = params.get('action');
