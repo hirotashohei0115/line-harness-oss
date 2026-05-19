@@ -173,6 +173,7 @@ function NavIcon({ d }: { d: string }) {
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const { selectedAccountId } = useAccount()
   const [isOpen, setIsOpen] = useState(false)
   const [staffName, setStaffName] = useState<string | null>(null)
   const [staffRole, setStaffRole] = useState<string | null>(null)
@@ -187,7 +188,8 @@ export default function Sidebar() {
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
     const fetchUnread = () => {
       const key = typeof window !== 'undefined' ? localStorage.getItem('lh_api_key') || '' : ''
-      fetch(`${API_URL}/api/chats/unread-count`, {
+      const q = selectedAccountId ? `?lineAccountId=${encodeURIComponent(selectedAccountId)}` : ''
+      fetch(`${API_URL}/api/chats/unread-count${q}`, {
         headers: { Authorization: `Bearer ${key}` },
       })
         .then(r => r.json())
@@ -199,7 +201,7 @@ export default function Sidebar() {
     fetchUnread()
     const id = setInterval(fetchUnread, 10000)
     return () => clearInterval(id)
-  }, [])
+  }, [selectedAccountId])
 
   useEffect(() => { setIsOpen(false) }, [pathname])
   useEffect(() => {

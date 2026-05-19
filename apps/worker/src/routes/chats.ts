@@ -216,14 +216,25 @@ chats.get('/api/messages/:messageId/content', async (c) => {
 chats.get('/api/chats/unread-count', async (c) => {
   try {
     const lineAccountId = c.req.query('lineAccountId');
+    // Count distinct chats (users) with unread messages — matches chat list display
     let row: { count: number } | null;
     if (lineAccountId) {
       row = await c.env.DB
-        .prepare(`SELECT COUNT(*) as count FROM messages_log ml JOIN friends f ON ml.friend_id = f.id WHERE ml.is_read = 0 AND ml.direction = 'incoming' AND f.line_account_id = ?`)
+        .prepare(`
+          SELECT COUNT(DISTINCT ch.friend_id) as count
+          FROM chats ch
+          JOIN friends f ON f.id = ch.friend_id
+          WHERE f.line_account_id = ?
+          AND (SELECT COUNT(*) FROM messages_log ml WHERE ml.friend_id = ch.friend_id AND ml.direction = 'incoming' AND ml.is_read = 0) > 0
+        `)
         .bind(lineAccountId).first<{ count: number }>();
     } else {
       row = await c.env.DB
-        .prepare(`SELECT COUNT(*) as count FROM messages_log WHERE is_read = 0 AND direction = 'incoming'`)
+        .prepare(`
+          SELECT COUNT(DISTINCT ch.friend_id) as count
+          FROM chats ch
+          WHERE (SELECT COUNT(*) FROM messages_log ml WHERE ml.friend_id = ch.friend_id AND ml.direction = 'incoming' AND ml.is_read = 0) > 0
+        `)
         .first<{ count: number }>();
     }
     return c.json({ success: true, data: { count: row?.count ?? 0 } });
