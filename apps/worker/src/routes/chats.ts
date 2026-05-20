@@ -216,27 +216,58 @@ chats.get('/api/messages/:messageId/content', async (c) => {
 chats.get('/api/chats/unread-count', async (c) => {
   try {
     const lineAccountId = c.req.query('lineAccountId');
-    // Count distinct chats (users) with unread messages — matches chat list display
-    let row: { count: number } | null;
+    const currentStaff = c.get('staff');
+    const assignedStores = currentStaff?.assignedStores;
+    const isStoreFiltered = assignedStores && assignedStores.length > 0
+      && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
+
+    // Count distinct chats with unread — same filtering as GET /api/chats
+    const conditions: string[] = [
+      `(SELECT COUNT(*) FROM messages_log ml WHERE ml.friend_id = ch.friend_id AND ml.direction = 'incoming' AND ml.is_read = 0) > 0`,
+    ];
+    const bindings: unknown[] = [];
+
     if (lineAccountId) {
-      row = await c.env.DB
-        .prepare(`
-          SELECT COUNT(DISTINCT ch.friend_id) as count
-          FROM chats ch
-          JOIN friends f ON f.id = ch.friend_id
-          WHERE f.line_account_id = ?
-          AND (SELECT COUNT(*) FROM messages_log ml WHERE ml.friend_id = ch.friend_id AND ml.direction = 'incoming' AND ml.is_read = 0) > 0
-        `)
-        .bind(lineAccountId).first<{ count: number }>();
-    } else {
-      row = await c.env.DB
-        .prepare(`
-          SELECT COUNT(DISTINCT ch.friend_id) as count
-          FROM chats ch
-          WHERE (SELECT COUNT(*) FROM messages_log ml WHERE ml.friend_id = ch.friend_id AND ml.direction = 'incoming' AND ml.is_read = 0) > 0
-        `)
-        .first<{ count: number }>();
+      conditions.push('f.line_account_id = ?');
+      bindings.push(lineAccountId);
     }
+
+    if (isStoreFiltered) {
+      const storeNames = assignedStores!;
+      const STORE_NAME_TO_KEY: Record<string, string> = {
+        '五反田店': 'gotanda', '錦糸町店': 'kinshicho', '成田店': 'narita',
+        '幕張店': 'makuhari', '菖蒲店': 'shobu', '岐阜店': 'gifu',
+        '宇都宮店': 'utsunomiya', '青森店': 'aomori', '盛岡店': 'morioka',
+        '大分店': 'oita', '木津川店': 'kizugawa', '長岡店': 'nagaoka',
+      };
+      const storeKeys = storeNames.map(n => STORE_NAME_TO_KEY[n]).filter(Boolean);
+      const namePH = storeNames.map(() => '?').join(',');
+      const subQueries: string[] = [];
+
+      if (storeKeys.length > 0) {
+        const keyPH = storeKeys.map(() => '?').join(',');
+        subQueries.push(`SELECT DISTINCT friend_id FROM store_reservations WHERE store_key IN (${keyPH})`);
+        storeKeys.forEach(k => bindings.push(k));
+      }
+      subQueries.push(`SELECT DISTINCT friend_id FROM mail_orders WHERE delivery_store IN (${namePH})`);
+      storeNames.forEach(s => bindings.push(s));
+      subQueries.push(`SELECT DISTINCT friend_id FROM friend_attributes WHERE key = 'repair_store' AND value IN (${namePH})`);
+      storeNames.forEach(s => bindings.push(s));
+
+      conditions.push(`ch.friend_id IN (${subQueries.join(' UNION ')})`);
+    }
+
+    const sql = `
+      SELECT COUNT(DISTINCT ch.friend_id) as count
+      FROM chats ch
+      JOIN friends f ON f.id = ch.friend_id
+      WHERE ${conditions.join(' AND ')}
+    `;
+    const row = await (bindings.length > 0
+      ? c.env.DB.prepare(sql).bind(...bindings)
+      : c.env.DB.prepare(sql)
+    ).first<{ count: number }>();
+
     return c.json({ success: true, data: { count: row?.count ?? 0 } });
   } catch (err) {
     console.error('GET /api/chats/unread-count error:', err);
