@@ -29,6 +29,18 @@ const ACTION_TYPE_OPTIONS = [
   { id: 'free_message',    label: '自由メッセージ送信' },
 ]
 
+const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
+  action: 'アクション',
+  tag: 'タグ',
+  contact_mark: '対応マーク',
+}
+
+const EXPLANATION_SUFFIX: Record<ConditionType, string> = {
+  action: 'アクションを実行したユーザーが到達したとカウントされます',
+  tag: 'タグを持つユーザーが到達したとカウントされます',
+  contact_mark: '対応マークのユーザーが到達したとカウントされます',
+}
+
 interface FunnelFormProps {
   initial?: FunnelWithSteps
 }
@@ -48,6 +60,8 @@ export default function FunnelForm({ initial }: FunnelFormProps) {
   const [marks, setMarks] = useState<ContactMark[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // UI-only state: which step cards are expanded
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     api.tags.list().then((r) => { if (r.success) setTags(r.data) }).catch(() => {})
@@ -55,10 +69,16 @@ export default function FunnelForm({ initial }: FunnelFormProps) {
   }, [])
 
   const addStep = () => {
-    setSteps((prev) => [...prev, { id: crypto.randomUUID(), name: '', conditionType: 'action', conditionIds: [] }])
+    const newId = crypto.randomUUID()
+    setSteps((prev) => [...prev, { id: newId, name: '', conditionType: 'action', conditionIds: [] }])
+    setExpandedIds((prev) => new Set([...prev, newId]))
   }
 
-  const removeStep = (idx: number) => setSteps((prev) => prev.filter((_, i) => i !== idx))
+  const removeStep = (idx: number) => {
+    const stepId = steps[idx].id
+    setSteps((prev) => prev.filter((_, i) => i !== idx))
+    setExpandedIds((prev) => { const s = new Set(prev); s.delete(stepId); return s })
+  }
 
   const updateStep = (idx: number, patch: Partial<StepDraft>) => {
     setSteps((prev) => prev.map((s, i) => i === idx ? { ...s, ...patch } : s))
@@ -70,6 +90,26 @@ export default function FunnelForm({ initial }: FunnelFormProps) {
       const ids = s.conditionIds.includes(id) ? s.conditionIds.filter((x) => x !== id) : [...s.conditionIds, id]
       return { ...s, conditionIds: ids }
     }))
+  }
+
+  const toggleExpand = (stepId: string) => {
+    setExpandedIds((prev) => {
+      const s = new Set(prev)
+      if (s.has(stepId)) s.delete(stepId)
+      else s.add(stepId)
+      return s
+    })
+  }
+
+  const getConditionLabels = (step: StepDraft): string[] => {
+    if (step.conditionIds.length === 0) return []
+    if (step.conditionType === 'action') {
+      return step.conditionIds.map(id => ACTION_TYPE_OPTIONS.find(o => o.id === id)?.label ?? id)
+    }
+    if (step.conditionType === 'tag') {
+      return step.conditionIds.map(id => tags.find(t => t.id === id)?.name ?? id)
+    }
+    return step.conditionIds.map(id => marks.find(m => m.id === id)?.name ?? id)
   }
 
   const handleSave = async () => {
@@ -122,71 +162,195 @@ export default function FunnelForm({ initial }: FunnelFormProps) {
             + ステップ追加
           </button>
         </div>
+
         {steps.length === 0 && (
           <div className="bg-white rounded-lg border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
             ステップを追加してください
           </div>
         )}
+
         <div className="space-y-3">
-          {steps.map((step, idx) => (
-            <div key={step.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-6 h-6 rounded-full text-xs font-bold text-white flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#06C755' }}>{idx + 1}</span>
-                <input type="text" value={step.name} onChange={(e) => updateStep(idx, { name: e.target.value })} placeholder="ステップ名（例：機種選択）"
-                  className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-                <button onClick={() => removeStep(idx)} className="text-xs text-red-400 hover:text-red-600 px-2">削除</button>
-              </div>
+          {steps.map((step, idx) => {
+            const isExpanded = expandedIds.has(step.id)
+            const conditionLabels = getConditionLabels(step)
+            const categoryLabel = CONDITION_TYPE_LABELS[step.conditionType]
 
-              {/* Condition type selector */}
-              <div className="flex gap-4 mb-3">
-                {(['action', 'tag', 'contact_mark'] as ConditionType[]).map((type) => (
-                  <label key={type} className="flex items-center gap-1.5 text-sm cursor-pointer">
+            return (
+              <div key={step.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                {/* ── Collapsed header (always visible) ── */}
+                <div
+                  className="flex items-center gap-2 px-4 py-3 cursor-pointer select-none hover:bg-gray-50 transition-colors"
+                  onClick={() => toggleExpand(step.id)}
+                >
+                  <span
+                    className="w-6 h-6 rounded-full text-xs font-bold text-white flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: '#06C755' }}
+                  >{idx + 1}</span>
+
+                  <span className="flex-1 text-sm font-medium text-gray-700 truncate min-w-0">
+                    {step.name || <span className="text-gray-400 font-normal">ステップ名未入力</span>}
+                  </span>
+
+                  {/* Category badge */}
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium flex-shrink-0">
+                    {categoryLabel}
+                  </span>
+
+                  {/* Selected condition chips (max 2 + overflow count) */}
+                  {conditionLabels.length > 0 && (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {conditionLabels.slice(0, 2).map((label, i) => (
+                        <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 truncate max-w-[72px]">{label}</span>
+                      ))}
+                      {conditionLabels.length > 2 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-500">+{conditionLabels.length - 2}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Chevron */}
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeStep(idx) }}
+                    className="text-xs text-red-400 hover:text-red-600 flex-shrink-0 px-1"
+                  >削除</button>
+                </div>
+
+                {/* ── Expanded content ── */}
+                {isExpanded && (
+                  <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-3">
+                    {/* Step name input */}
                     <input
-                      type="radio" name={`type-${step.id}`}
-                      checked={step.conditionType === type}
-                      onChange={() => updateStep(idx, { conditionType: type, conditionIds: [] })}
+                      type="text"
+                      value={step.name}
+                      onChange={(e) => updateStep(idx, { name: e.target.value })}
+                      placeholder="ステップ名（例：機種選択）"
+                      className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                     />
-                    {type === 'action' ? 'アクション' : type === 'tag' ? 'タグ' : '対応マーク'}
-                  </label>
-                ))}
-              </div>
 
-              {/* Condition options */}
-              <div className="border border-gray-200 rounded-md max-h-48 overflow-y-auto">
-                {step.conditionType === 'action' && (
-                  ACTION_TYPE_OPTIONS.map((opt) => (
-                    <label key={opt.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0">
-                      <input type="checkbox" checked={step.conditionIds.includes(opt.id)} onChange={() => toggleConditionId(idx, opt.id)} className="rounded" />
-                      <span className="text-gray-700">{opt.label}</span>
-                    </label>
-                  ))
-                )}
-                {step.conditionType === 'tag' && (
-                  tags.length === 0 ? <p className="p-3 text-xs text-gray-400">タグがありません</p> :
-                  tags.map((t) => (
-                    <label key={t.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0">
-                      <input type="checkbox" checked={step.conditionIds.includes(t.id)} onChange={() => toggleConditionId(idx, t.id)} className="rounded" />
-                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.color || '#3B82F6' }} />
-                      {t.name}
-                    </label>
-                  ))
-                )}
-                {step.conditionType === 'contact_mark' && (
-                  marks.length === 0 ? <p className="p-3 text-xs text-gray-400">マークがありません</p> :
-                  marks.map((m) => (
-                    <label key={m.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0">
-                      <input type="checkbox" checked={step.conditionIds.includes(m.id)} onChange={() => toggleConditionId(idx, m.id)} className="rounded" />
-                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
-                      {m.name}
-                    </label>
-                  ))
+                    {/* ① Segment control — 条件のカテゴリー */}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1.5">条件のカテゴリー</p>
+                      <div className="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+                        {(['action', 'tag', 'contact_mark'] as ConditionType[]).map((type) => {
+                          const isActive = step.conditionType === type
+                          const count = isActive ? step.conditionIds.length : 0
+                          return (
+                            <button
+                              key={type}
+                              onClick={() => updateStep(idx, { conditionType: type, conditionIds: [] })}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${
+                                isActive
+                                  ? 'bg-white text-gray-800 shadow-sm border border-gray-200'
+                                  : 'text-gray-500 hover:text-gray-700'
+                              }`}
+                            >
+                              {type === 'action' ? 'アクション' : type === 'tag' ? 'タグ' : '対応マーク'}
+                              {count > 0 && (
+                                <span className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded-full bg-blue-100 text-blue-600">
+                                  {count}
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ② List header */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs text-gray-500">
+                          対象となる<span className="font-semibold text-gray-600">{categoryLabel}</span>
+                          <span className="text-gray-400 ml-1">（複数選択時はOR条件）</span>
+                        </p>
+                        {step.conditionIds.length > 0 && (
+                          <span className="text-xs font-medium text-blue-600">{step.conditionIds.length}件選択中</span>
+                        )}
+                      </div>
+
+                      {/* ③ Condition list with row highlight */}
+                      <div className="border border-gray-200 rounded-md max-h-48 overflow-y-auto">
+                        {step.conditionType === 'action' && ACTION_TYPE_OPTIONS.map((opt) => {
+                          const checked = step.conditionIds.includes(opt.id)
+                          return (
+                            <label
+                              key={opt.id}
+                              className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-sm border-b border-gray-100 last:border-b-0 transition-colors ${
+                                checked ? 'bg-blue-50' : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <input type="checkbox" checked={checked} onChange={() => toggleConditionId(idx, opt.id)} className="rounded accent-blue-500" />
+                              <span className={checked ? 'font-medium text-blue-700' : 'text-gray-700'}>{opt.label}</span>
+                            </label>
+                          )
+                        })}
+
+                        {step.conditionType === 'tag' && (
+                          tags.length === 0
+                            ? <p className="p-3 text-xs text-gray-400">タグがありません</p>
+                            : tags.map((t) => {
+                              const checked = step.conditionIds.includes(t.id)
+                              return (
+                                <label
+                                  key={t.id}
+                                  className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-sm border-b border-gray-100 last:border-b-0 transition-colors ${
+                                    checked ? 'bg-blue-50' : 'hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <input type="checkbox" checked={checked} onChange={() => toggleConditionId(idx, t.id)} className="rounded accent-blue-500" />
+                                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.color || '#3B82F6' }} />
+                                  <span className={checked ? 'font-medium text-blue-700' : 'text-gray-700'}>{t.name}</span>
+                                </label>
+                              )
+                            })
+                        )}
+
+                        {step.conditionType === 'contact_mark' && (
+                          marks.length === 0
+                            ? <p className="p-3 text-xs text-gray-400">マークがありません</p>
+                            : marks.map((m) => {
+                              const checked = step.conditionIds.includes(m.id)
+                              return (
+                                <label
+                                  key={m.id}
+                                  className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-sm border-b border-gray-100 last:border-b-0 transition-colors ${
+                                    checked ? 'bg-blue-50' : 'hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <input type="checkbox" checked={checked} onChange={() => toggleConditionId(idx, m.id)} className="rounded accent-blue-500" />
+                                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
+                                  <span className={checked ? 'font-medium text-blue-700' : 'text-gray-700'}>{m.name}</span>
+                                </label>
+                              )
+                            })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ⑤ Explanation box */}
+                    {step.conditionIds.length > 0 && (
+                      <div className="flex gap-2 bg-gray-50 border border-gray-200 rounded-md px-3 py-2.5">
+                        <svg className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          このステップは「<span className="font-medium text-gray-700">{getConditionLabels(step).join(' / ')}</span>」
+                          {EXPLANATION_SUFFIX[step.conditionType]}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-              {step.conditionIds.length > 0 && (
-                <p className="text-xs text-gray-400 mt-1">{step.conditionIds.length}件選択中（OR条件）</p>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
