@@ -66,6 +66,15 @@ export type FunnelAnalyzeResult = {
   steps: { name: string; reached: number; notReached: number; rate: number; prevRate: number; totalRate: number; dropoff: number }[]
 }
 
+export type FunnelStepUser = {
+  id: string
+  displayName: string | null
+  pictureUrl: string | null
+  contactMarkId: string | null
+  chatId: string | null
+  lastMessageAt: string | null
+}
+
 export type CrossAnalysis = {
   id: string
   name: string
@@ -203,6 +212,8 @@ export const api = {
     delete: (id: string) => fetchApi<ApiResponse<null>>(`/api/funnels/${id}`, { method: 'DELETE' }),
     analyze: (id: string, from: string, to: string) =>
       fetchApi<ApiResponse<FunnelAnalyzeResult>>(`/api/funnels/${id}/analyze?from=${from}&to=${to}`),
+    stepUsers: (id: string, stepIndex: number, variant: 'reached' | 'not_reached' | 'base', from: string, to: string) =>
+      fetchApi<ApiResponse<{ users: FunnelStepUser[] }>>(`/api/funnels/${id}/step-users?stepIndex=${stepIndex}&variant=${variant}&from=${from}&to=${to}`),
   },
   crossAnalyses: {
     list: () => fetchApi<ApiResponse<CrossAnalysis[]>>('/api/cross-analyses'),

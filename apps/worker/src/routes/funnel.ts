@@ -196,4 +196,102 @@ funnelRoutes.get('/api/funnels/:id/analyze', async (c) => {
   }
 });
 
+// GET /api/funnels/:id/step-users?stepIndex={n}&variant={reached|not_reached|base}&from=&to=
+funnelRoutes.get('/api/funnels/:id/step-users', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const stepIndex = parseInt(c.req.query('stepIndex') ?? '-1', 10);
+    const variant = (c.req.query('variant') ?? 'reached') as 'reached' | 'not_reached' | 'base';
+    const from = c.req.query('from') ?? new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const to = c.req.query('to') ?? new Date().toISOString().slice(0, 10);
+    const fromTs = `${from}T00:00:00`;
+    const toTs = `${to}T23:59:59`;
+
+    const funnel = await c.env.DB.prepare('SELECT * FROM funnel_definitions WHERE id = ?').bind(id).first<FunnelRow>();
+    if (!funnel) return c.json({ success: false, error: 'Not found' }, 404);
+
+    const stepsResult = await c.env.DB
+      .prepare('SELECT * FROM funnel_steps WHERE funnel_id = ? ORDER BY step_order ASC').bind(id).all<FunnelStepRow>();
+    const steps = stepsResult.results;
+
+    const getMatchingIds = async (step: FunnelStepRow): Promise<Set<string>> => {
+      const conditionIds = JSON.parse(step.condition_ids || '[]') as string[];
+      if (conditionIds.length === 0) return new Set();
+      const ph = conditionIds.map(() => '?').join(',');
+      if (step.condition_type === 'tag') {
+        const rows = await c.env.DB.prepare(
+          `SELECT DISTINCT f.id FROM friends f JOIN friend_tags ft ON f.id = ft.friend_id WHERE f.created_at >= ? AND f.created_at <= ? AND ft.tag_id IN (${ph})`
+        ).bind(fromTs, toTs, ...conditionIds).all<{ id: string }>();
+        return new Set(rows.results.map(r => r.id));
+      } else if (step.condition_type === 'contact_mark') {
+        const rows = await c.env.DB.prepare(
+          `SELECT id FROM friends WHERE created_at >= ? AND created_at <= ? AND contact_mark_id IN (${ph})`
+        ).bind(fromTs, toTs, ...conditionIds).all<{ id: string }>();
+        return new Set(rows.results.map(r => r.id));
+      } else {
+        const rows = await c.env.DB.prepare(
+          `SELECT DISTINCT f.id FROM friends f JOIN friend_action_logs fal ON f.id = fal.friend_id WHERE f.created_at >= ? AND f.created_at <= ? AND fal.action_type IN (${ph})`
+        ).bind(fromTs, toTs, ...conditionIds).all<{ id: string }>();
+        return new Set(rows.results.map(r => r.id));
+      }
+    };
+
+    const getAllBaseIds = async (): Promise<Set<string>> => {
+      const rows = await c.env.DB.prepare('SELECT id FROM friends WHERE created_at >= ? AND created_at <= ?')
+        .bind(fromTs, toTs).all<{ id: string }>();
+      return new Set(rows.results.map(r => r.id));
+    };
+
+    let friendIds: Set<string>;
+    if (variant === 'base' || stepIndex === -1) {
+      friendIds = await getAllBaseIds();
+    } else if (variant === 'reached') {
+      const step = steps[stepIndex];
+      if (!step) return c.json({ success: false, error: 'Step not found' }, 404);
+      friendIds = await getMatchingIds(step);
+    } else {
+      const step = steps[stepIndex];
+      if (!step) return c.json({ success: false, error: 'Step not found' }, 404);
+      const prevIds = stepIndex === 0 ? await getAllBaseIds() : await getMatchingIds(steps[stepIndex - 1]);
+      const reachedIds = await getMatchingIds(step);
+      friendIds = new Set([...prevIds].filter(fid => !reachedIds.has(fid)));
+    }
+
+    if (friendIds.size === 0) {
+      return c.json({ success: true, data: { users: [] } });
+    }
+
+    const ids = [...friendIds];
+    const ph = ids.map(() => '?').join(',');
+    const rows = await c.env.DB.prepare(`
+      SELECT f.id, f.display_name, f.picture_url, f.contact_mark_id,
+             ch.id as chat_id, ch.last_message_at
+      FROM friends f
+      LEFT JOIN chats ch ON ch.friend_id = f.id
+      WHERE f.id IN (${ph})
+      ORDER BY CASE WHEN ch.last_message_at IS NULL THEN 1 ELSE 0 END, ch.last_message_at DESC
+    `).bind(...ids).all<{
+      id: string; display_name: string | null; picture_url: string | null;
+      contact_mark_id: string | null; chat_id: string | null; last_message_at: string | null;
+    }>();
+
+    return c.json({
+      success: true,
+      data: {
+        users: rows.results.map(r => ({
+          id: r.id,
+          displayName: r.display_name,
+          pictureUrl: r.picture_url,
+          contactMarkId: r.contact_mark_id,
+          chatId: r.chat_id,
+          lastMessageAt: r.last_message_at,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/funnels/:id/step-users error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 export { funnelRoutes };
