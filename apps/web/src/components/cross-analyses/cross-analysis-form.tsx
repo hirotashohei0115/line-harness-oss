@@ -101,14 +101,13 @@ export default function CrossAnalysisForm({ initial }: Props) {
 
   const exportCSV = () => {
     if (!result) return
-    const header = ['', ...result.axis2Items.map((i) => i.name), '合計']
+    const header = ['', ...result.axis2Items.map((i) => i.name), '行合計']
     const rows = result.axis1Items.map((a1) => [
       a1.name,
       ...result.axis2Items.map((a2) => result.cells[a1.id]?.[a2.id] ?? 0),
-      result.rowTotals[a1.id] ?? 0,
+      displayRowTotals[a1.id] ?? 0,
     ])
-    const grandTotal = result.axis1Items.reduce((s, a1) => s + (result.rowTotals[a1.id] ?? 0), 0)
-    const footer = ['列合計', ...result.axis2Items.map((a2) => result.colTotals[a2.id] ?? 0), grandTotal]
+    const footer = ['列合計（表示中）', ...result.axis2Items.map((a2) => displayColTotals[a2.id] ?? 0), grandTotal]
     const csv = [header, ...rows, footer].map((r) => r.join(',')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -117,9 +116,20 @@ export default function CrossAnalysisForm({ initial }: Props) {
     URL.revokeObjectURL(url)
   }
 
-  const grandTotal = result
-    ? result.axis1Items.reduce((s, a1) => s + (result.rowTotals[a1.id] ?? 0), 0)
-    : 0
+  // Compute display totals from cells to guarantee table internal consistency:
+  // sum of row cells = row total, sum of col cells = col total, both grand totals match
+  const displayRowTotals: Record<string, number> = {}
+  const displayColTotals: Record<string, number> = {}
+  let grandTotal = 0
+  if (result) {
+    for (const a1 of result.axis1Items) {
+      displayRowTotals[a1.id] = result.axis2Items.reduce((s, a2) => s + (result.cells[a1.id]?.[a2.id] ?? 0), 0)
+    }
+    for (const a2 of result.axis2Items) {
+      displayColTotals[a2.id] = result.axis1Items.reduce((s, a1) => s + (result.cells[a1.id]?.[a2.id] ?? 0), 0)
+    }
+    grandTotal = Object.values(displayRowTotals).reduce((s, v) => s + v, 0)
+  }
 
   const AxisSelector = ({
     label, type, setType, itemIds, setItemIds, color,
@@ -262,7 +272,7 @@ export default function CrossAnalysisForm({ initial }: Props) {
                     </th>
                   ))}
                   <th className="border border-gray-200 bg-gray-100 px-3 py-2 text-center text-xs font-semibold text-gray-600 min-w-[80px]">
-                    合計
+                    行合計
                   </th>
                 </tr>
               </thead>
@@ -284,18 +294,18 @@ export default function CrossAnalysisForm({ initial }: Props) {
                       )
                     })}
                     <td className="border border-gray-200 bg-gray-50 px-3 py-2 text-center text-sm font-bold text-gray-700">
-                      {result.rowTotals[a1.id] ?? 0}
+                      {displayRowTotals[a1.id] ?? 0}
                     </td>
                   </tr>
                 ))}
                 <tr className="bg-gray-50">
-                  <td className="border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600">列合計</td>
+                  <td className="border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600">列合計（表示中）</td>
                   {result.axis2Items.map((a2) => (
                     <td key={a2.id} className="border border-gray-200 px-3 py-2 text-center text-sm font-bold text-gray-700">
-                      {result.colTotals[a2.id] ?? 0}
+                      {displayColTotals[a2.id] ?? 0}
                     </td>
                   ))}
-                  <td className="border border-gray-200 bg-gray-100 px-3 py-2 text-center text-sm font-bold text-gray-900">
+                  <td className="border border-gray-200 bg-gray-100 px-3 py-2 text-center text-sm font-extrabold text-gray-900">
                     {grandTotal}
                   </td>
                 </tr>

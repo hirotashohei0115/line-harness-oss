@@ -150,10 +150,20 @@ crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
       rowTotals[a1Id] = row?.count ?? 0;
     }
 
-    // Col totals (axis2 condition only, regardless of axis1)
+    // Col totals: axis2 condition AND (axis1_1 OR axis1_2 OR ...) — symmetric with rowTotals
     const colTotals: Record<string, number> = {};
+    const a1Conditions = axis1.itemIds.map((a1Id) => buildItemCondition(axis1.type, a1Id));
+    const a1OrSql = a1Conditions.map((cond) => cond.sql).join(' OR ');
+    const a1OrParams = a1Conditions.flatMap((cond) => cond.params);
     for (const a2Id of axis2.itemIds) {
-      colTotals[a2Id] = await countUsers(c.env.DB, fromTs, toTs, undefined, buildItemCondition(axis2.type, a2Id));
+      const a2Cond = buildItemCondition(axis2.type, a2Id);
+      const colConditions = ['f.created_at >= ?', 'f.created_at <= ?', a2Cond.sql, `(${a1OrSql})`];
+      const colParams: unknown[] = [fromTs, toTs, ...a2Cond.params, ...a1OrParams];
+      const colRow = await c.env.DB
+        .prepare(`SELECT COUNT(DISTINCT f.id) as count FROM friends f WHERE ${colConditions.join(' AND ')}`)
+        .bind(...colParams)
+        .first<{ count: number }>();
+      colTotals[a2Id] = colRow?.count ?? 0;
     }
 
     return c.json({
