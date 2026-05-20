@@ -20,6 +20,64 @@ const AXIS_TYPE_OPTIONS: { value: AxisType; label: string }[] = [
 
 interface AxisItem { id: string; name: string; color: string }
 
+// Defined at module scope so React sees a stable component type across renders.
+// If defined inside CrossAnalysisForm, the function reference changes every render
+// and React unmounts/remounts the component, resetting scroll position.
+function toggleId(ids: string[], setIds: (v: string[]) => void, id: string) {
+  setIds(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])
+}
+
+interface AxisSelectorProps {
+  label: string; type: AxisType; setType: (t: AxisType) => void
+  items: AxisItem[]; itemIds: string[]; setItemIds: (ids: string[]) => void; color: string
+}
+
+function AxisSelector({ label, type, setType, items, itemIds, setItemIds, color }: AxisSelectorProps) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs font-semibold text-white px-2 py-0.5 rounded" style={{ backgroundColor: color }}>
+          {label}
+        </span>
+        <select
+          value={type}
+          onChange={(e) => { setType(e.target.value as AxisType); setItemIds([]) }}
+          className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+        >
+          {AXIS_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <button
+          onClick={() => setItemIds(items.map((i) => i.id))}
+          className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700 border border-gray-300 rounded"
+        >全選択</button>
+        <button
+          onClick={() => setItemIds([])}
+          className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700 border border-gray-300 rounded"
+        >解除</button>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-gray-400 text-center py-3">項目がありません</p>
+      ) : (
+        <div className="space-y-0.5 max-h-52 overflow-y-auto border border-gray-100 rounded-md">
+          {items.map((item) => (
+            <label key={item.id} className="flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={itemIds.includes(item.id)}
+                onChange={() => toggleId(itemIds, setItemIds, item.id)}
+                className="rounded accent-green-500"
+              />
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+              <span className="text-sm text-gray-700">{item.name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      <p className="text-xs text-gray-400 mt-2">{itemIds.length}件選択中</p>
+    </div>
+  )
+}
+
 export default function CrossAnalysisForm({ initial }: Props) {
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
@@ -49,10 +107,6 @@ export default function CrossAnalysisForm({ initial }: Props) {
   const getAxisItems = (type: AxisType): AxisItem[] => {
     if (type === 'tag') return tags.map((t) => ({ id: t.id, name: t.name, color: t.color || '#3B82F6' }))
     return marks.map((m) => ({ id: m.id, name: m.name, color: m.color }))
-  }
-
-  const toggleId = (ids: string[], setIds: (v: string[]) => void, id: string) => {
-    setIds(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])
   }
 
   const handleRun = useCallback(async () => {
@@ -131,58 +185,6 @@ export default function CrossAnalysisForm({ initial }: Props) {
     grandTotal = Object.values(displayRowTotals).reduce((s, v) => s + v, 0)
   }
 
-  const AxisSelector = ({
-    label, type, setType, itemIds, setItemIds, color,
-  }: {
-    label: string; type: AxisType; setType: (t: AxisType) => void
-    itemIds: string[]; setItemIds: (ids: string[]) => void; color: string
-  }) => {
-    const items = getAxisItems(type)
-    return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs font-semibold text-white px-2 py-0.5 rounded" style={{ backgroundColor: color }}>
-            {label}
-          </span>
-          <select
-            value={type}
-            onChange={(e) => { setType(e.target.value as AxisType); setItemIds([]) }}
-            className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
-          >
-            {AXIS_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <button
-            onClick={() => setItemIds(items.map((i) => i.id))}
-            className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700 border border-gray-300 rounded"
-          >全選択</button>
-          <button
-            onClick={() => setItemIds([])}
-            className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700 border border-gray-300 rounded"
-          >解除</button>
-        </div>
-        {items.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-3">項目がありません</p>
-        ) : (
-          <div className="space-y-0.5 max-h-52 overflow-y-auto border border-gray-100 rounded-md">
-            {items.map((item) => (
-              <label key={item.id} className="flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={itemIds.includes(item.id)}
-                  onChange={() => toggleId(itemIds, setItemIds, item.id)}
-                  className="rounded accent-green-500"
-                />
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-                <span className="text-sm text-gray-700">{item.name}</span>
-              </label>
-            ))}
-          </div>
-        )}
-        <p className="text-xs text-gray-400 mt-2">{itemIds.length}件選択中</p>
-      </div>
-    )
-  }
-
   return (
     <div>
       {error && (
@@ -221,10 +223,12 @@ export default function CrossAnalysisForm({ initial }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <AxisSelector
           label="軸1（行）" type={axis1Type} setType={setAxis1Type}
+          items={getAxisItems(axis1Type)}
           itemIds={axis1ItemIds} setItemIds={setAxis1ItemIds} color="#3b82f6"
         />
         <AxisSelector
           label="軸2（列）" type={axis2Type} setType={setAxis2Type}
+          items={getAxisItems(axis2Type)}
           itemIds={axis2ItemIds} setItemIds={setAxis2ItemIds} color="#8b5cf6"
         />
       </div>
