@@ -31,6 +31,19 @@ async function addTagToFriend(db: D1Database, friendId: string, tagName: string)
   }
 }
 
+async function removeTagsByNames(db: D1Database, friendId: string, tagNames: string[]): Promise<void> {
+  if (tagNames.length === 0) return;
+  try {
+    const placeholders = tagNames.map(() => '?').join(',');
+    await db
+      .prepare(`DELETE FROM friend_tags WHERE friend_id = ? AND tag_id IN (SELECT id FROM tags WHERE name IN (${placeholders}))`)
+      .bind(friendId, ...tagNames)
+      .run();
+  } catch (err) {
+    console.error('removeTagsByNames error:', err);
+  }
+}
+
 function serializeQuote(q: RepairQuote) {
   return {
     id: q.id,
@@ -252,15 +265,25 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
     // フォーム送信完了マーク: 梱包キット希望→mark_27、それ以外→mark_03
     await setContactMark(c.env.DB, friend.id, packagingKit ? 'mark_27' : 'mark_03');
 
-    // 自動タグ付与
+    // 自動タグ付与（排他制御）
+    await removeTagsByNames(c.env.DB, friend.id, [packagingKit ? '梱包キット希望しない' : '梱包キット希望する']);
     await addTagToFriend(c.env.DB, friend.id, packagingKit ? '梱包キット希望する' : '梱包キット希望しない');
+    const ALL_POSTAL_TAGS = ['郵送依頼', '郵送（盛岡）', '郵送（菖蒲）', '郵送（岐阜）', '郵送（大分）', '店舗持込'];
     if (deliveryStore.includes('菖蒲')) {
+      await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（菖蒲）'));
+      await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
       await addTagToFriend(c.env.DB, friend.id, '郵送（菖蒲）');
     } else if (deliveryStore.includes('盛岡')) {
+      await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（盛岡）'));
+      await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
       await addTagToFriend(c.env.DB, friend.id, '郵送（盛岡）');
     } else if (deliveryStore.includes('岐阜')) {
+      await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（岐阜）'));
+      await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
       await addTagToFriend(c.env.DB, friend.id, '郵送（岐阜）');
     } else if (deliveryStore.includes('大分')) {
+      await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（大分）'));
+      await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
       await addTagToFriend(c.env.DB, friend.id, '郵送（大分）');
     }
 

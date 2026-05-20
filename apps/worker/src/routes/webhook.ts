@@ -720,6 +720,19 @@ async function addTagToFriend(db: D1Database, friendId: string, tagName: string)
   }
 }
 
+async function removeTagsByNames(db: D1Database, friendId: string, tagNames: string[]): Promise<void> {
+  if (tagNames.length === 0) return;
+  try {
+    const placeholders = tagNames.map(() => '?').join(',');
+    await db
+      .prepare(`DELETE FROM friend_tags WHERE friend_id = ? AND tag_id IN (SELECT id FROM tags WHERE name IN (${placeholders}))`)
+      .bind(friendId, ...tagNames)
+      .run();
+  } catch (err) {
+    console.error('removeTagsByNames error:', err);
+  }
+}
+
 async function handleEvent(
   db: D1Database,
   lineClient: LineClient,
@@ -1073,7 +1086,9 @@ async function handleEvent(
       await setFriendAttribute(db, friend.id, 'repair_product_id', p.id);
       await setFriendAttribute(db, friend.id, 'repair_product_name', incomingText);
       await setFriendAttribute(db, friend.id, 'repair_product_key', p.key);
-      await addTagToFriend(db, friend.id, incomingText === 'MacBook Air' ? 'MacbookAir' : incomingText === 'MacBook Pro' ? 'MacbookPro' : 'その他');
+      const macTagName = incomingText === 'MacBook Air' ? 'MacbookAir' : incomingText === 'MacBook Pro' ? 'MacbookPro' : 'その他';
+      await removeTagsByNames(db, friend.id, ['MacbookAir', 'MacbookPro', 'その他'].filter(t => t !== macTagName));
+      await addTagToFriend(db, friend.id, macTagName);
       if (incomingText === 'その他') {
         try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch (err) { console.error('repair msg other product:', err); }
       } else {
@@ -1215,6 +1230,7 @@ async function handleEvent(
       if (quoteId) await updateRepairQuoteRequestType(db, quoteId, type);
       try {
         if (type === 'mail') {
+          await removeTagsByNames(db, friend.id, ['依頼しない']);
           await addTagToFriend(db, friend.id, '依頼する');
           await addTagToFriend(db, friend.id, '郵送依頼');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
@@ -1222,6 +1238,7 @@ async function handleEvent(
             buildMessage('flex', JSON.stringify({ type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'button', action: { type: 'uri', label: '郵送修理ご依頼フォーム', uri: MAIL_REPAIR_FORM_URL }, style: 'primary', height: 'sm', color: '#00B900' }] } })),
           ]);
         } else if (type === 'store') {
+          await removeTagsByNames(db, friend.id, ['依頼しない']);
           await addTagToFriend(db, friend.id, '依頼する');
           await addTagToFriend(db, friend.id, '店舗持込');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
@@ -1241,6 +1258,7 @@ async function handleEvent(
             })),
           ]);
         } else {
+          await removeTagsByNames(db, friend.id, ['依頼する']);
           await addTagToFriend(db, friend.id, '依頼しない');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildConsultCategoryFlex())]);
         }
@@ -1539,7 +1557,9 @@ async function handleEvent(
       await setFriendAttribute(db, friend.id, 'repair_product_name', productName);
       await setFriendAttribute(db, friend.id, 'repair_product_key', productKey);
       await setContactMark(db, friend.id, 'mark_16');
-      await addTagToFriend(db, friend.id, productKey === 'air' ? 'MacbookAir' : productKey === 'pro' ? 'MacbookPro' : 'その他');
+      const macTagNamePb = productKey === 'air' ? 'MacbookAir' : productKey === 'pro' ? 'MacbookPro' : 'その他';
+      await removeTagsByNames(db, friend.id, ['MacbookAir', 'MacbookPro', 'その他'].filter(t => t !== macTagNamePb));
+      await addTagToFriend(db, friend.id, macTagNamePb);
       try {
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           buildMessage('flex', buildModelMethodFlex(productName, productKey)),
@@ -1754,6 +1774,7 @@ async function handleEvent(
       try {
         if (type === 'mail') {
           await setContactMark(db, friend.id, 'mark_23');
+          await removeTagsByNames(db, friend.id, ['依頼しない']);
           await addTagToFriend(db, friend.id, '依頼する');
           await addTagToFriend(db, friend.id, '郵送依頼');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
@@ -1769,12 +1790,14 @@ async function handleEvent(
             })),
           ]);
         } else if (type === 'store') {
+          await removeTagsByNames(db, friend.id, ['依頼しない']);
           await addTagToFriend(db, friend.id, '依頼する');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             buildMessage('flex', buildStoreSelectFlex()),
           ]);
         } else {
           await setContactMark(db, friend.id, 'mark_11');
+          await removeTagsByNames(db, friend.id, ['依頼する']);
           await addTagToFriend(db, friend.id, '依頼しない');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
             buildMessage('flex', buildConsultCategoryFlex()),

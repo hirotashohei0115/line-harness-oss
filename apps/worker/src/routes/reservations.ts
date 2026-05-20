@@ -17,6 +17,29 @@ import type { Env } from '../index.js';
 
 const reservationRoutes = new Hono<Env>();
 
+async function addTagToFriend(db: D1Database, friendId: string, tagName: string): Promise<void> {
+  try {
+    const tag = await db.prepare('SELECT id FROM tags WHERE name = ?').bind(tagName).first<{ id: string }>();
+    if (!tag) return;
+    await db.prepare('INSERT OR IGNORE INTO friend_tags (friend_id, tag_id) VALUES (?, ?)').bind(friendId, tag.id).run();
+  } catch (err) {
+    console.error('addTagToFriend error:', err);
+  }
+}
+
+async function removeTagsByNames(db: D1Database, friendId: string, tagNames: string[]): Promise<void> {
+  if (tagNames.length === 0) return;
+  try {
+    const placeholders = tagNames.map(() => '?').join(',');
+    await db
+      .prepare(`DELETE FROM friend_tags WHERE friend_id = ? AND tag_id IN (SELECT id FROM tags WHERE name IN (${placeholders}))`)
+      .bind(friendId, ...tagNames)
+      .run();
+  } catch (err) {
+    console.error('removeTagsByNames error:', err);
+  }
+}
+
 const STORE_NAMES: Record<string, string> = {
   gotanda: '五反田店',
   kinshicho: '錦糸町店',
@@ -162,12 +185,17 @@ reservationRoutes.post('/api/reservations', async (c) => {
     notes: body.notes ?? '',
   });
 
-  // Set mark_04 on friend
+  // Set mark_04 on friend, add 店舗持込 tag, remove postal tags
   if (friend?.id) {
     await c.env.DB
       .prepare('UPDATE friends SET contact_mark_id = ? WHERE id = ?')
       .bind('mark_04', friend.id)
       .run();
+    await removeTagsByNames(c.env.DB, friend.id, [
+      '郵送依頼', '郵送（盛岡）', '郵送（菖蒲）', '郵送（岐阜）', '郵送（大分）',
+      '梱包キット希望する', '梱包キット希望しない',
+    ]);
+    await addTagToFriend(c.env.DB, friend.id, '店舗持込');
   }
 
   const storeName = STORE_NAMES[storeKey] ?? storeKey;
