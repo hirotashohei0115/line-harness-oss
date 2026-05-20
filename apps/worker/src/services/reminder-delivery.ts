@@ -13,6 +13,7 @@ import {
   completeReminderIfDone,
   getFriendById,
   jstNow,
+  upsertChatOnOutgoingMessage,
 } from '@line-crm/db';
 import type { LineClient, Message } from '@line-crm/line-sdk';
 import { addJitter, sleep } from './stealth.js';
@@ -54,6 +55,9 @@ export async function processReminderDeliveries(
 
         // 配信済みを記録
         await markReminderStepDelivered(db, fr.id, step.id);
+
+        // チャット一覧に反映
+        await upsertChatOnOutgoingMessage(db, friend.id);
       }
 
       // 全ステップ配信済みかチェック
