@@ -5,6 +5,7 @@ import {
   getRepairPrice,
   createRepairQuote,
   getRepairQuotesByFriend,
+  upsertChatOnMessage,
 } from '@line-crm/db';
 import type { RepairQuote } from '@line-crm/db';
 import { LineClient } from '@line-crm/line-sdk';
@@ -233,6 +234,19 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       )
       .bind(id, friend.id, name, postalCode, address, phone, packagingKit ? 1 : 0, deliveryStore, now, now)
       .run();
+
+    // フォーム内容をチャットに表示（incoming メッセージとして記録）
+    const formContent = `【郵送修理フォーム送信】\n━━━━━━━━━━\nお名前：${name}\n郵便番号：${postalCode}\nご住所：${address}\n電話番号：${phone}\n梱包キット：${packagingKit ? 'あり（無料）' : 'なし'}\n配送先：${deliveryStore}\n━━━━━━━━━━`;
+    await c.env.DB
+      .prepare(
+        `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
+         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 0, ?)`,
+      )
+      .bind(crypto.randomUUID(), friend.id, formContent, now)
+      .run();
+
+    // チャット一覧に表示されるよう chats エントリを更新
+    await upsertChatOnMessage(c.env.DB, friend.id);
 
     // フォーム送信完了マーク: 梱包キット希望→mark_27、それ以外→mark_03
     await setContactMark(c.env.DB, friend.id, packagingKit ? 'mark_27' : 'mark_03');
