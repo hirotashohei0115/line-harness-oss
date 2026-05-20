@@ -394,7 +394,7 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            onKeyDown={(e) => { if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); handleSend() } }}
             placeholder="メッセージを入力..."
             className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
           />
@@ -912,10 +912,11 @@ export default function ChatsPage() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && e.shiftKey) {
       e.preventDefault()
       handleSendMessage()
     }
+    // Enter alone = newline (default behavior)
   }
 
   const handleTextareaInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
