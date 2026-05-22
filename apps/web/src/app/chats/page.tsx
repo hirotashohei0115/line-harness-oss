@@ -431,6 +431,7 @@ export default function ChatsPage() {
   const [savingNotes, setSavingNotes] = useState(false)
   const [templates, setTemplates] = useState<Template[]>([])
   const [showTemplates, setShowTemplates] = useState(false)
+  const [templateCategory, setTemplateCategory] = useState<string>('all')
   const [repairQuote, setRepairQuote] = useState<RepairQuote | null>(null)
   const [repairAttrs, setRepairAttrs] = useState<Record<string, string>>({})
   const [mailOrder, setMailOrder] = useState<MailOrder | null>(null)
@@ -1384,22 +1385,51 @@ export default function ChatsPage() {
               {/* Send Message Form */}
               <div className="px-4 py-3 border-t border-gray-200">
                 {/* Template picker */}
-                {showTemplates && templates.length > 0 && (
-                  <div className="mb-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg bg-white shadow-sm">
-                    {templates.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => { setMessageContent(t.messageContent); setPendingMessageType(t.messageType || 'text'); setShowTemplates(false) }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                      >
-                        <span className="font-medium text-gray-800">{t.name}</span>
-                        <span className="ml-2 text-xs text-gray-400 truncate">{t.messageContent.slice(0, 40)}</span>
-                      </button>
-                    ))}
+                {showTemplates && (
+                  <div className="mb-2 border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
+                    {/* Category tabs */}
+                    <div className="flex gap-0 border-b border-gray-100 overflow-x-auto">
+                      {['all', '来店予約', '郵送案内', '見積もり関連', 'よくある質問', 'その他'].map((cat) => {
+                        const label = cat === 'all' ? '全て' : cat
+                        const isActive = templateCategory === cat
+                        const count = cat === 'all' ? templates.length : templates.filter(t => t.category === cat).length
+                        return (
+                          <button
+                            key={cat}
+                            onClick={() => setTemplateCategory(cat)}
+                            className={`flex-shrink-0 px-3 py-1.5 text-xs font-medium transition-colors border-b-2 ${
+                              isActive
+                                ? 'border-green-500 text-green-700 bg-green-50'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {label}{count > 0 && <span className="ml-1 text-gray-400">({count})</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {/* Template list */}
+                    {(() => {
+                      const filtered = templateCategory === 'all' ? templates : templates.filter(t => t.category === templateCategory)
+                      if (filtered.length === 0) return (
+                        <p className="px-3 py-3 text-xs text-gray-400 text-center">テンプレートがありません</p>
+                      )
+                      return (
+                        <div className="max-h-40 overflow-y-auto">
+                          {filtered.map((t) => (
+                            <button
+                              key={t.id}
+                              onClick={() => { setMessageContent(t.messageContent); setPendingMessageType(t.messageType || 'text'); setShowTemplates(false) }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                            >
+                              <span className="font-medium text-gray-800">{t.name}</span>
+                              <span className="ml-2 text-xs text-gray-400 truncate">{t.messageContent.slice(0, 40)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </div>
-                )}
-                {showTemplates && templates.length === 0 && (
-                  <p className="mb-2 text-xs text-gray-400 text-center">テンプレートがありません</p>
                 )}
                 {/* 画像プレビュー */}
                 {pendingImage && (

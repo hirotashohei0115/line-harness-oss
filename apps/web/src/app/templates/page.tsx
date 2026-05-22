@@ -426,6 +426,7 @@ export default function TemplatesPage() {
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
   const [editName, setEditName] = useState('')
   const [editContent, setEditContent] = useState('')
+  const [editCategory, setEditCategory] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
 
@@ -571,6 +572,7 @@ export default function TemplatesPage() {
     setEditingTemplate(template)
     setEditName(template.name)
     setEditContent(template.messageContent)
+    setEditCategory(template.category || 'その他')
     setEditError('')
   }
 
@@ -581,7 +583,7 @@ export default function TemplatesPage() {
     setEditSaving(true)
     setEditError('')
     try {
-      await api.templates.patch(editingTemplate.id, { name: editName.trim(), messageContent: editContent.trim() })
+      await api.templates.patch(editingTemplate.id, { name: editName.trim(), messageContent: editContent.trim(), category: editCategory })
       setEditingTemplate(null)
       load()
     } catch {
@@ -662,6 +664,20 @@ export default function TemplatesPage() {
                 />
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">カテゴリ</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  value={editCategory}
+                  onChange={e => setEditCategory(e.target.value)}
+                >
+                  <option value="来店予約">来店予約</option>
+                  <option value="郵送案内">郵送案内</option>
+                  <option value="見積もり関連">見積もり関連</option>
+                  <option value="よくある質問">よくある質問</option>
+                  <option value="その他">その他</option>
+                </select>
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">メッセージ内容 <span className="text-red-500">*</span></label>
                 <textarea
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
@@ -712,13 +728,18 @@ export default function TemplatesPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">カテゴリ <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="例: 挨拶、キャンペーン、通知"
+              <select
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
-              />
+              >
+                <option value="">選択してください</option>
+                <option value="来店予約">来店予約</option>
+                <option value="郵送案内">郵送案内</option>
+                <option value="見積もり関連">見積もり関連</option>
+                <option value="よくある質問">よくある質問</option>
+                <option value="その他">その他</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">メッセージタイプ</label>
