@@ -17,6 +17,21 @@ import type { Env } from '../index.js';
 
 const reservationRoutes = new Hono<Env>();
 
+const STORE_CHATWORK_CONFIG: Record<string, { roomId: string; managerAccountId: string | null; storeAccountId: string | null }> = {
+  'aomori':     { roomId: '282185894', managerAccountId: '4990024',  storeAccountId: '10740725' },
+  'morioka':    { roomId: '143977136', managerAccountId: '3864937',  storeAccountId: '6955860'  },
+  'utsunomiya': { roomId: '198849506', managerAccountId: '10048092', storeAccountId: '5205467'  },
+  'shobu':      { roomId: '243564267', managerAccountId: '6401378',  storeAccountId: '6380351'  },
+  'narita':     { roomId: '177956614', managerAccountId: null,       storeAccountId: '4581697'  },
+  'makuhari':   { roomId: '275467046', managerAccountId: '7008476',  storeAccountId: '7120956'  },
+  'kinshicho':  { roomId: '347607561', managerAccountId: '1669352',  storeAccountId: null       },
+  'gotanda':    { roomId: '305105971', managerAccountId: '8870364',  storeAccountId: '3711854'  },
+  'nagaoka':    { roomId: '433591904', managerAccountId: '11294514', storeAccountId: '11307739' },
+  'gifu':       { roomId: '368537823', managerAccountId: '10218778', storeAccountId: '9589322'  },
+  'kizugawa':   { roomId: '420332491', managerAccountId: '3069371',  storeAccountId: '11121070' },
+  'oita':       { roomId: '288490480', managerAccountId: '10168426', storeAccountId: '7482587'  },
+};
+
 async function addTagToFriend(db: D1Database, friendId: string, tagName: string): Promise<void> {
   try {
     const tag = await db.prepare('SELECT id FROM tags WHERE name = ?').bind(tagName).first<{ id: string }>();
@@ -216,37 +231,52 @@ reservationRoutes.post('/api/reservations', async (c) => {
     console.error('LINE confirmation send error:', err);
   }
 
+  // Fetch latest repair quote for price/delivery info (used in both Chatwork and Calendar)
+  const quote = friend?.id
+    ? await c.env.DB
+        .prepare('SELECT price_from, price_to, delivery_days_from, delivery_days_to FROM repair_quotes WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1')
+        .bind(friend.id)
+        .first<{ price_from: number | null; price_to: number | null; delivery_days_from: number | null; delivery_days_to: number | null }>()
+    : null;
+  let priceText = '未見積もり';
+  if (quote?.price_from != null && quote.price_to != null) {
+    priceText = `${quote.price_from.toLocaleString()}〜${quote.price_to.toLocaleString()}円`;
+  } else if (quote?.price_from != null) {
+    priceText = `${quote.price_from.toLocaleString()}円〜`;
+  }
+  let deliveryText = '未定';
+  if (quote?.delivery_days_from != null && quote.delivery_days_to != null) {
+    deliveryText = `${quote.delivery_days_from}〜${quote.delivery_days_to}日`;
+  } else if (quote?.delivery_days_from != null) {
+    deliveryText = `${quote.delivery_days_from}日〜`;
+  }
+
   // Chatwork notification — await to ensure delivery before response (Worker keepalive)
   const cwToken = c.env.CHATWORK_API_TOKEN;
+  const reservationInfo = `店舗：リペアマスター${storeName}\n日時：${dateDisplay}（${dayName}）${time}〜\nお名前：${name}様\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n見積もり金額：${priceText}\n納期目安：${deliveryText}\n管理画面：https://macbook-repair-admin.vercel.app`;
+
+  // ① 管理者向け通知（既存ルームID）
   const cwRoom = c.env.CHATWORK_ROOM_ID;
   if (cwToken && cwRoom) {
-    const cwMsg = `[info][title]🏪 来店予約が入りました[/title]店舗：リペアマスター${storeName}\n日時：${dateDisplay}（${dayName}）${time}〜\nお名前：${name}様\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+    const cwMsg = `[info][title]🏪 来店予約が入りました[/title]${reservationInfo}[/info]`;
     await sendChatworkMessage(cwToken, cwRoom, cwMsg);
+  }
+
+  // ② 店舗向け通知（各店舗ルームへメンション付き）
+  const storeConfig = STORE_CHATWORK_CONFIG[storeKey];
+  if (cwToken && storeConfig) {
+    const mentions = [storeConfig.managerAccountId, storeConfig.storeAccountId]
+      .filter(Boolean)
+      .map(id => `[To:${id}]`)
+      .join('');
+    const storeCwMsg = `${mentions}\n[info][title]🏪 来店予約が入りました[/title]${reservationInfo}[/info]`;
+    await sendChatworkMessage(cwToken, storeConfig.roomId, storeCwMsg);
   }
 
   // Google Calendar event
   try {
     const calendarId = STORE_CALENDAR_IDS[storeKey];
     if (calendarId && c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET && c.env.GOOGLE_REFRESH_TOKEN) {
-      // Fetch latest repair quote for this friend
-      const quote = friend?.id
-        ? await c.env.DB
-            .prepare('SELECT price_from, price_to, delivery_days_from, delivery_days_to FROM repair_quotes WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1')
-            .bind(friend.id)
-            .first<{ price_from: number | null; price_to: number | null; delivery_days_from: number | null; delivery_days_to: number | null }>()
-        : null;
-      let priceText = '未見積もり';
-      if (quote?.price_from != null && quote.price_to != null) {
-        priceText = `${quote.price_from.toLocaleString()}〜${quote.price_to.toLocaleString()}円`;
-      } else if (quote?.price_from != null) {
-        priceText = `${quote.price_from.toLocaleString()}円〜`;
-      }
-      let deliveryText = '未定';
-      if (quote?.delivery_days_from != null && quote.delivery_days_to != null) {
-        deliveryText = `${quote.delivery_days_from}〜${quote.delivery_days_to}日`;
-      } else if (quote?.delivery_days_from != null) {
-        deliveryText = `${quote.delivery_days_from}日〜`;
-      }
 
       const [hh, mm] = time.split(':').map(Number);
       const startDateTime = `${date}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00+09:00`;
