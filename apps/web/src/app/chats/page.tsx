@@ -454,6 +454,9 @@ export default function ChatsPage() {
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [readConfirmed, setReadConfirmed] = useState(false)
   const [readingAll, setReadingAll] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [editNameValue, setEditNameValue] = useState('')
+  const [savingName, setSavingName] = useState(false)
   const [zoomedImageContent, setZoomedImageContent] = useState<string | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const prevChatsRef = useRef<Chat[]>([])
@@ -740,6 +743,7 @@ export default function ChatsPage() {
     setPendingImage(null)
     setPendingMessageType('text')
     setReadConfirmed(false)
+    setEditingName(false)
   }
 
   const handleReadAll = async () => {
@@ -909,6 +913,37 @@ export default function ChatsPage() {
     } catch {
       alert('タグの削除に失敗しました')
     }
+  }
+
+  const handleStartEditName = () => {
+    setEditNameValue(chatDetail?.friendName ?? '')
+    setEditingName(true)
+  }
+
+  const handleSaveName = async () => {
+    const newName = editNameValue.trim()
+    if (!newName || !chatDetail?.friendId || savingName) return
+    setSavingName(true)
+    try {
+      await fetchApi(`/api/friends/${chatDetail.friendId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ display_name: newName }),
+      })
+      setChatDetail(prev => prev ? { ...prev, friendName: newName } : prev)
+      setChats(prev => prev.map(c => c.friendId === chatDetail.friendId ? { ...c, friendName: newName } : c))
+      setEditingName(false)
+    } catch {
+      alert('名前の更新に失敗しました')
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  const handleCancelEditName = () => setEditingName(false)
+
+  const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { e.preventDefault(); void handleSaveName() }
+    if (e.key === 'Escape') handleCancelEditName()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1183,10 +1218,43 @@ export default function ChatsPage() {
                   {chatDetail.friendPictureUrl && (
                     <img src={chatDetail.friendPictureUrl} alt="" className="w-8 h-8 rounded-full flex-shrink-0" />
                   )}
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {chatDetail.friendName}
-                    </p>
+                  <div className="min-w-0 flex items-center gap-1">
+                    {editingName ? (
+                      <>
+                        <input
+                          type="text"
+                          value={editNameValue}
+                          onChange={(e) => setEditNameValue(e.target.value)}
+                          onKeyDown={handleNameKeyDown}
+                          autoFocus
+                          className="text-sm font-medium text-gray-900 border border-blue-400 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-400 w-40"
+                        />
+                        <button
+                          onClick={() => void handleSaveName()}
+                          disabled={savingName || !editNameValue.trim()}
+                          className="text-xs px-2 py-0.5 bg-blue-500 hover:bg-blue-600 text-white rounded disabled:opacity-50"
+                        >{savingName ? '…' : '保存'}</button>
+                        <button
+                          onClick={handleCancelEditName}
+                          className="text-xs px-2 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded"
+                        >✕</button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {chatDetail.friendName}
+                        </p>
+                        <button
+                          onClick={handleStartEditName}
+                          title="名前を編集"
+                          className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

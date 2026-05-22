@@ -214,6 +214,26 @@ friends.get('/api/friends/:id', async (c) => {
   }
 });
 
+// PATCH /api/friends/:id — update display_name
+friends.patch('/api/friends/:id', async (c) => {
+  try {
+    const friendId = c.req.param('id')
+    const body = await c.req.json<{ display_name?: string }>()
+    if (body.display_name === undefined) {
+      return c.json({ success: false, error: 'display_name is required' }, 400)
+    }
+    const now = jstNow()
+    await c.env.DB
+      .prepare('UPDATE friends SET display_name = ?, updated_at = ? WHERE id = ?')
+      .bind(body.display_name.trim(), now, friendId)
+      .run()
+    return c.json({ success: true, data: null })
+  } catch (err) {
+    console.error('PATCH /api/friends/:id error:', err)
+    return c.json({ success: false, error: 'Internal server error' }, 500)
+  }
+})
+
 // PATCH /api/friends/:id/pin — pin/unpin a friend (per-staff via staff_pins table)
 friends.patch('/api/friends/:id/pin', async (c) => {
   try {
