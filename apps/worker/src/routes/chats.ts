@@ -137,9 +137,10 @@ chats.get('/api/chats', async (c) => {
         storeKeys.forEach(k => bindings.push(k));
       }
 
-      // 2. mail_orders (delivery_store = 日本語店舗名)
-      subQueries.push(`SELECT DISTINCT friend_id FROM mail_orders WHERE delivery_store IN (${namePH})`);
-      storeNames.forEach(s => bindings.push(s));
+      // 2. mail_orders — delivery_store may be prefixed ("郵送修理センター菖蒲店（埼玉県）"), so use LIKE
+      const mailLikeClauses = storeNames.map(() => 'delivery_store LIKE ?').join(' OR ');
+      subQueries.push(`SELECT DISTINCT friend_id FROM mail_orders WHERE (${mailLikeClauses})`);
+      storeNames.forEach(s => bindings.push(`%${s}%`));
 
       // 3. friend_attributes repair_store (store selection in chat/repair flow)
       subQueries.push(`SELECT DISTINCT friend_id FROM friend_attributes WHERE key = 'repair_store' AND value IN (${namePH})`);
@@ -249,8 +250,9 @@ chats.get('/api/chats/unread-count', async (c) => {
         subQueries.push(`SELECT DISTINCT friend_id FROM store_reservations WHERE store_key IN (${keyPH})`);
         storeKeys.forEach(k => bindings.push(k));
       }
-      subQueries.push(`SELECT DISTINCT friend_id FROM mail_orders WHERE delivery_store IN (${namePH})`);
-      storeNames.forEach(s => bindings.push(s));
+      const mailLikeClauses2 = storeNames.map(() => 'delivery_store LIKE ?').join(' OR ');
+      subQueries.push(`SELECT DISTINCT friend_id FROM mail_orders WHERE (${mailLikeClauses2})`);
+      storeNames.forEach(s => bindings.push(`%${s}%`));
       subQueries.push(`SELECT DISTINCT friend_id FROM friend_attributes WHERE key = 'repair_store' AND value IN (${namePH})`);
       storeNames.forEach(s => bindings.push(s));
 

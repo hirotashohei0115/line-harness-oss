@@ -265,6 +265,23 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
     // フォーム送信完了マーク: 梱包キット希望→mark_27、それ以外→mark_03
     await setContactMark(c.env.DB, friend.id, packagingKit ? 'mark_27' : 'mark_03');
 
+    // repair_quotesの希望店舗を更新（チャット画面「修理情報」に反映）
+    const storeShortName = deliveryStore.includes('菖蒲') ? '菖蒲店'
+      : deliveryStore.includes('盛岡') ? '盛岡店'
+      : deliveryStore.includes('岐阜') ? '岐阜店'
+      : deliveryStore.includes('大分') ? '大分店'
+      : null;
+    if (storeShortName) {
+      await c.env.DB
+        .prepare(`UPDATE repair_quotes SET store = ? WHERE id = (SELECT id FROM repair_quotes WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1)`)
+        .bind(storeShortName, friend.id)
+        .run();
+      await c.env.DB
+        .prepare(`UPDATE friend_attributes SET value = ?, updated_at = ? WHERE friend_id = ? AND key = 'repair_store'`)
+        .bind(storeShortName, jstNow(), friend.id)
+        .run();
+    }
+
     // 自動タグ付与（排他制御）
     await removeTagsByNames(c.env.DB, friend.id, [packagingKit ? '梱包キット希望しない' : '梱包キット希望する']);
     await addTagToFriend(c.env.DB, friend.id, packagingKit ? '梱包キット希望する' : '梱包キット希望しない');
