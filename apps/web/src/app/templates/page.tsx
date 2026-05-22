@@ -537,6 +537,73 @@ function formatDate(iso: string): string {
   })
 }
 
+function CategorySelect({
+  value,
+  onChange,
+  existingCategories,
+  selectClassName,
+}: {
+  value: string
+  onChange: (v: string) => void
+  existingCategories: string[]
+  selectClassName: string
+}) {
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+
+  const allOptions = Array.from(
+    new Set([...existingCategories, ...(value && value !== '' && value !== '__new__' ? [value] : [])])
+  )
+
+  const confirm = () => {
+    const trimmed = newName.trim()
+    if (trimmed) onChange(trimmed)
+    setCreating(false)
+    setNewName('')
+  }
+
+  if (creating) {
+    return (
+      <div className="flex gap-2">
+        <input
+          type="text"
+          autoFocus
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); confirm() }
+            if (e.key === 'Escape') { setCreating(false); setNewName('') }
+          }}
+          placeholder="新しいカテゴリー名を入力"
+          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+        />
+        <button type="button" onClick={confirm}
+          className="px-3 py-2 text-xs font-medium text-white rounded-lg whitespace-nowrap"
+          style={{ backgroundColor: '#06C755' }}>確定</button>
+        <button type="button" onClick={() => { setCreating(false); setNewName('') }}
+          className="px-3 py-2 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg">×</button>
+      </div>
+    )
+  }
+
+  return (
+    <select
+      className={selectClassName}
+      value={value}
+      onChange={e => {
+        if (e.target.value === '__new__') { setCreating(true) }
+        else { onChange(e.target.value) }
+      }}
+    >
+      <option value="">選択してください</option>
+      {allOptions.map(cat => (
+        <option key={cat} value={cat}>{cat}</option>
+      ))}
+      <option value="__new__">＋ 新しいカテゴリーを作成</option>
+    </select>
+  )
+}
+
 const ccPrompts = [
   {
     title: 'テンプレート作成',
@@ -599,6 +666,7 @@ export default function TemplatesPage() {
   const [editCategory, setEditCategory] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
+  const [allCategories, setAllCategories] = useState<string[]>([])
 
   // Sync store card fields → form.messageContent (real-time JSON generation)
   useEffect(() => {
@@ -621,6 +689,8 @@ export default function TemplatesPage() {
       )
       if (res.success) {
         setTemplates(res.data)
+        const newCats = res.data.map(t => t.category).filter(Boolean) as string[]
+        setAllCategories(prev => Array.from(new Set([...prev, ...newCats])))
       } else {
         setError(res.error)
       }
@@ -742,7 +812,7 @@ export default function TemplatesPage() {
     setEditingTemplate(template)
     setEditName(template.name)
     setEditContent(template.messageContent)
-    setEditCategory(template.category || 'その他')
+    setEditCategory(template.category || '')
     setEditError('')
   }
 
@@ -835,17 +905,12 @@ export default function TemplatesPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">カテゴリ</label>
-                <select
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                <CategorySelect
                   value={editCategory}
-                  onChange={e => setEditCategory(e.target.value)}
-                >
-                  <option value="来店予約">来店予約</option>
-                  <option value="郵送案内">郵送案内</option>
-                  <option value="見積もり関連">見積もり関連</option>
-                  <option value="よくある質問">よくある質問</option>
-                  <option value="その他">その他</option>
-                </select>
+                  onChange={setEditCategory}
+                  existingCategories={allCategories}
+                  selectClassName="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">メッセージ内容 <span className="text-red-500">*</span></label>
@@ -898,18 +963,12 @@ export default function TemplatesPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">カテゴリ <span className="text-red-500">*</span></label>
-              <select
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+              <CategorySelect
                 value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-              >
-                <option value="">選択してください</option>
-                <option value="来店予約">来店予約</option>
-                <option value="郵送案内">郵送案内</option>
-                <option value="見積もり関連">見積もり関連</option>
-                <option value="よくある質問">よくある質問</option>
-                <option value="その他">その他</option>
-              </select>
+                onChange={v => setForm(p => ({ ...p, category: v }))}
+                existingCategories={allCategories}
+                selectClassName="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">メッセージタイプ</label>
