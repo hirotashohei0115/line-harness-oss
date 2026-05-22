@@ -79,6 +79,19 @@ templates.put('/api/templates/:id', async (c) => {
   }
 });
 
+// PATCH /api/templates/reorder — registered before /:id to avoid route shadowing
+templates.patch('/api/templates/reorder', async (c) => {
+  try {
+    const body = await c.req.json<{ orders: { id: string; sort_order: number }[] }>();
+    if (!Array.isArray(body.orders)) return c.json({ success: false, error: 'orders array required' }, 400);
+    await reorderTemplates(c.env.DB, body.orders);
+    return c.json({ success: true, data: null });
+  } catch (err) {
+    console.error('PATCH /api/templates/reorder error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 templates.patch('/api/templates/:id', async (c) => {
   try {
     const id = c.req.param('id');
@@ -92,19 +105,6 @@ templates.patch('/api/templates/:id', async (c) => {
     });
   } catch (err) {
     console.error('PATCH /api/templates/:id error:', err);
-    return c.json({ success: false, error: 'Internal server error' }, 500);
-  }
-});
-
-// PATCH /api/templates/reorder — must be before /:id routes
-templates.patch('/api/templates/reorder', async (c) => {
-  try {
-    const body = await c.req.json<{ orders: { id: string; sort_order: number }[] }>();
-    if (!Array.isArray(body.orders)) return c.json({ success: false, error: 'orders array required' }, 400);
-    await reorderTemplates(c.env.DB, body.orders);
-    return c.json({ success: true, data: null });
-  } catch (err) {
-    console.error('PATCH /api/templates/reorder error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
 });
