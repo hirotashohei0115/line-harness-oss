@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { api } from '@/lib/api'
+import { api, fetchApi } from '@/lib/api'
 import Header from '@/components/layout/header'
 import CcPromptButton from '@/components/cc-prompt-button'
 import FlexPreviewComponent from '@/components/flex-preview'
@@ -227,6 +227,96 @@ function buildCustomFlexJson(parts: FlexPart[], settings: FlexEditorSettings): s
   return JSON.stringify(bubble, null, 2)
 }
 
+function ImagePartSettings({
+  part, onUpdate, inp, sel,
+}: { part: FlexPart; onUpdate: (u: Partial<FlexPart>) => void; inp: string; sel: string }) {
+  const [tab, setTab] = useState<'url' | 'upload'>('url')
+  const [preview, setPreview] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+
+  const handleFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) { setUploadError('画像ファイルを選択してください'); return }
+    setUploadError('')
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const base64 = e.target?.result as string
+      setPreview(base64)
+      setUploading(true)
+      try {
+        const res = await fetchApi<{ success: boolean; url?: string; error?: string }>(
+          '/api/images/upload',
+          { method: 'POST', body: JSON.stringify({ image: base64 }) }
+        )
+        if (res.success && res.url) {
+          onUpdate({ url: res.url })
+        } else {
+          setUploadError(res.error ?? 'アップロードに失敗しました')
+        }
+      } catch {
+        setUploadError('アップロードに失敗しました')
+      } finally {
+        setUploading(false)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {/* Tab switcher */}
+      <div className="flex bg-gray-100 rounded p-0.5 gap-0.5 w-fit text-xs">
+        {(['url', 'upload'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-2.5 py-1 rounded transition-colors font-medium ${
+              tab === t ? 'bg-white shadow-sm text-gray-800 border border-gray-200' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >{t === 'url' ? 'URLを入力' : 'ファイル'}</button>
+        ))}
+      </div>
+
+      {tab === 'url' ? (
+        <input type="text" value={part.url || ''} onChange={e => onUpdate({ url: e.target.value })}
+          placeholder="画像URL" className={inp} />
+      ) : (
+        <div className="space-y-1.5">
+          <label className={`flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-md px-3 py-3 cursor-pointer hover:bg-gray-50 text-xs text-gray-500 transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+          >
+            <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+            {uploading ? '📤 アップロード中...' : '📎 クリックまたはドラッグ＆ドロップ'}
+          </label>
+          {uploadError && <p className="text-[10px] text-red-500">{uploadError}</p>}
+          {preview && (
+            <div className="relative w-full">
+              <img src={preview} alt="" className="w-full max-h-24 object-contain rounded border border-gray-200" />
+              {uploading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded text-xs text-gray-600">
+                  アップロード中...
+                </div>
+              )}
+              {!uploading && part.url && part.url.startsWith('http') && (
+                <div className="mt-0.5 text-[10px] text-green-600 truncate">✓ {part.url}</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-1.5">
+        <select value={part.size || 'full'} onChange={e => onUpdate({ size: e.target.value })} className={sel}>
+          {['full','lg','md','sm'].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={part.aspectRatio || '20:13'} onChange={e => onUpdate({ aspectRatio: e.target.value })} className={sel}>
+          {['20:13','1:1','4:3'].map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </div>
+    </div>
+  )
+}
+
 function PartSettings({ part, onUpdate }: { part: FlexPart; onUpdate: (u: Partial<FlexPart>) => void }) {
   const inp = 'w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-500'
   const sel = 'text-xs border border-gray-200 rounded px-1 py-0.5'
@@ -253,20 +343,7 @@ function PartSettings({ part, onUpdate }: { part: FlexPart; onUpdate: (u: Partia
       </div>
     </div>
   )
-  if (part.type === 'image') return (
-    <div className="space-y-1.5">
-      <input type="text" value={part.url || ''} onChange={e => onUpdate({ url: e.target.value })}
-        placeholder="画像URL" className={inp} />
-      <div className="flex gap-1.5">
-        <select value={part.size || 'full'} onChange={e => onUpdate({ size: e.target.value })} className={sel}>
-          {['full','lg','md','sm'].map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={part.aspectRatio || '20:13'} onChange={e => onUpdate({ aspectRatio: e.target.value })} className={sel}>
-          {['20:13','1:1','4:3'].map(r => <option key={r} value={r}>{r}</option>)}
-        </select>
-      </div>
-    </div>
-  )
+  if (part.type === 'image') return <ImagePartSettings part={part} onUpdate={onUpdate} inp={inp} sel={sel} />
   if (part.type === 'button') return (
     <div className="space-y-1.5">
       <input type="text" value={part.label || ''} onChange={e => onUpdate({ label: e.target.value })} placeholder="ラベル" className={inp} />

@@ -440,21 +440,56 @@ chats.post('/api/chats/:id/send', async (c) => {
   }
 });
 
-// GET /api/images/:messageId — public, serves base64 image as binary for LINE
+// POST /api/images/upload — authenticated, stores base64 image and returns public URL
+chats.post('/api/images/upload', async (c) => {
+  try {
+    const body = await c.req.json<{ image: string }>();
+    if (!body.image || !body.image.startsWith('data:image/')) {
+      return c.json({ success: false, error: 'Invalid image data' }, 400);
+    }
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await c.env.DB
+      .prepare('INSERT INTO uploaded_images (id, content, created_at) VALUES (?, ?, ?)')
+      .bind(id, body.image, now)
+      .run();
+    const origin = new URL(c.req.url).origin;
+    return c.json({ success: true, url: `${origin}/api/images/${id}` }, 201);
+  } catch (err) {
+    console.error('POST /api/images/upload error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// GET /api/images/:messageId — public, serves base64 image as binary (messages_log or uploaded_images)
 chats.get('/api/images/:messageId', async (c) => {
   const messageId = c.req.param('messageId');
+
+  // Check messages_log first
   const row = await c.env.DB
     .prepare('SELECT content, message_type FROM messages_log WHERE id = ? LIMIT 1')
     .bind(messageId)
     .first<{ content: string; message_type: string }>();
 
-  if (!row || row.message_type !== 'image' || !row.content.startsWith('data:image/')) {
-    return c.json({ error: 'Not found' }, 404);
+  let base64Content: string | null = null;
+  if (row && row.message_type === 'image' && row.content.startsWith('data:image/')) {
+    base64Content = row.content;
+  } else {
+    // Fallback: check uploaded_images
+    const uploaded = await c.env.DB
+      .prepare('SELECT content FROM uploaded_images WHERE id = ? LIMIT 1')
+      .bind(messageId)
+      .first<{ content: string }>();
+    if (uploaded && uploaded.content.startsWith('data:image/')) {
+      base64Content = uploaded.content;
+    }
   }
 
-  const commaIdx = row.content.indexOf(',');
-  const header = row.content.slice(0, commaIdx);         // "data:image/jpeg;base64"
-  const base64Data = row.content.slice(commaIdx + 1);    // "/9j/4AAQ..."
+  if (!base64Content) return c.json({ error: 'Not found' }, 404);
+
+  const commaIdx = base64Content.indexOf(',');
+  const header = base64Content.slice(0, commaIdx);
+  const base64Data = base64Content.slice(commaIdx + 1);
   const mimeType = header.split(':')[1]?.split(';')[0] ?? 'image/jpeg';
 
   const binaryStr = atob(base64Data);

@@ -69,7 +69,7 @@ export async function authMiddleware(c: Context<Env>, next: Next): Promise<Respo
     path.match(/^\/api\/forms\/[^/]+\/submit$/) ||
     path.match(/^\/api\/forms\/[^/]+$/) ||
     path.match(/^\/api\/messages\/[^/]+\/content$/) ||
-    path.match(/^\/api\/images\/[^/]+$/)
+    (path.match(/^\/api\/images\/[^/]+$/) && c.req.method === 'GET')
   ) {
     return next();
   }
