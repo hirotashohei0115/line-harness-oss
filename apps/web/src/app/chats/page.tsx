@@ -1363,7 +1363,7 @@ export default function ChatsPage() {
               </div>
 
               {/* Notes */}
-              <div className="px-4 py-2 border-t border-gray-200 bg-gray-50">
+              <div className="px-4 py-1.5 border-t border-gray-200 bg-gray-50">
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
@@ -1383,7 +1383,7 @@ export default function ChatsPage() {
               </div>
 
               {/* Send Message Form */}
-              <div className="px-4 py-3 border-t border-gray-200">
+              <div className="px-4 py-2 border-t border-gray-200">
                 {/* Template picker */}
                 {showTemplates && (
                   <div className="mb-2 border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
@@ -1455,14 +1455,14 @@ export default function ChatsPage() {
                     📋
                   </button>
                   <textarea
-                    rows={4}
+                    rows={2}
                     value={messageContent}
                     onChange={(e) => setMessageContent(e.target.value)}
                     onKeyDown={handleKeyDown}
                     onInput={handleTextareaInput}
                     placeholder="メッセージを入力..."
                     className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
-                    style={{ minHeight: '88px', maxHeight: '240px' }}
+                    style={{ minHeight: '52px', maxHeight: '120px' }}
                   />
                   <button
                     onClick={handleSendMessage}
