@@ -5,7 +5,6 @@ import { api, fetchApi } from '@/lib/api'
 import type { ContactMark } from '@/lib/api'
 import { useAccount } from '@/contexts/account-context'
 import Header from '@/components/layout/header'
-import CcPromptButton from '@/components/cc-prompt-button'
 import FlexPreviewComponent from '@/components/flex-preview'
 
 interface Chat {
@@ -197,24 +196,6 @@ function formatDatetime(iso: string | null): string {
   })
 }
 
-const ccPrompts = [
-  {
-    title: 'チャット対応テンプレート',
-    prompt: `チャット対応で使えるテンプレートメッセージを作成してください。
-1. よくある質問への回答テンプレート（挨拶、FAQ、サポート）
-2. クレーム対応用の丁寧な返信テンプレート
-3. フォローアップメッセージのテンプレート
-手順を示してください。`,
-  },
-  {
-    title: '未対応チャット確認',
-    prompt: `未対応のチャットを確認し、対応優先度を整理してください。
-1. 未読・対応中のチャット数を集計
-2. 最終メッセージからの経過時間で優先度を判定
-3. 長時間未対応のチャットへの対応アクションを提案
-結果をレポートしてください。`,
-  },
-]
 
 interface FriendItem {
   id: string
@@ -1205,7 +1186,7 @@ export default function ChatsPage() {
             <div className="flex flex-1 overflow-hidden">
               <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* Chat Header */}
-              <div className="px-4 py-4 border-b border-gray-200 flex items-center justify-between gap-2">
+              <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <button
                     onClick={() => setSelectedChatId(null)}
@@ -1455,14 +1436,14 @@ export default function ChatsPage() {
                     📋
                   </button>
                   <textarea
-                    rows={2}
+                    rows={5}
                     value={messageContent}
                     onChange={(e) => setMessageContent(e.target.value)}
                     onKeyDown={handleKeyDown}
                     onInput={handleTextareaInput}
                     placeholder="メッセージを入力..."
                     className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
-                    style={{ minHeight: '52px', maxHeight: '120px' }}
+                    style={{ minHeight: '120px', maxHeight: '200px' }}
                   />
                   <button
                     onClick={handleSendMessage}
@@ -1810,7 +1791,6 @@ export default function ChatsPage() {
           ) : null}
         </div>
       </div>
-      <CcPromptButton prompts={ccPrompts} />
     </div>
   )
 }
