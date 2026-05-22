@@ -5,6 +5,7 @@ import {
   createTemplate,
   updateTemplate,
   deleteTemplate,
+  reorderTemplates,
 } from '@line-crm/db';
 import type { Env } from '../index.js';
 
@@ -91,6 +92,19 @@ templates.patch('/api/templates/:id', async (c) => {
     });
   } catch (err) {
     console.error('PATCH /api/templates/:id error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// PATCH /api/templates/reorder — must be before /:id routes
+templates.patch('/api/templates/reorder', async (c) => {
+  try {
+    const body = await c.req.json<{ orders: { id: string; sort_order: number }[] }>();
+    if (!Array.isArray(body.orders)) return c.json({ success: false, error: 'orders array required' }, 400);
+    await reorderTemplates(c.env.DB, body.orders);
+    return c.json({ success: true, data: null });
+  } catch (err) {
+    console.error('PATCH /api/templates/reorder error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
 });

@@ -421,6 +421,8 @@ export const api = {
         `/api/templates/${id}`,
         { method: 'PATCH', body: JSON.stringify(data) },
       ),
+    reorder: (orders: { id: string; sort_order: number }[]) =>
+      fetchApi<ApiResponse<null>>('/api/templates/reorder', { method: 'PATCH', body: JSON.stringify({ orders }) }),
   },
   automations: {
     list: (params?: { accountId?: string }) => {

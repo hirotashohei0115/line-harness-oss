@@ -5,6 +5,23 @@ import { api } from '@/lib/api'
 import Header from '@/components/layout/header'
 import CcPromptButton from '@/components/cc-prompt-button'
 import FlexPreviewComponent from '@/components/flex-preview'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 interface Template {
   id: string
@@ -22,6 +39,63 @@ const messageTypeLabels: Record<string, string> = {
   flex: 'Flex',
   store_card: '店舗案内カード（Flex）',
   custom_flex: 'カスタムFlex',
+}
+
+function SortableTemplateRow({
+  template,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  formatDate,
+}: {
+  template: Template
+  onEdit: (t: Template) => void
+  onDuplicate: (id: string) => void
+  onDelete: (id: string) => void
+  formatDate: (s: string) => string
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: template.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  }
+  return (
+    <tr ref={setNodeRef} style={style} className="hover:bg-gray-50 transition-colors">
+      <td className="pl-3 pr-1 py-3 w-8">
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 text-base leading-none select-none"
+          title="ドラッグして並べ替え"
+        >⠿</button>
+      </td>
+      <td className="px-4 py-3">
+        <div>
+          <p className="text-sm font-medium text-gray-900">{template.name}</p>
+          <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">
+            {template.messageContent.slice(0, 50)}{template.messageContent.length > 50 ? '...' : ''}
+          </p>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+          {template.category}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-sm text-gray-600">
+        {messageTypeLabels[template.messageType] || template.messageType}
+      </td>
+      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(template.createdAt)}</td>
+      <td className="px-4 py-3 text-right">
+        <div className="flex items-center justify-end gap-1.5">
+          <button onClick={() => onEdit(template)} className="px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors">編集</button>
+          <button onClick={() => onDuplicate(template.id)} className="px-3 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">複製</button>
+          <button onClick={() => onDelete(template.id)} className="px-3 py-1 text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors">削除</button>
+        </div>
+      </td>
+    </tr>
+  )
 }
 
 interface CreateFormState {
@@ -409,6 +483,25 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = templates.findIndex(t => t.id === active.id)
+    const newIndex = templates.findIndex(t => t.id === over.id)
+    const reordered = arrayMove(templates, oldIndex, newIndex)
+    setTemplates(reordered)
+    try {
+      await api.templates.reorder(reordered.map((t, i) => ({ id: t.id, sort_order: i + 1 })))
+    } catch {
+      setError('並び順の保存に失敗しました')
+    }
+  }
   const [showCreate, setShowCreate] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [form, setForm] = useState<CreateFormState>({
@@ -976,6 +1069,7 @@ export default function TemplatesPage() {
           <table className="w-full min-w-[640px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="pl-3 pr-1 py-3 w-8" />
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   テンプレート名
                 </th>
@@ -991,63 +1085,22 @@ export default function TemplatesPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {templates.map((template) => (
-                <tr key={template.id} className="hover:bg-gray-50 transition-colors">
-                  {/* Name */}
-                  <td className="px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{template.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">
-                        {template.messageContent.slice(0, 50)}
-                        {template.messageContent.length > 50 ? '...' : ''}
-                      </p>
-                    </div>
-                  </td>
-
-                  {/* Category */}
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                      {template.category}
-                    </span>
-                  </td>
-
-                  {/* Message Type */}
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {messageTypeLabels[template.messageType] || template.messageType}
-                  </td>
-
-                  {/* Created At */}
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {formatDate(template.createdAt)}
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => handleEditOpen(template)}
-                        className="px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
-                      >
-                        編集
-                      </button>
-                      <button
-                        onClick={() => handleDuplicate(template.id)}
-                        className="px-3 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                      >
-                        複製
-                      </button>
-                      <button
-                        onClick={() => handleDelete(template.id)}
-                        className="px-3 py-1 text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                      >
-                        削除
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={templates.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                <tbody className="divide-y divide-gray-100">
+                  {templates.map((template) => (
+                    <SortableTemplateRow
+                      key={template.id}
+                      template={template}
+                      onEdit={handleEditOpen}
+                      onDuplicate={handleDuplicate}
+                      onDelete={handleDelete}
+                      formatDate={formatDate}
+                    />
+                  ))}
+                </tbody>
+              </SortableContext>
+            </DndContext>
           </table>
           </div>
         </div>

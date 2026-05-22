@@ -7,6 +7,7 @@ export interface TemplateRow {
   category: string;
   message_type: string;
   message_content: string;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -25,7 +26,7 @@ export async function getTemplates(db: D1Database, category?: string, accountId?
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const result = await db.prepare(`SELECT * FROM templates ${where} ORDER BY created_at DESC`)
+  const result = await db.prepare(`SELECT * FROM templates ${where} ORDER BY sort_order ASC, created_at ASC`)
     .bind(...values).all<TemplateRow>();
   return result.results;
 }
@@ -65,4 +66,10 @@ export async function updateTemplate(
 
 export async function deleteTemplate(db: D1Database, id: string): Promise<void> {
   await db.prepare(`DELETE FROM templates WHERE id = ?`).bind(id).run();
+}
+
+export async function reorderTemplates(db: D1Database, orders: { id: string; sort_order: number }[]): Promise<void> {
+  for (const { id, sort_order } of orders) {
+    await db.prepare(`UPDATE templates SET sort_order = ? WHERE id = ?`).bind(sort_order, id).run();
+  }
 }
