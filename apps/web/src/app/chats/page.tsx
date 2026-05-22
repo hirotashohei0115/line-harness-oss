@@ -1443,6 +1443,7 @@ export default function ChatsPage() {
                     {sending ? '送信中...' : '送信'}
                   </button>
                 </div>
+                <p className="text-xs text-gray-400 text-center mt-1">Shift + Enter で送信</p>
               </div>
               </div>
 
