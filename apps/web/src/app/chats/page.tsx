@@ -1530,7 +1530,6 @@ export default function ChatsPage() {
                       { key: 'repair_symptom_name', label: '症状' },
                       { key: 'repair_year', label: '年式' },
                       { key: 'repair_inch_size', label: 'インチ' },
-                      { key: 'repair_store', label: '希望店舗' },
                       { key: 'priceFrom', label: '料金（下限）¥' },
                       { key: 'priceTo', label: '料金（上限）¥' },
                       { key: 'deliveryDaysFrom', label: '納期（下限）日' },
@@ -1546,6 +1545,29 @@ export default function ChatsPage() {
                         />
                       </div>
                     ))}
+                    <div>
+                      <p className="text-[10px] text-gray-400 mb-0.5">希望店舗</p>
+                      <select
+                        value={repairEditData.repair_store ?? ''}
+                        onChange={e => setRepairEditData(d => ({ ...d, repair_store: e.target.value }))}
+                        className="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
+                      >
+                        <option value="">（未選択）</option>
+                        <option value="青森店">青森店</option>
+                        <option value="盛岡店">盛岡店</option>
+                        <option value="宇都宮店">宇都宮店</option>
+                        <option value="菖蒲店">菖蒲店</option>
+                        <option value="成田店">成田店</option>
+                        <option value="幕張店">幕張店</option>
+                        <option value="錦糸町店">錦糸町店</option>
+                        <option value="五反田店">五反田店</option>
+                        <option value="長岡店">長岡店</option>
+                        <option value="岐阜店">岐阜店</option>
+                        <option value="木津川店">木津川店</option>
+                        <option value="大分店">大分店</option>
+                      </select>
+                    </div>
+                    {/* dummy to satisfy trailing syntax */}
                     <div>
                       <p className="text-[10px] text-gray-400 mb-0.5">依頼方法</p>
                       <select
