@@ -60,7 +60,7 @@ export type Env = {
     GOOGLE_CLIENT_SECRET?: string;
   };
   Variables: {
-    staff: { id: string; name: string; role: 'owner' | 'admin' | 'staff'; assignedStores?: string[] };
+    staff: { id: string; name: string; role: 'owner' | 'admin' | 'staff'; assignedStores?: string[]; assignedTags?: string[] };
   };
 };
 

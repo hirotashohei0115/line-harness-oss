@@ -90,6 +90,7 @@ export async function authMiddleware(c: Context<Env>, next: Next): Promise<Respo
       name: (jwtPayload.name as string) ?? '',
       role: jwtPayload.role as 'admin' | 'staff',
       assignedStores: jwtPayload.assignedStores as string[] | undefined,
+      assignedTags: jwtPayload.assignedTags as string[] | undefined,
     });
     return next();
   }

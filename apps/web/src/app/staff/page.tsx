@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import Header from '@/components/layout/header'
-import { fetchApi } from '@/lib/api'
+import { fetchApi, api } from '@/lib/api'
 
 const STORE_LIST = [
   '青森店', '盛岡店', '宇都宮店', '菖蒲店', '成田店', '幕張店',
@@ -16,6 +16,7 @@ interface StaffAccount {
   name: string
   role: 'admin' | 'staff'
   assignedStores: string[]
+  assignedTags: string[]
   isActive: boolean
   created_at: string
 }
@@ -35,10 +36,11 @@ interface FormState {
   name: string
   role: 'admin' | 'staff'
   assignedStores: string[]
+  assignedTags: string[]
   password: string
 }
 
-const defaultForm: FormState = { email: '', name: '', role: 'staff', assignedStores: [], password: '' }
+const defaultForm: FormState = { email: '', name: '', role: 'staff', assignedStores: [], assignedTags: [], password: '' }
 
 export default function StaffPage() {
   const [accounts, setAccounts] = useState<StaffAccount[]>([])
@@ -49,6 +51,7 @@ export default function StaffPage() {
   const [form, setForm] = useState<FormState>(defaultForm)
   const [saving, setSaving] = useState(false)
   const [myRole, setMyRole] = useState('')
+  const [allTags, setAllTags] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
     setMyRole(localStorage.getItem('lh_staff_role') || '')
@@ -65,10 +68,14 @@ export default function StaffPage() {
 
   useEffect(() => { loadAccounts() }, [loadAccounts])
 
+  useEffect(() => {
+    api.tags.list().then(r => { if (r.success) setAllTags(r.data.map(t => ({ id: t.id, name: t.name }))) }).catch(() => {})
+  }, [])
+
   const openCreate = () => { setEditTarget(null); setForm(defaultForm); setShowForm(true) }
   const openEdit = (a: StaffAccount) => {
     setEditTarget(a)
-    setForm({ email: a.email, name: a.name, role: a.role, assignedStores: a.assignedStores, password: '' })
+    setForm({ email: a.email, name: a.name, role: a.role, assignedStores: a.assignedStores, assignedTags: a.assignedTags ?? [], password: '' })
     setShowForm(true)
   }
 
@@ -78,13 +85,13 @@ export default function StaffPage() {
     setSaving(true)
     try {
       if (editTarget) {
-        const body: Record<string, unknown> = { name: form.name, email: form.email, role: form.role, assignedStores: form.assignedStores }
+        const body: Record<string, unknown> = { name: form.name, email: form.email, role: form.role, assignedStores: form.assignedStores, assignedTags: form.assignedTags }
         if (form.password) body.password = form.password
         await fetchApi(`/api/staff/accounts/${editTarget.id}`, { method: 'PATCH', body: JSON.stringify(body) })
       } else {
         await fetchApi('/api/staff/accounts', {
           method: 'POST',
-          body: JSON.stringify({ email: form.email, name: form.name, role: form.role, assignedStores: form.assignedStores, password: form.password }),
+          body: JSON.stringify({ email: form.email, name: form.name, role: form.role, assignedStores: form.assignedStores, assignedTags: form.assignedTags, password: form.password }),
         })
       }
       setShowForm(false)
@@ -109,6 +116,15 @@ export default function StaffPage() {
       assignedStores: prev.assignedStores.includes(store)
         ? prev.assignedStores.filter(s => s !== store)
         : [...prev.assignedStores, store],
+    }))
+  }
+
+  const toggleTag = (tagName: string) => {
+    setForm(prev => ({
+      ...prev,
+      assignedTags: prev.assignedTags.includes(tagName)
+        ? prev.assignedTags.filter(t => t !== tagName)
+        : [...prev.assignedTags, tagName],
     }))
   }
 
@@ -213,6 +229,23 @@ export default function StaffPage() {
                   </div>
                   {form.assignedStores.length > 0 && (
                     <p className="text-xs text-gray-400 mt-1">{form.assignedStores.length}件選択中</p>
+                  )}
+                </div>
+              )}
+              {form.role === 'staff' && allTags.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">表示タグ</label>
+                  <p className="text-xs text-gray-400 mb-2">選択したタグが付いているユーザーも表示されます（店舗 OR タグ）</p>
+                  <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1">
+                    {allTags.map(tag => (
+                      <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5">
+                        <input type="checkbox" checked={form.assignedTags.includes(tag.name)} onChange={() => toggleTag(tag.name)} className="rounded" />
+                        <span className="text-sm text-gray-700">{tag.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {form.assignedTags.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">{form.assignedTags.length}件選択中</p>
                   )}
                 </div>
               )}

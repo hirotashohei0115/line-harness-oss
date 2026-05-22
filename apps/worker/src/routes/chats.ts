@@ -84,10 +84,12 @@ chats.get('/api/chats', async (c) => {
     const lineAccountId = c.req.query('lineAccountId') ?? undefined;
     const unreadOnly = c.req.query('unread') === 'true';
 
-    // スタッフの担当店舗フィルタリング
+    // スタッフのフィルタリング（店舗 OR タグ）
     const currentStaff = c.get('staff');
-    const assignedStores = currentStaff?.assignedStores;
-    const isStoreFiltered = assignedStores && assignedStores.length > 0 && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
+    const assignedStores = currentStaff?.assignedStores ?? [];
+    const assignedTags = currentStaff?.assignedTags ?? [];
+    const isFiltered = (assignedStores.length > 0 || assignedTags.length > 0)
+      && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
 
     // JOIN friends and staff_pins (per-staff pin state)
     const staffId = currentStaff?.id ?? 'env-owner';
@@ -116,35 +118,39 @@ chats.get('/api/chats', async (c) => {
       conditions.push('f.line_account_id = ?');
       bindings.push(lineAccountId);
     }
-    if (isStoreFiltered) {
-      const storeNames = assignedStores!;
-      // store_reservations uses short keys (gotanda, kinshicho...), map from store names
-      const STORE_NAME_TO_KEY: Record<string, string> = {
-        '五反田店': 'gotanda', '錦糸町店': 'kinshicho', '成田店': 'narita',
-        '幕張店': 'makuhari', '菖蒲店': 'shobu', '岐阜店': 'gifu',
-        '宇都宮店': 'utsunomiya', '青森店': 'aomori', '盛岡店': 'morioka',
-        '大分店': 'oita', '木津川店': 'kizugawa', '長岡店': 'nagaoka',
-      };
-      const storeKeys = storeNames.map(n => STORE_NAME_TO_KEY[n]).filter(Boolean);
-
-      const namePH = storeNames.map(() => '?').join(',');
+    if (isFiltered) {
       const subQueries: string[] = [];
 
-      // 1. store_reservations (store_key)
-      if (storeKeys.length > 0) {
-        const keyPH = storeKeys.map(() => '?').join(',');
-        subQueries.push(`SELECT DISTINCT friend_id FROM store_reservations WHERE store_key IN (${keyPH})`);
-        storeKeys.forEach(k => bindings.push(k));
+      // --- 店舗フィルタ ---
+      if (assignedStores.length > 0) {
+        const storeNames = assignedStores;
+        const STORE_NAME_TO_KEY: Record<string, string> = {
+          '五反田店': 'gotanda', '錦糸町店': 'kinshicho', '成田店': 'narita',
+          '幕張店': 'makuhari', '菖蒲店': 'shobu', '岐阜店': 'gifu',
+          '宇都宮店': 'utsunomiya', '青森店': 'aomori', '盛岡店': 'morioka',
+          '大分店': 'oita', '木津川店': 'kizugawa', '長岡店': 'nagaoka',
+        };
+        const storeKeys = storeNames.map(n => STORE_NAME_TO_KEY[n]).filter(Boolean);
+        const namePH = storeNames.map(() => '?').join(',');
+
+        if (storeKeys.length > 0) {
+          const keyPH = storeKeys.map(() => '?').join(',');
+          subQueries.push(`SELECT DISTINCT friend_id FROM store_reservations WHERE store_key IN (${keyPH})`);
+          storeKeys.forEach(k => bindings.push(k));
+        }
+        const mailLikeClauses = storeNames.map(() => 'delivery_store LIKE ?').join(' OR ');
+        subQueries.push(`SELECT DISTINCT friend_id FROM mail_orders WHERE (${mailLikeClauses})`);
+        storeNames.forEach(s => bindings.push(`%${s}%`));
+        subQueries.push(`SELECT DISTINCT friend_id FROM friend_attributes WHERE key = 'repair_store' AND value IN (${namePH})`);
+        storeNames.forEach(s => bindings.push(s));
       }
 
-      // 2. mail_orders — delivery_store may be prefixed ("郵送修理センター菖蒲店（埼玉県）"), so use LIKE
-      const mailLikeClauses = storeNames.map(() => 'delivery_store LIKE ?').join(' OR ');
-      subQueries.push(`SELECT DISTINCT friend_id FROM mail_orders WHERE (${mailLikeClauses})`);
-      storeNames.forEach(s => bindings.push(`%${s}%`));
-
-      // 3. friend_attributes repair_store (store selection in chat/repair flow)
-      subQueries.push(`SELECT DISTINCT friend_id FROM friend_attributes WHERE key = 'repair_store' AND value IN (${namePH})`);
-      storeNames.forEach(s => bindings.push(s));
+      // --- タグフィルタ ---
+      if (assignedTags.length > 0) {
+        const tagPH = assignedTags.map(() => '?').join(',');
+        subQueries.push(`SELECT DISTINCT ft.friend_id FROM friend_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name IN (${tagPH})`);
+        assignedTags.forEach(t => bindings.push(t));
+      }
 
       conditions.push(`c.friend_id IN (${subQueries.join(' UNION ')})`);
     }
@@ -218,8 +224,9 @@ chats.get('/api/chats/unread-count', async (c) => {
   try {
     const lineAccountId = c.req.query('lineAccountId');
     const currentStaff = c.get('staff');
-    const assignedStores = currentStaff?.assignedStores;
-    const isStoreFiltered = assignedStores && assignedStores.length > 0
+    const assignedStores2 = currentStaff?.assignedStores ?? [];
+    const assignedTags2 = currentStaff?.assignedTags ?? [];
+    const isFiltered2 = (assignedStores2.length > 0 || assignedTags2.length > 0)
       && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
 
     // Count distinct chats with unread — same filtering as GET /api/chats
@@ -233,28 +240,36 @@ chats.get('/api/chats/unread-count', async (c) => {
       bindings.push(lineAccountId);
     }
 
-    if (isStoreFiltered) {
-      const storeNames = assignedStores!;
-      const STORE_NAME_TO_KEY: Record<string, string> = {
-        '五反田店': 'gotanda', '錦糸町店': 'kinshicho', '成田店': 'narita',
-        '幕張店': 'makuhari', '菖蒲店': 'shobu', '岐阜店': 'gifu',
-        '宇都宮店': 'utsunomiya', '青森店': 'aomori', '盛岡店': 'morioka',
-        '大分店': 'oita', '木津川店': 'kizugawa', '長岡店': 'nagaoka',
-      };
-      const storeKeys = storeNames.map(n => STORE_NAME_TO_KEY[n]).filter(Boolean);
-      const namePH = storeNames.map(() => '?').join(',');
+    if (isFiltered2) {
       const subQueries: string[] = [];
 
-      if (storeKeys.length > 0) {
-        const keyPH = storeKeys.map(() => '?').join(',');
-        subQueries.push(`SELECT DISTINCT friend_id FROM store_reservations WHERE store_key IN (${keyPH})`);
-        storeKeys.forEach(k => bindings.push(k));
+      if (assignedStores2.length > 0) {
+        const storeNames = assignedStores2;
+        const STORE_NAME_TO_KEY: Record<string, string> = {
+          '五反田店': 'gotanda', '錦糸町店': 'kinshicho', '成田店': 'narita',
+          '幕張店': 'makuhari', '菖蒲店': 'shobu', '岐阜店': 'gifu',
+          '宇都宮店': 'utsunomiya', '青森店': 'aomori', '盛岡店': 'morioka',
+          '大分店': 'oita', '木津川店': 'kizugawa', '長岡店': 'nagaoka',
+        };
+        const storeKeys = storeNames.map(n => STORE_NAME_TO_KEY[n]).filter(Boolean);
+        const namePH = storeNames.map(() => '?').join(',');
+        if (storeKeys.length > 0) {
+          const keyPH = storeKeys.map(() => '?').join(',');
+          subQueries.push(`SELECT DISTINCT friend_id FROM store_reservations WHERE store_key IN (${keyPH})`);
+          storeKeys.forEach(k => bindings.push(k));
+        }
+        const mailLikeClauses = storeNames.map(() => 'delivery_store LIKE ?').join(' OR ');
+        subQueries.push(`SELECT DISTINCT friend_id FROM mail_orders WHERE (${mailLikeClauses})`);
+        storeNames.forEach(s => bindings.push(`%${s}%`));
+        subQueries.push(`SELECT DISTINCT friend_id FROM friend_attributes WHERE key = 'repair_store' AND value IN (${namePH})`);
+        storeNames.forEach(s => bindings.push(s));
       }
-      const mailLikeClauses2 = storeNames.map(() => 'delivery_store LIKE ?').join(' OR ');
-      subQueries.push(`SELECT DISTINCT friend_id FROM mail_orders WHERE (${mailLikeClauses2})`);
-      storeNames.forEach(s => bindings.push(`%${s}%`));
-      subQueries.push(`SELECT DISTINCT friend_id FROM friend_attributes WHERE key = 'repair_store' AND value IN (${namePH})`);
-      storeNames.forEach(s => bindings.push(s));
+
+      if (assignedTags2.length > 0) {
+        const tagPH = assignedTags2.map(() => '?').join(',');
+        subQueries.push(`SELECT DISTINCT ft.friend_id FROM friend_tags ft JOIN tags t ON t.id = ft.tag_id WHERE t.name IN (${tagPH})`);
+        assignedTags2.forEach(t => bindings.push(t));
+      }
 
       conditions.push(`ch.friend_id IN (${subQueries.join(' UNION ')})`);
     }
