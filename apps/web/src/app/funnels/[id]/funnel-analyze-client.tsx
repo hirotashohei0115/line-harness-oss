@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
-import type { FunnelAnalyzeResult, FunnelStepUser, ContactMark } from '@/lib/api'
+import type { FunnelAnalyzeResult, FunnelStepUser, ContactMark, FunnelWithSteps } from '@/lib/api'
 import Header from '@/components/layout/header'
+import { ACTION_TRIGGER_MAP } from '@/lib/funnel-action-map'
 
 function getFunnelIdFromPath(): string {
   if (typeof window === 'undefined') return ''
@@ -46,6 +47,7 @@ export default function FunnelAnalyzeClient() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const [funnelDef, setFunnelDef] = useState<FunnelWithSteps | null>(null)
   const [modal, setModal] = useState<StepModalState | null>(null)
   const [modalUsers, setModalUsers] = useState<FunnelStepUser[]>([])
   const [modalLoading, setModalLoading] = useState(false)
@@ -66,9 +68,13 @@ export default function FunnelAnalyzeClient() {
     setLoading(true)
     setError('')
     try {
-      const res = await api.funnels.analyze(id, from, to)
+      const [res, defRes] = await Promise.all([
+        api.funnels.analyze(id, from, to),
+        api.funnels.get(id),
+      ])
       if (res.success) setResult(res.data)
       else setError('分析に失敗しました')
+      if (defRes.success) setFunnelDef(defRes.data)
     } catch { setError('分析に失敗しました') }
     finally { setLoading(false) }
   }, [id, from, to])
@@ -204,7 +210,7 @@ export default function FunnelAnalyzeClient() {
                     <span className="text-xs text-gray-400">（前ステップからの移行率）</span>
                   </div>
 
-                  <div className="grid grid-cols-[1fr_auto_auto_auto_2fr] gap-0 px-6 py-3 border-b border-gray-100 items-center hover:bg-gray-50">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_2fr] gap-0 px-6 py-3 border-b border-gray-100 items-start hover:bg-gray-50">
                     <div>
                       <div className="flex items-center gap-2">
                         <span
@@ -213,6 +219,31 @@ export default function FunnelAnalyzeClient() {
                         >{idx + 1}</span>
                         <span className="text-sm font-medium text-gray-700">{step.name}</span>
                       </div>
+                      {/* アクション発火元の補助情報 */}
+                      {(() => {
+                        const defStep = funnelDef?.steps?.[idx]
+                        if (!defStep || defStep.conditionType !== 'action') return null
+                        const actionIds = defStep.conditionIds
+                        if (actionIds.length === 0) return null
+                        const triggers = actionIds.map(aid => ACTION_TRIGGER_MAP[aid]).filter(Boolean)
+                        if (triggers.length === 0) return null
+                        return triggers.map((trigger, ti) => {
+                          const { source, triggerButtons } = trigger
+                          const MAX_SHOW = 2
+                          const shown = triggerButtons.slice(0, MAX_SHOW)
+                          const rest = triggerButtons.length - MAX_SHOW
+                          const btnText = triggerButtons.length === 0
+                            ? null
+                            : rest > 0
+                              ? `「${shown.join(' / ')} / +${rest}件」`
+                              : `「${shown.join(' / ')}」`
+                          return (
+                            <p key={ti} className="text-[11px] text-gray-400 mt-0.5 ml-7 leading-snug">
+                              └ {source}{btnText ? ` の${btnText}` : 'に自動発火'}
+                            </p>
+                          )
+                        })
+                      })()}
                     </div>
                     <div className="text-right w-20">
                       <button
