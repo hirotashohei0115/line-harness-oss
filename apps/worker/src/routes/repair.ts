@@ -457,4 +457,88 @@ repairRoutes.patch('/api/repair/attributes/:friendId', async (c) => {
   }
 });
 
+// POST /api/repair/visit-orders
+repairRoutes.post('/api/repair/visit-orders', async (c) => {
+  let body: {
+    lineUserId?: string;
+    name?: string;
+    furigana?: string;
+    phone?: string;
+    address?: string;
+    customerType?: string;
+    preferredDatetime1?: string;
+    preferredDatetime2?: string;
+    preferredDatetime3?: string;
+    visitReason?: string;
+    detail?: string;
+  };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error: 'Invalid JSON body' }, 400);
+  }
+
+  const { lineUserId, name, furigana, phone, address, customerType, preferredDatetime1, preferredDatetime2, preferredDatetime3, visitReason, detail } = body;
+  if (!lineUserId || !name || !furigana || !phone || !address || !preferredDatetime1) {
+    return c.json({ success: false, error: 'Missing required fields' }, 400);
+  }
+
+  try {
+    const friend = await c.env.DB
+      .prepare(`SELECT id FROM friends WHERE line_user_id = ? LIMIT 1`)
+      .bind(lineUserId)
+      .first<{ id: string }>();
+    if (!friend) return c.json({ success: false, error: 'Friend not found' }, 404);
+
+    const id = crypto.randomUUID();
+    await c.env.DB
+      .prepare(
+        `INSERT INTO visit_orders (id, friend_id, name, furigana, phone, address, customer_type, preferred_datetime1, preferred_datetime2, preferred_datetime3, visit_reason, detail)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(id, friend.id, name, furigana, phone, address, customerType ?? 'individual', preferredDatetime1, preferredDatetime2 ?? null, preferredDatetime3 ?? null, visitReason ?? null, detail ?? null)
+      .run();
+
+    // フォーム内容をチャットに表示
+    const customerTypeLabel = customerType === 'corporate' ? '法人' : '個人';
+    const formContent = `【訪問修理フォーム送信】\n━━━━━━━━━━\nお名前：${name}（${furigana}）\n${customerTypeLabel}\n電話番号：${phone}\n住所：${address}\n第1希望：${preferredDatetime1}${preferredDatetime2 ? `\n第2希望：${preferredDatetime2}` : ''}${preferredDatetime3 ? `\n第3希望：${preferredDatetime3}` : ''}${visitReason ? `\n訪問理由：${visitReason}` : ''}${detail ? `\n依頼内容：${detail}` : ''}\n━━━━━━━━━━`;
+    await c.env.DB
+      .prepare(`INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at) VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 0, ?)`)
+      .bind(crypto.randomUUID(), friend.id, formContent, jstNow())
+      .run();
+    await upsertChatOnMessage(c.env.DB, friend.id);
+
+    // タグ付与
+    await removeTagsByNames(c.env.DB, friend.id, ['郵送依頼', '店舗持込']);
+    await addTagToFriend(c.env.DB, friend.id, '訪問修理');
+
+    // LINE自動返信
+    try {
+      const lineClient = new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN);
+      await lineClient.pushMessage(lineUserId, [{
+        type: 'text',
+        text: '訪問修理のご依頼ありがとうございます！\n\n訪問可能かお調べしますので、しばらくお待ちください。\n確認でき次第、ご連絡いたします📱',
+      }]);
+    } catch (pushErr) {
+      console.error('visit-order push message error:', pushErr);
+    }
+
+    // Chatwork通知
+    try {
+      const cwToken = c.env.CHATWORK_API_TOKEN;
+      if (cwToken) {
+        const cwMsg = `[info][title]🚗 訪問修理依頼が入りました[/title]お名前：${name}（${furigana}）\n電話番号：${phone}\n住所：${address}\n個人/法人：${customerTypeLabel}\n第1希望：${preferredDatetime1}\n第2希望：${preferredDatetime2 ?? 'なし'}\n第3希望：${preferredDatetime3 ?? 'なし'}\n訪問希望理由：${visitReason ?? 'なし'}\n依頼内容：${detail ?? 'なし'}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+        await sendChatworkMessage(cwToken, '436188150', cwMsg);
+      }
+    } catch (cwErr) {
+      console.error('visit-order chatwork error:', cwErr);
+    }
+
+    return c.json({ success: true, data: { id } }, 201);
+  } catch (err) {
+    console.error('POST /api/repair/visit-orders error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 export { repairRoutes };

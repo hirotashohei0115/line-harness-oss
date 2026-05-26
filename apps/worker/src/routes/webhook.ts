@@ -631,6 +631,7 @@ function buildQuoteFlex(params: {
       contents: [
         { type: 'button', action: { type: 'message', label: '郵送で依頼する', text: '郵送で依頼する' }, style: 'primary', height: 'sm', color: '#00B900' },
         { type: 'button', action: { type: 'message', label: '店舗に持込む', text: '店舗に持込む' }, style: 'primary', height: 'sm', color: '#00B900' },
+        { type: 'button', action: { type: 'uri', label: '訪問修理で依頼する', uri: 'https://liff.line.me/2010126656-iMP2b4Jw?page=visit-repair' }, style: 'primary', height: 'sm', color: '#FF6B35' },
         { type: 'button', action: { type: 'message', label: '質問・相談したい', text: '質問・相談したい' }, style: 'secondary', height: 'sm' },
       ],
     },

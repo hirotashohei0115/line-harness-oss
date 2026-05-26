@@ -18,6 +18,7 @@ import { initBooking } from './booking.js';
 import { initForm } from './form.js';
 import { initMailRepair } from './mail-repair.js';
 import { initReservation } from './reservation.js';
+import { initVisitRepair } from './visit-repair.js';
 
 declare const liff: {
   init(config: { liffId: string }): Promise<void>;
@@ -274,6 +275,8 @@ async function main() {
       await initMailRepair();
     } else if (page === 'reservation') {
       await initReservation();
+    } else if (page === 'visit-repair') {
+      await initVisitRepair();
     } else {
       await linkAndAddFlow();
     }
