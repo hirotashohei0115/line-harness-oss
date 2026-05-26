@@ -93,7 +93,7 @@ const MAIL_REPAIR_FORM_URL = 'https://liff.line.me/2010126656-iMP2b4Jw?page=mail
 const STORE_RESERVATION_URL_GENERAL = 'https://liff.line.me/2010126656-iMP2b4Jw?page=reservation';
 const PRIVACY_POLICY_URL = 'https://forms.gle/XXXXXXXXXXXXXXXX';
 const CONSULT_PHONE_TEXT =
-  '【電話・LINE相談のご案内】\nお問い合わせありがとうございます！\n\nお急ぎの方は下記電話番号までご連絡ください\n👉070-1391-9861\n（受付時間：10時〜20時）\n\nLINEでのご相談をご希望の場合は\nこのままご質問・ご相談内容をご記入のうえご返信ください😆';
+  '【電話・LINE相談のご案内】\nお問い合わせありがとうございます！\nお急ぎの方は下記電話番号までご連絡ください\n👉070-1391-9861\n（受付時間：10時〜20時）\n\nLINEでのご相談をご希望の場合は\nこのままご質問・ご相談内容をご記入のうえご返信ください😆\n\n例）\n①機種や型番：\n　例、MacBook Air 2022 A2337\n②症状：\n　例、液晶割れ、画が映らない\n③ご要望：\n　例、修理費用が知りたい';
 
 const MISSING_MODEL_MESSAGE =
   '該当機種が存在しない可能性がございますので、お見積りを作成するためにパソコンの底面に記載されているモデル番号(Aから始まる4桁の数字)をチャットにてお知らせください！';
