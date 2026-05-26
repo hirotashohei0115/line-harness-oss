@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
-import type { CrossAnalysis, CrossRunResult } from '@/lib/api'
+import type { CrossAnalysis, CrossRunResult, AxisGroup } from '@/lib/api'
 import type { Tag } from '@line-crm/shared'
 import type { ContactMark } from '@/lib/api'
 
@@ -13,6 +13,12 @@ interface Props {
 
 type AxisType = 'tag' | 'contact_mark'
 
+type AxisGroupState = {
+  id: string
+  name: string
+  itemIds: string[]
+}
+
 const AXIS_TYPE_OPTIONS: { value: AxisType; label: string }[] = [
   { value: 'tag', label: 'タグ' },
   { value: 'contact_mark', label: '対応マーク' },
@@ -20,19 +26,111 @@ const AXIS_TYPE_OPTIONS: { value: AxisType; label: string }[] = [
 
 interface AxisItem { id: string; name: string; color: string }
 
-// Defined at module scope so React sees a stable component type across renders.
-// If defined inside CrossAnalysisForm, the function reference changes every render
-// and React unmounts/remounts the component, resetting scroll position.
-function toggleId(ids: string[], setIds: (v: string[]) => void, id: string) {
-  setIds(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])
+// ── Module-scope helpers (never defined inside the component render) ──────────
+// Defining these outside prevents React from unmounting/remounting child
+// components on each render due to changed function references, which would
+// cause scroll position resets.
+
+function toggleItemInGroup(
+  groups: AxisGroupState[],
+  setGroups: (g: AxisGroupState[]) => void,
+  groupId: string,
+  itemId: string,
+) {
+  setGroups(groups.map((grp) => {
+    if (grp.id !== groupId) return grp
+    const has = grp.itemIds.includes(itemId)
+    return { ...grp, itemIds: has ? grp.itemIds.filter((x) => x !== itemId) : [...grp.itemIds, itemId] }
+  }))
+}
+
+function updateGroupName(
+  groups: AxisGroupState[],
+  setGroups: (g: AxisGroupState[]) => void,
+  groupId: string,
+  name: string,
+) {
+  setGroups(groups.map((grp) => grp.id !== groupId ? grp : { ...grp, name }))
+}
+
+function removeGroup(
+  groups: AxisGroupState[],
+  setGroups: (g: AxisGroupState[]) => void,
+  groupId: string,
+) {
+  setGroups(groups.filter((grp) => grp.id !== groupId))
+}
+
+function addGroup(
+  groups: AxisGroupState[],
+  setGroups: (g: AxisGroupState[]) => void,
+) {
+  const newId = crypto.randomUUID()
+  setGroups([...groups, { id: newId, name: `グループ${groups.length + 1}`, itemIds: [] }])
+}
+
+// Single group panel — defined at module scope for stable reference
+interface GroupPanelProps {
+  group: AxisGroupState
+  items: AxisItem[]
+  groups: AxisGroupState[]
+  setGroups: (g: AxisGroupState[]) => void
+  canDelete: boolean
+}
+
+function GroupPanel({ group, items, groups, setGroups, canDelete }: GroupPanelProps) {
+  return (
+    <div className="border border-gray-200 rounded-lg p-3 bg-white">
+      <div className="flex items-center gap-2 mb-2">
+        <input
+          type="text"
+          value={group.name}
+          onChange={(e) => updateGroupName(groups, setGroups, group.id, e.target.value)}
+          placeholder="グループ名"
+          className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+        />
+        {canDelete && (
+          <button
+            onClick={() => removeGroup(groups, setGroups, group.id)}
+            className="text-xs px-2 py-1 text-red-500 hover:text-red-700 border border-red-200 rounded"
+          >削除</button>
+        )}
+      </div>
+      <hr className="border-gray-100 mb-2" />
+      {items.length === 0 ? (
+        <p className="text-xs text-gray-400 text-center py-2">項目がありません</p>
+      ) : (
+        <div className="space-y-0.5 max-h-44 overflow-y-auto">
+          {items.map((item) => (
+            <label key={item.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={group.itemIds.includes(item.id)}
+                onChange={() => toggleItemInGroup(groups, setGroups, group.id, item.id)}
+                className="rounded accent-green-500"
+              />
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+              <span className="text-sm text-gray-700">{item.name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      <p className="text-xs text-gray-400 mt-2">{group.itemIds.length}件選択中</p>
+    </div>
+  )
 }
 
 interface AxisSelectorProps {
-  label: string; type: AxisType; setType: (t: AxisType) => void
-  items: AxisItem[]; itemIds: string[]; setItemIds: (ids: string[]) => void; color: string
+  label: string
+  color: string
+  type: AxisType
+  setType: (t: AxisType) => void
+  items: AxisItem[]
+  groups: AxisGroupState[]
+  setGroups: (g: AxisGroupState[]) => void
 }
 
-function AxisSelector({ label, type, setType, items, itemIds, setItemIds, color }: AxisSelectorProps) {
+function AxisSelector({ label, color, type, setType, items, groups, setGroups }: AxisSelectorProps) {
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <div className="flex items-center gap-2 mb-3">
@@ -41,41 +139,49 @@ function AxisSelector({ label, type, setType, items, itemIds, setItemIds, color 
         </span>
         <select
           value={type}
-          onChange={(e) => { setType(e.target.value as AxisType); setItemIds([]) }}
+          onChange={(e) => {
+            setType(e.target.value as AxisType)
+            // Reset groups when type changes
+            setGroups([{ id: crypto.randomUUID(), name: 'グループ1', itemIds: [] }])
+          }}
           className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
         >
           {AXIS_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <button
-          onClick={() => setItemIds(items.map((i) => i.id))}
-          className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700 border border-gray-300 rounded"
-        >全選択</button>
-        <button
-          onClick={() => setItemIds([])}
-          className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700 border border-gray-300 rounded"
-        >解除</button>
       </div>
-      {items.length === 0 ? (
-        <p className="text-xs text-gray-400 text-center py-3">項目がありません</p>
-      ) : (
-        <div className="space-y-0.5 max-h-52 overflow-y-auto border border-gray-100 rounded-md">
-          {items.map((item) => (
-            <label key={item.id} className="flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={itemIds.includes(item.id)}
-                onChange={() => toggleId(itemIds, setItemIds, item.id)}
-                className="rounded accent-green-500"
-              />
-              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-              <span className="text-sm text-gray-700">{item.name}</span>
-            </label>
-          ))}
-        </div>
-      )}
-      <p className="text-xs text-gray-400 mt-2">{itemIds.length}件選択中</p>
+
+      <div className="space-y-3">
+        {groups.map((grp) => (
+          <GroupPanel
+            key={grp.id}
+            group={grp}
+            items={items}
+            groups={groups}
+            setGroups={setGroups}
+            canDelete={groups.length > 1}
+          />
+        ))}
+      </div>
+
+      <button
+        onClick={() => addGroup(groups, setGroups)}
+        className="mt-3 w-full text-sm text-green-600 hover:text-green-800 border border-dashed border-green-300 hover:border-green-500 rounded-lg py-2"
+      >
+        ＋ グループを追加
+      </button>
     </div>
   )
+}
+
+// ── Helper: convert initial CrossAnalysis groups or itemIds to AxisGroupState[] ─
+function initialGroups(axisGroups: AxisGroup[] | undefined, axisItemIds: string[]): AxisGroupState[] {
+  if (axisGroups && axisGroups.length > 0) {
+    return axisGroups.map((g) => ({ id: g.id, name: g.name, itemIds: g.itemIds }))
+  }
+  if (axisItemIds && axisItemIds.length > 0) {
+    return axisItemIds.map((id) => ({ id, name: id, itemIds: [id] }))
+  }
+  return [{ id: crypto.randomUUID(), name: 'グループ1', itemIds: [] }]
 }
 
 export default function CrossAnalysisForm({ initial }: Props) {
@@ -87,9 +193,13 @@ export default function CrossAnalysisForm({ initial }: Props) {
   const [from, setFrom] = useState(thirtyDaysAgo)
   const [to, setTo] = useState(today)
   const [axis1Type, setAxis1Type] = useState<AxisType>(initial?.axis1Type ?? 'tag')
-  const [axis1ItemIds, setAxis1ItemIds] = useState<string[]>(initial?.axis1ItemIds ?? [])
+  const [axis1Groups, setAxis1Groups] = useState<AxisGroupState[]>(() =>
+    initialGroups(initial?.axis1Groups, initial?.axis1ItemIds ?? [])
+  )
   const [axis2Type, setAxis2Type] = useState<AxisType>(initial?.axis2Type ?? 'contact_mark')
-  const [axis2ItemIds, setAxis2ItemIds] = useState<string[]>(initial?.axis2ItemIds ?? [])
+  const [axis2Groups, setAxis2Groups] = useState<AxisGroupState[]>(() =>
+    initialGroups(initial?.axis2Groups, initial?.axis2ItemIds ?? [])
+  )
 
   const [tags, setTags] = useState<Tag[]>([])
   const [marks, setMarks] = useState<ContactMark[]>([])
@@ -110,8 +220,12 @@ export default function CrossAnalysisForm({ initial }: Props) {
   }
 
   const handleRun = useCallback(async () => {
-    if (axis1ItemIds.length === 0 || axis2ItemIds.length === 0) {
-      setError('軸1と軸2にそれぞれ1つ以上の項目を選択してください')
+    if (axis1Groups.length === 0 || axis1Groups.every((g) => g.itemIds.length === 0)) {
+      setError('軸1に1つ以上の項目を持つグループを作成してください')
+      return
+    }
+    if (axis2Groups.length === 0 || axis2Groups.every((g) => g.itemIds.length === 0)) {
+      setError('軸2に1つ以上の項目を持つグループを作成してください')
       return
     }
     setRunning(true)
@@ -120,14 +234,14 @@ export default function CrossAnalysisForm({ initial }: Props) {
       const res = await api.crossAnalyses.run({
         name: name || 'クロス分析',
         period: { from, to },
-        axis1: { type: axis1Type, itemIds: axis1ItemIds },
-        axis2: { type: axis2Type, itemIds: axis2ItemIds },
+        axis1: { type: axis1Type, itemIds: [], groups: axis1Groups },
+        axis2: { type: axis2Type, itemIds: [], groups: axis2Groups },
       })
       if (res.success) setResult(res.data)
       else setError('分析に失敗しました')
     } catch { setError('分析に失敗しました') }
     finally { setRunning(false) }
-  }, [name, from, to, axis1Type, axis1ItemIds, axis2Type, axis2ItemIds])
+  }, [name, from, to, axis1Type, axis1Groups, axis2Type, axis2Groups])
 
   const handleSave = async () => {
     if (!name.trim()) { setError('分析名を入力してください'); return }
@@ -137,14 +251,14 @@ export default function CrossAnalysisForm({ initial }: Props) {
       if (initial) {
         await api.crossAnalyses.update(initial.id, {
           name,
-          axis1: { type: axis1Type, itemIds: axis1ItemIds },
-          axis2: { type: axis2Type, itemIds: axis2ItemIds },
+          axis1: { type: axis1Type, itemIds: [], groups: axis1Groups },
+          axis2: { type: axis2Type, itemIds: [], groups: axis2Groups },
         })
       } else {
         const res = await api.crossAnalyses.create({
           name,
-          axis1: { type: axis1Type, itemIds: axis1ItemIds },
-          axis2: { type: axis2Type, itemIds: axis2ItemIds },
+          axis1: { type: axis1Type, itemIds: [], groups: axis1Groups },
+          axis2: { type: axis2Type, itemIds: [], groups: axis2Groups },
         })
         if (res.success) { router.push('/cross-analyses'); return }
       }
@@ -170,8 +284,7 @@ export default function CrossAnalysisForm({ initial }: Props) {
     URL.revokeObjectURL(url)
   }
 
-  // Compute display totals from cells to guarantee table internal consistency:
-  // sum of row cells = row total, sum of col cells = col total, both grand totals match
+  // Compute display totals from cells to guarantee table internal consistency
   const displayRowTotals: Record<string, number> = {}
   const displayColTotals: Record<string, number> = {}
   let grandTotal = 0
@@ -222,14 +335,16 @@ export default function CrossAnalysisForm({ initial }: Props) {
       {/* Axis Selectors */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <AxisSelector
-          label="軸1（行）" type={axis1Type} setType={setAxis1Type}
+          label="軸1（行）" color="#3b82f6"
+          type={axis1Type} setType={setAxis1Type}
           items={getAxisItems(axis1Type)}
-          itemIds={axis1ItemIds} setItemIds={setAxis1ItemIds} color="#3b82f6"
+          groups={axis1Groups} setGroups={setAxis1Groups}
         />
         <AxisSelector
-          label="軸2（列）" type={axis2Type} setType={setAxis2Type}
+          label="軸2（列）" color="#8b5cf6"
+          type={axis2Type} setType={setAxis2Type}
           items={getAxisItems(axis2Type)}
-          itemIds={axis2ItemIds} setItemIds={setAxis2ItemIds} color="#8b5cf6"
+          groups={axis2Groups} setGroups={setAxis2Groups}
         />
       </div>
 

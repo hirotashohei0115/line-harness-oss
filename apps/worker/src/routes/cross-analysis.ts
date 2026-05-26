@@ -3,9 +3,16 @@ import type { Env } from '../index.js';
 
 type AxisType = 'tag' | 'contact_mark';
 
+interface AxisGroup {
+  id: string;
+  name: string;
+  itemIds: string[];
+}
+
 interface AxisConfig {
   type: AxisType;
-  itemIds: string[];
+  itemIds?: string[];
+  groups?: AxisGroup[];
 }
 
 interface RunRequest {
@@ -33,18 +40,37 @@ const TYPE_LABEL: Record<AxisType, string> = {
   contact_mark: '対応マーク',
 };
 
+/**
+ * Convert an AxisConfig to a list of AxisGroup[].
+ * - If config.groups is present and non-empty, use it directly.
+ * - Otherwise fall back to legacy itemIds[] format: each itemId becomes its own group.
+ */
+function configToGroups(config: AxisConfig): AxisGroup[] {
+  if (config.groups && config.groups.length > 0) {
+    return config.groups;
+  }
+  // Legacy: each itemId is its own group
+  return (config.itemIds ?? []).map((id) => ({ id, name: id, itemIds: [id] }));
+}
+
 function serializeDefinition(row: CrossAnalysisRow) {
   let axis1: AxisConfig = { type: 'tag', itemIds: [] };
   let axis2: AxisConfig = { type: 'contact_mark', itemIds: [] };
   try { axis1 = JSON.parse(row.axis1_groups) as AxisConfig; } catch { /* legacy */ }
   try { axis2 = JSON.parse(row.axis2_groups) as AxisConfig; } catch { /* legacy */ }
+
+  const axis1Groups = configToGroups(axis1);
+  const axis2Groups = configToGroups(axis2);
+
   return {
     id: row.id,
     name: row.name,
     axis1Type: axis1.type ?? 'tag',
-    axis1ItemIds: axis1.itemIds ?? [],
+    axis1ItemIds: axis1Groups.flatMap((g) => g.itemIds),
+    axis1Groups,
     axis2Type: axis2.type ?? 'contact_mark',
-    axis2ItemIds: axis2.itemIds ?? [],
+    axis2ItemIds: axis2Groups.flatMap((g) => g.itemIds),
+    axis2Groups,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -60,7 +86,21 @@ function buildItemCondition(type: AxisType, itemId: string): { sql: string; para
   return { sql: `f.contact_mark_id = ?`, params: [itemId] };
 }
 
-async function countUsers(
+/**
+ * Build an OR condition across all itemIds in a group.
+ * If itemIds is empty, returns an impossible condition (1=0).
+ */
+function buildGroupCondition(type: AxisType, itemIds: string[]): { sql: string; params: unknown[] } {
+  if (itemIds.length === 0) {
+    return { sql: '1=0', params: [] };
+  }
+  const parts = itemIds.map((id) => buildItemCondition(type, id));
+  const sql = parts.map((p) => p.sql).join(' OR ');
+  const params = parts.flatMap((p) => p.params);
+  return { sql: `(${sql})`, params };
+}
+
+async function countUsersWithConditions(
   db: D1Database,
   fromTs: string,
   toTs: string,
@@ -76,21 +116,6 @@ async function countUsers(
     .bind(...params)
     .first<{ count: number }>();
   return row?.count ?? 0;
-}
-
-async function getItemNames(
-  db: D1Database,
-  type: AxisType,
-  itemIds: string[],
-): Promise<{ id: string; name: string }[]> {
-  if (itemIds.length === 0) return [];
-  const ph = itemIds.map(() => '?').join(',');
-  const table = type === 'tag' ? 'tags' : 'contact_marks';
-  const result = await db
-    .prepare(`SELECT id, name FROM ${table} WHERE id IN (${ph})`)
-    .bind(...itemIds)
-    .all<{ id: string; name: string }>();
-  return itemIds.map((id) => result.results.find((r) => r.id === id) ?? { id, name: id });
 }
 
 // GET /api/cross-analyses
@@ -116,54 +141,46 @@ crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
     const toTs = `${to}T23:59:59`;
     const { axis1, axis2 } = body;
 
-    const [axis1Items, axis2Items] = await Promise.all([
-      getItemNames(c.env.DB, axis1.type, axis1.itemIds),
-      getItemNames(c.env.DB, axis2.type, axis2.itemIds),
-    ]);
+    const axis1Groups = configToGroups(axis1);
+    const axis2Groups = configToGroups(axis2);
 
-    // Cells: axis1 × axis2 intersection
+    // Build axis items from groups (id = group.id, name = group.name)
+    const axis1Items = axis1Groups.map((g) => ({ id: g.id, name: g.name }));
+    const axis2Items = axis2Groups.map((g) => ({ id: g.id, name: g.name }));
+
+    // Cells: each axis1 group × each axis2 group
     const cells: Record<string, Record<string, number>> = {};
-    for (const a1Id of axis1.itemIds) {
-      cells[a1Id] = {};
-      for (const a2Id of axis2.itemIds) {
-        cells[a1Id][a2Id] = await countUsers(
-          c.env.DB, fromTs, toTs,
-          buildItemCondition(axis1.type, a1Id),
-          buildItemCondition(axis2.type, a2Id),
+    for (const grp1 of axis1Groups) {
+      cells[grp1.id] = {};
+      const cond1 = buildGroupCondition(axis1.type, grp1.itemIds);
+      for (const grp2 of axis2Groups) {
+        const cond2 = buildGroupCondition(axis2.type, grp2.itemIds);
+        cells[grp1.id][grp2.id] = await countUsersWithConditions(
+          c.env.DB, fromTs, toTs, cond1, cond2,
         );
       }
     }
 
-    // Row totals: axis1 AND (axis2_1 OR axis2_2 OR ...)
+    // Row totals: grp1 AND (any grp2)
     const rowTotals: Record<string, number> = {};
-    const a2Conditions = axis2.itemIds.map((a2Id) => buildItemCondition(axis2.type, a2Id));
-    const a2OrSql = a2Conditions.map((c) => c.sql).join(' OR ');
-    const a2OrParams = a2Conditions.flatMap((c) => c.params);
-    for (const a1Id of axis1.itemIds) {
-      const a1Cond = buildItemCondition(axis1.type, a1Id);
-      const conditions = ['f.created_at >= ?', 'f.created_at <= ?', a1Cond.sql, `(${a2OrSql})`];
-      const params: unknown[] = [fromTs, toTs, ...a1Cond.params, ...a2OrParams];
-      const row = await c.env.DB
-        .prepare(`SELECT COUNT(DISTINCT f.id) as count FROM friends f WHERE ${conditions.join(' AND ')}`)
-        .bind(...params)
-        .first<{ count: number }>();
-      rowTotals[a1Id] = row?.count ?? 0;
+    const allAxis2ItemIds = axis2Groups.flatMap((g) => g.itemIds);
+    const a2OrCond = buildGroupCondition(axis2.type, allAxis2ItemIds);
+    for (const grp1 of axis1Groups) {
+      const cond1 = buildGroupCondition(axis1.type, grp1.itemIds);
+      rowTotals[grp1.id] = await countUsersWithConditions(
+        c.env.DB, fromTs, toTs, cond1, a2OrCond,
+      );
     }
 
-    // Col totals: axis2 condition AND (axis1_1 OR axis1_2 OR ...) — symmetric with rowTotals
+    // Col totals: grp2 AND (any grp1)
     const colTotals: Record<string, number> = {};
-    const a1Conditions = axis1.itemIds.map((a1Id) => buildItemCondition(axis1.type, a1Id));
-    const a1OrSql = a1Conditions.map((cond) => cond.sql).join(' OR ');
-    const a1OrParams = a1Conditions.flatMap((cond) => cond.params);
-    for (const a2Id of axis2.itemIds) {
-      const a2Cond = buildItemCondition(axis2.type, a2Id);
-      const colConditions = ['f.created_at >= ?', 'f.created_at <= ?', a2Cond.sql, `(${a1OrSql})`];
-      const colParams: unknown[] = [fromTs, toTs, ...a2Cond.params, ...a1OrParams];
-      const colRow = await c.env.DB
-        .prepare(`SELECT COUNT(DISTINCT f.id) as count FROM friends f WHERE ${colConditions.join(' AND ')}`)
-        .bind(...colParams)
-        .first<{ count: number }>();
-      colTotals[a2Id] = colRow?.count ?? 0;
+    const allAxis1ItemIds = axis1Groups.flatMap((g) => g.itemIds);
+    const a1OrCond = buildGroupCondition(axis1.type, allAxis1ItemIds);
+    for (const grp2 of axis2Groups) {
+      const cond2 = buildGroupCondition(axis2.type, grp2.itemIds);
+      colTotals[grp2.id] = await countUsersWithConditions(
+        c.env.DB, fromTs, toTs, cond2, a1OrCond,
+      );
     }
 
     return c.json({
