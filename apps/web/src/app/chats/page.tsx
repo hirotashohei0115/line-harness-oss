@@ -452,6 +452,7 @@ export default function ChatsPage() {
   })
   const [rightCollapsed, setRightCollapsed] = useState(false)
   const [layoutMode, setLayoutMode] = useState<'normal' | 'focus' | 'info'>('normal')
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const prevChatsRef = useRef<Chat[]>([])
   const isAtBottomRef = useRef(true)
@@ -730,6 +731,24 @@ export default function ChatsPage() {
     setTagInput('')
   }, [chatDetail?.friendId, loadRepairInfo, loadFriendTags])
 
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', handler)
+    document.addEventListener('webkitfullscreenchange', handler)
+    return () => {
+      document.removeEventListener('fullscreenchange', handler)
+      document.removeEventListener('webkitfullscreenchange', handler)
+    }
+  }, [])
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {})
+    } else {
+      document.exitFullscreen().catch(() => {})
+    }
+  }
+
   const handleSelectChat = (chatId: string) => {
     isAtBottomRef.current = true
     setSelectedChatId(chatId)
@@ -968,6 +987,11 @@ export default function ChatsPage() {
 
       {/* Layout mode controls */}
       <div className="flex items-center justify-end mb-2 gap-2">
+        <button
+          onClick={toggleFullscreen}
+          className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors border ${isFullscreen ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
+          title={isFullscreen ? '通常表示に戻す' : 'フルスクリーン'}
+        >{isFullscreen ? '✕ 通常表示' : '⛶ フルスクリーン'}</button>
         <div className="flex items-center bg-gray-100 rounded-lg p-0.5 gap-0.5">
           {([
             { mode: 'normal' as const, icon: '⊞', label: '通常' },
