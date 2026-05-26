@@ -29,6 +29,7 @@ interface ChatMessage {
   direction: 'incoming' | 'outgoing'
   messageType: string
   content: string
+  sentByStaffName: string | null
   createdAt: string
 }
 
@@ -217,6 +218,7 @@ interface MessageLog {
   direction: 'incoming' | 'outgoing'
   messageType: string
   content: string
+  sentByStaffName: string | null
   createdAt: string
 }
 
@@ -301,6 +303,7 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
         direction: 'outgoing',
         messageType: 'text',
         content: message,
+        sentByStaffName: null,
         createdAt: new Date().toISOString(),
       }])
       setMessage('')
@@ -364,6 +367,9 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
                 <span className="text-xs text-white/50 mt-0.5 px-1">
                   {new Date(msg.createdAt).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 </span>
+                {msg.direction === 'outgoing' && msg.sentByStaffName && (
+                  <span className="text-xs text-gray-400 px-1">{msg.sentByStaffName}</span>
+                )}
               </div>
             </div>
           ))
@@ -1332,10 +1338,13 @@ export default function ChatsPage() {
                           >
                             {bubbleContent}
                           </div>
-                          {/* 時刻 */}
+                          {/* 時刻・送信者名 */}
                           <span className="text-xs text-white/50 mt-0.5 px-1">
                             {new Date(msg.createdAt).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                           </span>
+                          {isOutgoing && msg.sentByStaffName && (
+                            <span className="text-xs text-gray-400 px-1">{msg.sentByStaffName}</span>
+                          )}
                         </div>
                       </div>
                     )

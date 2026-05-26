@@ -320,7 +320,7 @@ chats.get('/api/chats/:id', async (c) => {
 
     // チャットに関連するメッセージログも取得（最新200件をDESCで取得し、ASCに反転して返す）
     const messages = await c.env.DB
-      .prepare(`SELECT id, friend_id, direction, message_type, content, created_at FROM messages_log WHERE friend_id = ? ORDER BY created_at DESC LIMIT 200`)
+      .prepare(`SELECT id, friend_id, direction, message_type, content, sent_by_staff_name, created_at FROM messages_log WHERE friend_id = ? ORDER BY created_at DESC LIMIT 200`)
       .bind(item.friend_id)
       .all();
     const messagesAsc = (messages.results as Record<string, unknown>[]).slice().reverse();
@@ -342,6 +342,7 @@ chats.get('/api/chats/:id', async (c) => {
           direction: m.direction,
           messageType: m.message_type,
           content: m.content,
+          sentByStaffName: m.sent_by_staff_name ?? null,
           createdAt: m.created_at,
         })),
       },
@@ -440,9 +441,10 @@ chats.post('/api/chats/:id/send', async (c) => {
     }
 
     // メッセージログに記録
+    const sendingStaff = c.get('staff');
     await c.env.DB
-      .prepare(`INSERT INTO messages_log (id, friend_id, direction, message_type, content, created_at) VALUES (?, ?, 'outgoing', ?, ?, ?)`)
-      .bind(logId, friend.id, messageType, body.content, jstNow())
+      .prepare(`INSERT INTO messages_log (id, friend_id, direction, message_type, content, sent_by_staff_id, sent_by_staff_name, created_at) VALUES (?, ?, 'outgoing', ?, ?, ?, ?, ?)`)
+      .bind(logId, friend.id, messageType, body.content, sendingStaff?.id ?? null, sendingStaff?.name ?? null, jstNow())
       .run();
 
     // チャットの最終メッセージ日時を更新
