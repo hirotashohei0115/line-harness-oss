@@ -446,6 +446,12 @@ export default function ChatsPage() {
   const [editNameValue, setEditNameValue] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [zoomedImageContent, setZoomedImageContent] = useState<string | null>(null)
+  const [leftCollapsed, setLeftCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('chat_left_collapsed') === '1'
+  })
+  const [rightCollapsed, setRightCollapsed] = useState(false)
+  const [layoutMode, setLayoutMode] = useState<'normal' | 'focus' | 'info'>('normal')
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const prevChatsRef = useRef<Chat[]>([])
   const isAtBottomRef = useRef(true)
@@ -960,9 +966,42 @@ export default function ChatsPage() {
         </div>
       )}
 
-      <div className="flex gap-4 h-[calc(100vh-120px)] lg:h-[calc(100vh-180px)]">
+      {/* Layout mode controls */}
+      <div className="flex items-center justify-end mb-2 gap-2">
+        <div className="flex items-center bg-gray-100 rounded-lg p-0.5 gap-0.5">
+          {([
+            { mode: 'normal' as const, icon: '⊞', label: '通常' },
+            { mode: 'focus' as const, icon: '⊡', label: '集中' },
+            { mode: 'info' as const, icon: '⊟', label: '情報' },
+          ]).map(({ mode, icon, label }) => (
+            <button
+              key={mode}
+              onClick={() => {
+                setLayoutMode(mode)
+                if (mode === 'focus') { setLeftCollapsed(true); setRightCollapsed(true) }
+                else { setLeftCollapsed(false); setRightCollapsed(false) }
+              }}
+              title={label}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${layoutMode === mode ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+            >{icon} {label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2 h-[calc(100vh-120px)] lg:h-[calc(100vh-195px)]">
         {/* Left Panel: Chat List */}
-        <div className={`w-full lg:w-96 lg:flex-shrink-0 bg-white rounded-lg shadow-sm border border-gray-200 flex-col overflow-hidden ${selectedChatId ? 'hidden lg:flex' : 'flex'}`}>
+        <div className={`relative flex-shrink-0 bg-white rounded-lg shadow-sm border border-gray-200 flex-col overflow-hidden transition-all duration-200 ${
+          leftCollapsed ? 'w-8' : (layoutMode === 'info' ? 'lg:w-72' : 'lg:w-80')
+        } ${selectedChatId ? 'hidden lg:flex' : 'flex'}`}>
+          {/* Left collapse toggle */}
+          {leftCollapsed ? (
+            <button
+              onClick={() => { setLeftCollapsed(false); localStorage.setItem('chat_left_collapsed', '0') }}
+              className="w-full h-full flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+              title="チャット一覧を表示"
+            >▶</button>
+          ) : (
+          <>
           {/* Status Filter Tabs */}
           <div className="flex border-b border-gray-200">
             {statusFilters.map((filter) => (
@@ -979,6 +1018,11 @@ export default function ChatsPage() {
                 {filter.label}
               </button>
             ))}
+            <button
+              onClick={() => { setLeftCollapsed(true); localStorage.setItem('chat_left_collapsed', '1') }}
+              className="px-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 border-l border-gray-200 flex-shrink-0"
+              title="チャット一覧を折りたたむ"
+            >◀</button>
           </div>
 
           {/* Filter toggle button */}
@@ -1168,6 +1212,8 @@ export default function ChatsPage() {
               </>
             )}
           </div>
+          </>
+          )}
         </div>
 
         {/* Right Panel: Chat Detail */}
@@ -1468,9 +1514,24 @@ export default function ChatsPage() {
               </div>
 
               {/* Repair Info Sidebar */}
-              <div className="flex w-56 flex-shrink-0 flex-col border-l border-gray-200 bg-gray-50 overflow-y-auto">
+              <div className={`flex-shrink-0 flex-col border-l border-gray-200 bg-gray-50 overflow-y-auto transition-all duration-200 ${
+                rightCollapsed ? 'w-8 overflow-hidden' : (layoutMode === 'info' ? 'w-96' : 'w-56')
+              } flex`}>
+                {rightCollapsed ? (
+                  <button
+                    onClick={() => setRightCollapsed(false)}
+                    className="w-full h-full flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 text-xs"
+                    title="修理情報を表示"
+                  >▶</button>
+                ) : (
+                <>
                 <div className="px-3 py-2 border-b border-gray-200 bg-white flex items-center justify-between">
-                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">修理情報</p>
+                  <button
+                    onClick={() => setRightCollapsed(true)}
+                    className="text-gray-400 hover:text-gray-600 text-xs mr-1"
+                    title="修理情報を折りたたむ"
+                  >◀</button>
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex-1">修理情報</p>
                   {!repairEditMode && chatDetail && (
                     <button
                       onClick={handleRepairEdit}
@@ -1795,6 +1856,8 @@ export default function ChatsPage() {
                     </div>
                   </div>
                 </div>
+                </>
+                )}
               </div>
             </div>
           ) : null}
