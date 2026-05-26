@@ -9,6 +9,8 @@ import {
   getStoreReservation,
   updateReservationStatus,
   deleteStoreReservation,
+  upsertChatOnMessage,
+  jstNow,
 } from '@line-crm/db';
 import { LineClient } from '@line-crm/line-sdk';
 import { sendChatworkMessage, jstTimestamp } from '../lib/chatwork.js';
@@ -220,15 +222,28 @@ reservationRoutes.post('/api/reservations', async (c) => {
   const dayName = DAY_NAMES[dateObj.getDay()];
 
   // LINE confirmation message
+  const confirmText = `✅ 来店予約が完了しました！\n\n📍 店舗：リペアマスター${storeName}\n📅 日時：${dateDisplay}（${dayName}）${time}〜\n👤 お名前：${name} 様${body.phone ? `\n📞 電話番号：${body.phone}` : ''}${body.notes ? `\n📝 ご要望：${body.notes}` : ''}\n\nご来店をお待ちしております！\n※ご不明な点がございましたらLINEにてお問い合わせください。`;
   try {
     const lineToken = c.env.LINE_CHANNEL_ACCESS_TOKEN;
     if (lineToken) {
       const lineClient = new LineClient(lineToken);
-      const confirmText = `✅ 来店予約が完了しました！\n\n📍 店舗：リペアマスター${storeName}\n📅 日時：${dateDisplay}（${dayName}）${time}〜\n👤 お名前：${name} 様${body.phone ? `\n📞 電話番号：${body.phone}` : ''}${body.notes ? `\n📝 ご要望：${body.notes}` : ''}\n\nご来店をお待ちしております！\n※ご不明な点がございましたらLINEにてお問い合わせください。`;
       await lineClient.pushMessage(lineUserId, [{ type: 'text', text: confirmText }]);
     }
   } catch (err) {
     console.error('LINE confirmation send error:', err);
+  }
+
+  // チャットに予約完了メッセージを保存
+  if (friend?.id) {
+    try {
+      await c.env.DB
+        .prepare(`INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at) VALUES (?, ?, 'outgoing', 'text', ?, NULL, NULL, 1, ?)`)
+        .bind(crypto.randomUUID(), friend.id, confirmText, jstNow())
+        .run();
+      await upsertChatOnMessage(c.env.DB, friend.id);
+    } catch (err) {
+      console.error('reservation chat log error:', err);
+    }
   }
 
   // Fetch latest repair quote for price/delivery info (used in both Chatwork and Calendar)
