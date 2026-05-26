@@ -201,6 +201,7 @@ interface FlexPart {
   align?: string
   url?: string
   aspectRatio?: string
+  aspectMode?: string
   label?: string
   style?: string
 }
@@ -215,7 +216,10 @@ function buildCustomFlexJson(parts: FlexPart[], settings: FlexEditorSettings): s
   const spacerH: Record<string, string> = { sm: '10px', md: '20px', lg: '30px', xl: '40px' }
   const contents = parts.map(p => {
     if (p.type === 'text') return { type: 'text', text: p.text || 'テキスト', size: p.size || 'md', color: p.color || '#333333', weight: p.bold ? 'bold' : 'regular', align: p.align || 'start', wrap: true }
-    if (p.type === 'image') return { type: 'image', url: p.url || 'https://via.placeholder.com/400x200', size: p.size || 'full', aspectRatio: p.aspectRatio || '20:13', aspectMode: 'cover' }
+    if (p.type === 'image') {
+      const isOriginal = p.aspectRatio === 'original'
+      return { type: 'image', url: p.url || 'https://via.placeholder.com/400x200', size: p.size || 'full', aspectRatio: isOriginal ? '20:13' : (p.aspectRatio || '20:13'), aspectMode: isOriginal ? 'fit' : (p.aspectMode || 'cover') }
+    }
     if (p.type === 'button') return { type: 'button', action: { type: 'uri', label: p.label || 'ボタン', uri: p.url || 'https://example.com' }, style: p.style || 'primary', ...(!p.style || p.style === 'primary' ? { color: p.color || '#06C755' } : {}) }
     if (p.type === 'separator') return { type: 'separator' }
     return { type: 'box', layout: 'vertical', height: spacerH[p.size || 'md'] || '20px', contents: [] }
@@ -305,13 +309,28 @@ function ImagePartSettings({
         </div>
       )}
 
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 flex-wrap">
         <select value={part.size || 'full'} onChange={e => onUpdate({ size: e.target.value })} className={sel}>
           {['full','lg','md','sm'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <select value={part.aspectRatio || '20:13'} onChange={e => onUpdate({ aspectRatio: e.target.value })} className={sel}>
-          {['20:13','1:1','4:3'].map(r => <option key={r} value={r}>{r}</option>)}
+        <select value={part.aspectRatio || '20:13'} onChange={e => {
+          const v = e.target.value
+          onUpdate({ aspectRatio: v, ...(v === 'original' ? { aspectMode: 'fit' } : {}) })
+        }} className={sel}>
+          <option value="20:13">20:13（横長）</option>
+          <option value="1:1">1:1（正方形）</option>
+          <option value="4:3">4:3</option>
+          <option value="3:4">3:4（縦長）</option>
+          <option value="2:3">2:3（縦長）</option>
+          <option value="9:16">9:16（縦長）</option>
+          <option value="original">オリジナル（fit）</option>
         </select>
+        {part.aspectRatio !== 'original' && (
+          <select value={part.aspectMode || 'cover'} onChange={e => onUpdate({ aspectMode: e.target.value })} className={sel}>
+            <option value="cover">cover（トリミング）</option>
+            <option value="fit">fit（全体表示）</option>
+          </select>
+        )}
       </div>
     </div>
   )
@@ -383,7 +402,7 @@ function FlexVisualEditor({ parts, setParts, settings, setSettings }: {
   const addPart = (type: FlexPart['type']) => {
     const defaults: Record<string, Partial<FlexPart>> = {
       text: { text: '', size: 'md', color: '#333333', bold: false, align: 'start' },
-      image: { url: '', size: 'full', aspectRatio: '20:13' },
+      image: { url: '', size: 'full', aspectRatio: '20:13', aspectMode: 'cover' },
       button: { label: '', url: '', style: 'primary', color: '#06C755' },
       separator: {}, spacer: { size: 'md' },
     }
