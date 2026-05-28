@@ -453,6 +453,19 @@ chats.post('/api/chats/:id/send', async (c) => {
     return c.json({ success: true, data: { sent: true, messageId: logId } });
   } catch (err) {
     console.error('POST /api/chats/:id/send error:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (errMsg.includes('LINE API error:')) {
+      const match = errMsg.match(/— (.+)$/);
+      const lineBody = match ? match[1] : errMsg;
+      try {
+        const parsed = JSON.parse(lineBody) as { message?: string; details?: { message: string }[] };
+        const detail = parsed.details?.[0]?.message;
+        const msg = detail ? `LINE送信エラー: ${parsed.message} — ${detail}` : `LINE送信エラー: ${parsed.message ?? lineBody}`;
+        return c.json({ success: false, error: msg }, 400);
+      } catch {
+        return c.json({ success: false, error: `LINE送信エラー: ${lineBody}` }, 400);
+      }
+    }
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
 });

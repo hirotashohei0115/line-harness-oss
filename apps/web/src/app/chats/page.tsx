@@ -787,8 +787,9 @@ export default function ChatsPage() {
       }
       loadChatDetail(selectedChatId)
       loadChats()
-    } catch {
-      setError('メッセージの送信に失敗しました。')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'メッセージの送信に失敗しました。'
+      setError(msg)
     } finally {
       setSending(false)
     }

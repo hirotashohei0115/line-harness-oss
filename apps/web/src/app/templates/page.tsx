@@ -363,10 +363,13 @@ function PartSettings({ part, onUpdate }: { part: FlexPart; onUpdate: (u: Partia
     </div>
   )
   if (part.type === 'image') return <ImagePartSettings part={part} onUpdate={onUpdate} inp={inp} sel={sel} />
-  if (part.type === 'button') return (
+  if (part.type === 'button') {
+    const urlValid = !part.url || /^(https?:\/\/|tel:|mailto:)/.test(part.url)
+    return (
     <div className="space-y-1.5">
       <input type="text" value={part.label || ''} onChange={e => onUpdate({ label: e.target.value })} placeholder="ラベル" className={inp} />
-      <input type="text" value={part.url || ''} onChange={e => onUpdate({ url: e.target.value })} placeholder="URL" className={inp} />
+      <input type="text" value={part.url || ''} onChange={e => onUpdate({ url: e.target.value })} placeholder="https://..." className={`${inp} ${!urlValid ? 'border-orange-400' : ''}`} />
+      {!urlValid && <p className="text-[10px] text-orange-500">⚠ URLは https:// / http:// / tel: で始める必要があります（LINE APIが拒否します）</p>}
       <div className="flex gap-1.5 items-center">
         <select value={part.style || 'primary'} onChange={e => onUpdate({ style: e.target.value })} className={sel}>
           <option value="primary">primary</option>
@@ -383,6 +386,7 @@ function PartSettings({ part, onUpdate }: { part: FlexPart; onUpdate: (u: Partia
       </div>
     </div>
   )
+  }
   if (part.type === 'separator') return <div className="border-t border-gray-300 mx-1" />
   return (
     <select value={part.size || 'md'} onChange={e => onUpdate({ size: e.target.value })} className={sel}>
