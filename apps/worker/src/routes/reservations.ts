@@ -218,8 +218,9 @@ reservationRoutes.post('/api/reservations', async (c) => {
   const storeName = STORE_NAMES[storeKey] ?? storeKey;
   const [y, mo, d] = date.split('-');
   const dateDisplay = `${y}年${Number(mo)}月${Number(d)}日`;
-  const dateObj = new Date(date + 'T00:00:00+09:00');
-  const dayName = DAY_NAMES[dateObj.getDay()];
+  // date は 'YYYY-MM-DD'（JST日付）。UTC midnight として扱い getUTCDay() で曜日を取得することで
+  // Cloudflare Workers の UTC 動作環境での曜日ズレを防ぐ
+  const dayName = DAY_NAMES[new Date(date + 'T00:00:00Z').getUTCDay()];
 
   // LINE confirmation message
   const confirmText = `✅ 来店予約が完了しました！\n\n📍 店舗：リペアマスター${storeName}\n📅 日時：${dateDisplay}（${dayName}）${time}〜\n👤 お名前：${name} 様${body.phone ? `\n📞 電話番号：${body.phone}` : ''}${body.notes ? `\n📝 ご要望：${body.notes}` : ''}\n\nご来店をお待ちしております！\n※ご不明な点がございましたらLINEにてお問い合わせください。`;
