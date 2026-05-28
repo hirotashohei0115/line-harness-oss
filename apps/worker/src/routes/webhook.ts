@@ -1414,14 +1414,14 @@ async function handleEvent(
       // 岐阜店・大分店ユーザー判定 → 各店舗ルームへ通知
       if (cwToken) {
         const STORE_CW: Record<string, { roomId: string; accountId: string; keywords: string[] }> = {
-          gifu:  { roomId: '368537823', accountId: '9589322',  keywords: ['岐阜'] },
-          oita:  { roomId: '288490480', accountId: '7482587',  keywords: ['大分'] },
+          gifu:  { roomId: '368537823', accountId: '9589322',  keywords: ['gifu', '岐阜'] },
+          oita:  { roomId: '288490480', accountId: '7482587',  keywords: ['oita', '大分'] },
         };
 
         try {
           const storeRows = await db.prepare(`
             SELECT DISTINCT store_name FROM (
-              SELECT storeKey AS store_name FROM store_reservations WHERE friend_id = ?
+              SELECT store_key AS store_name FROM store_reservations WHERE friend_id = ?
               UNION
               SELECT delivery_store AS store_name FROM mail_orders WHERE friend_id = ?
               UNION
