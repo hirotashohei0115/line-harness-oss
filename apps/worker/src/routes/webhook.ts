@@ -1403,10 +1403,44 @@ async function handleEvent(
     // Chatwork通知: 選択肢以外の自由入力メッセージのみ
     if (!isAutoKeyword && !isTimeCommand) {
       const cwToken = chatworkApiToken;
+      const cwMsg = `[info][title]💬 個別メッセージが届きました[/title]ユーザー：${friend.display_name || userId}\nメッセージ：${incomingText}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+
+      // 管理者ルームへ通知（既存）
       const cwRoom = chatworkRoomId;
       if (cwToken && cwRoom) {
-        const cwMsg = `[info][title]💬 個別メッセージが届きました[/title]ユーザー：${friend.display_name || userId}\nメッセージ：${incomingText}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
         sendChatworkMessage(cwToken, cwRoom, cwMsg).catch(() => {});
+      }
+
+      // 岐阜店・大分店ユーザー判定 → 各店舗ルームへ通知
+      if (cwToken) {
+        const STORE_CW: Record<string, { roomId: string; accountId: string; keywords: string[] }> = {
+          gifu:  { roomId: '368537823', accountId: '9589322',  keywords: ['岐阜'] },
+          oita:  { roomId: '288490480', accountId: '7482587',  keywords: ['大分'] },
+        };
+
+        try {
+          const storeRows = await db.prepare(`
+            SELECT DISTINCT store_name FROM (
+              SELECT storeKey AS store_name FROM store_reservations WHERE friend_id = ?
+              UNION
+              SELECT delivery_store AS store_name FROM mail_orders WHERE friend_id = ?
+              UNION
+              SELECT store AS store_name FROM repair_quotes WHERE friend_id = ? AND store IS NOT NULL
+            )
+          `).bind(friend.id, friend.id, friend.id).all<{ store_name: string }>();
+
+          const storeNames = storeRows.results.map(r => r.store_name ?? '');
+
+          for (const cfg of Object.values(STORE_CW)) {
+            const matched = storeNames.some(s => cfg.keywords.some(k => s.includes(k)));
+            if (matched) {
+              const storeCwMsg = `[To:${cfg.accountId}]\n${cwMsg}`;
+              sendChatworkMessage(cwToken, cfg.roomId, storeCwMsg).catch(() => {});
+            }
+          }
+        } catch (err) {
+          console.error('store chatwork notification error:', err);
+        }
       }
     }
 
