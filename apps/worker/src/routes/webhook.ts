@@ -1239,7 +1239,7 @@ async function handleEvent(
       if (quoteId) await updateRepairQuoteRequestType(db, quoteId, type);
       try {
         if (type === 'mail') {
-          await removeTagsByNames(db, friend.id, ['依頼しない']);
+          await removeTagsByNames(db, friend.id, ['依頼しない', 'タグなし']);
           await addTagToFriend(db, friend.id, '依頼する');
           await addTagToFriend(db, friend.id, '郵送依頼');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
@@ -1247,7 +1247,7 @@ async function handleEvent(
             buildMessage('flex', JSON.stringify({ type: 'bubble', body: { type: 'box', layout: 'vertical', paddingAll: '20px', contents: [{ type: 'button', action: { type: 'uri', label: '郵送修理ご依頼フォーム', uri: MAIL_REPAIR_FORM_URL }, style: 'primary', height: 'sm', color: '#00B900' }] } })),
           ]);
         } else if (type === 'store') {
-          await removeTagsByNames(db, friend.id, ['依頼しない']);
+          await removeTagsByNames(db, friend.id, ['依頼しない', 'タグなし']);
           await addTagToFriend(db, friend.id, '依頼する');
           await addTagToFriend(db, friend.id, '店舗持込');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
@@ -1278,6 +1278,7 @@ async function handleEvent(
     // 来店予約ボタンタップ → LIFF予約フォームへ誘導
     if (incomingText === '来店予約する') {
       await logFriendAction(db, friend.id, 'delivery_method', '来店予約する');
+      await removeTagsByNames(db, friend.id, ['タグなし']);
       await addTagToFriend(db, friend.id, '店舗持込');
       // 選択済み店舗があればURLに含める
       const repairStore = await getFriendAttribute(db, friend.id, 'repair_store');
@@ -1839,7 +1840,7 @@ async function handleEvent(
       try {
         if (type === 'mail') {
           await setContactMark(db, friend.id, 'mark_23');
-          await removeTagsByNames(db, friend.id, ['依頼しない']);
+          await removeTagsByNames(db, friend.id, ['依頼しない', 'タグなし']);
           await addTagToFriend(db, friend.id, '依頼する');
           await addTagToFriend(db, friend.id, '郵送依頼');
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [

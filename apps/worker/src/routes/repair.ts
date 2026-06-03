@@ -285,6 +285,7 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
     // 自動タグ付与（排他制御）
     await removeTagsByNames(c.env.DB, friend.id, [packagingKit ? '梱包キット希望しない' : '梱包キット希望する']);
     await addTagToFriend(c.env.DB, friend.id, packagingKit ? '梱包キット希望する' : '梱包キット希望しない');
+    await removeTagsByNames(c.env.DB, friend.id, ['タグなし']);
     const ALL_POSTAL_TAGS = ['郵送依頼', '郵送（盛岡）', '郵送（菖蒲）', '郵送（岐阜）', '郵送（大分）', '店舗持込'];
     if (deliveryStore.includes('菖蒲')) {
       await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（菖蒲）'));
