@@ -368,7 +368,7 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
                   {new Date(msg.createdAt).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 </span>
                 {msg.direction === 'outgoing' && msg.sentByStaffName && (
-                  <span className="text-xs text-gray-400 px-1">{msg.sentByStaffName}</span>
+                  <span className="text-xs text-gray-200 px-1">{msg.sentByStaffName}</span>
                 )}
               </div>
             </div>
@@ -1415,7 +1415,7 @@ export default function ChatsPage() {
                             {new Date(msg.createdAt).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                           </span>
                           {isOutgoing && msg.sentByStaffName && (
-                            <span className="text-xs text-gray-400 px-1">{msg.sentByStaffName}</span>
+                            <span className="text-xs text-gray-200 px-1">{msg.sentByStaffName}</span>
                           )}
                         </div>
                       </div>
