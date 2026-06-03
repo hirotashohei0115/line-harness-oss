@@ -387,7 +387,7 @@ staff.post('/api/staff/login', async (c) => {
       role: account.role,
       assignedStores,
       assignedTags,
-      exp: Math.floor(Date.now() / 1000) + 86400, // 24時間
+      exp: Math.floor(Date.now() / 1000) + 86400 * 7, // 7日間
     };
     const token = await signJWT(payload, secret);
 
@@ -397,6 +397,38 @@ staff.post('/api/staff/login', async (c) => {
     });
   } catch (err) {
     console.error('POST /api/staff/login error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// GET /api/staff/refresh-token — 残り1日以内なら新トークンを発行
+staff.get('/api/staff/refresh-token', async (c) => {
+  try {
+    const staffInfo = c.get('staff');
+    if (!staffInfo?.id) return c.json({ success: false, error: 'Unauthorized' }, 401);
+
+    const account = await c.env.DB
+      .prepare(`SELECT id, email, name, role, assigned_stores, assigned_tags FROM staff_accounts WHERE id = ? AND is_active = 1`)
+      .bind(staffInfo.id)
+      .first<{ id: string; email: string; name: string; role: string; assigned_stores: string | null; assigned_tags: string | null }>();
+    if (!account) return c.json({ success: false, error: 'Account not found' }, 404);
+
+    const secret = c.env.JWT_SECRET ?? 'fallback-secret';
+    const assignedStores: string[] = account.assigned_stores ? JSON.parse(account.assigned_stores) : [];
+    const assignedTags: string[] = account.assigned_tags ? JSON.parse(account.assigned_tags) : [];
+    const payload = {
+      sub: account.id,
+      email: account.email,
+      name: account.name,
+      role: account.role,
+      assignedStores,
+      assignedTags,
+      exp: Math.floor(Date.now() / 1000) + 86400 * 7,
+    };
+    const token = await signJWT(payload, secret);
+    return c.json({ success: true, data: { token } });
+  } catch (err) {
+    console.error('GET /api/staff/refresh-token error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
 });

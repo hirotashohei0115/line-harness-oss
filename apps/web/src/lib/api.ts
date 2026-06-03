@@ -127,6 +127,14 @@ export async function fetchApi<T>(path: string, options?: RequestInit): Promise<
     },
   })
   if (!res.ok) {
+    if (res.status === 401) {
+      // セッション切れをグローバルに通知（AppShellがモーダル表示）
+      if (typeof window !== 'undefined') {
+        import('@/components/app-shell').then(({ triggerSessionExpired }) => {
+          triggerSessionExpired()
+        }).catch(() => {})
+      }
+    }
     const body = await res.json().catch(() => ({})) as { error?: string }
     throw new Error(body.error ?? `API error: ${res.status}`)
   }
