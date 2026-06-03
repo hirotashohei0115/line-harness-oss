@@ -32,7 +32,7 @@ export default function Header({ title, description, action }: HeaderProps) {
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{title}</h1>
-          {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
+          {description && <p className="mt-1 text-sm text-white">{description}</p>}
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {action && <div>{action}</div>}
@@ -40,7 +40,7 @@ export default function Header({ title, description, action }: HeaderProps) {
             <div className="flex items-center gap-2">
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-medium text-gray-700">{staffName}</p>
-                <p className="text-xs text-gray-400">{staffRole === 'admin' ? '管理者' : staffRole === 'owner' ? 'オーナー' : 'スタッフ'}</p>
+                <p className="text-xs text-white">{staffRole === 'admin' ? '管理者' : staffRole === 'owner' ? 'オーナー' : 'スタッフ'}</p>
               </div>
               <button
                 onClick={handleLogout}
