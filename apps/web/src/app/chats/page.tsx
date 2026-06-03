@@ -419,6 +419,7 @@ export default function ChatsPage() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [showTemplates, setShowTemplates] = useState(false)
   const [templateCategory, setTemplateCategory] = useState<string>('all')
+  const [templateSearch, setTemplateSearch] = useState('')
   const [repairQuote, setRepairQuote] = useState<RepairQuote | null>(null)
   const [repairAttrs, setRepairAttrs] = useState<Record<string, string>>({})
   const [mailOrder, setMailOrder] = useState<MailOrder | null>(null)
@@ -1448,6 +1449,24 @@ export default function ChatsPage() {
                 {/* Template picker */}
                 {showTemplates && (
                   <div className="mb-2 border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
+                    {/* Search input */}
+                    <div className="px-2 py-1.5 border-b border-gray-100">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={templateSearch}
+                          onChange={(e) => setTemplateSearch(e.target.value)}
+                          placeholder="テンプレート名を検索..."
+                          className="w-full pl-3 pr-7 py-1 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-green-400"
+                        />
+                        {templateSearch && (
+                          <button
+                            onClick={() => setTemplateSearch('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm leading-none"
+                          >×</button>
+                        )}
+                      </div>
+                    </div>
                     {/* Category tabs */}
                     <div className="flex gap-0 border-b border-gray-100 overflow-x-auto">
                       {['all', '来店予約', '郵送案内', '見積もり関連', 'よくある質問', 'その他'].map((cat) => {
@@ -1471,7 +1490,10 @@ export default function ChatsPage() {
                     </div>
                     {/* Template list */}
                     {(() => {
-                      const filtered = templateCategory === 'all' ? templates : templates.filter(t => t.category === templateCategory)
+                      const byCat = templateCategory === 'all' ? templates : templates.filter(t => t.category === templateCategory)
+                      const filtered = templateSearch.trim()
+                        ? byCat.filter(t => t.name.includes(templateSearch.trim()))
+                        : byCat
                       if (filtered.length === 0) return (
                         <p className="px-3 py-3 text-xs text-gray-400 text-center">テンプレートがありません</p>
                       )
@@ -1480,7 +1502,7 @@ export default function ChatsPage() {
                           {filtered.map((t) => (
                             <button
                               key={t.id}
-                              onClick={() => { setMessageContent(t.messageContent); setPendingMessageType(t.messageType || 'text'); setShowTemplates(false) }}
+                              onClick={() => { setMessageContent(t.messageContent); setPendingMessageType(t.messageType || 'text'); setShowTemplates(false); setTemplateSearch('') }}
                               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
                             >
                               <span className="font-medium text-gray-800">{t.name}</span>
@@ -1509,7 +1531,7 @@ export default function ChatsPage() {
                     <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={handleImageSelect} />
                   </label>
                   <button
-                    onClick={() => setShowTemplates((v) => !v)}
+                    onClick={() => { setShowTemplates((v) => !v); setTemplateSearch('') }}
                     className="flex-shrink-0 px-2 py-2 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mt-0.5"
                     title="テンプレート"
                   >
