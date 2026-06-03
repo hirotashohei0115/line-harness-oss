@@ -1450,6 +1450,28 @@ async function handleEvent(
           console.error('store chatwork notification error:', err);
         }
       }
+
+      // 菖蒲店ユーザー判定 → LINEグループに通知
+      try {
+        const shobuCheck = await db.prepare(`
+          SELECT 1 FROM (
+            SELECT store_key AS s FROM store_reservations WHERE friend_id = ? AND store_key = 'shobu'
+            UNION
+            SELECT delivery_store AS s FROM mail_orders WHERE friend_id = ? AND delivery_store LIKE '%菖蒲%'
+            UNION
+            SELECT store AS s FROM repair_quotes WHERE friend_id = ? AND store LIKE '%菖蒲%'
+          ) LIMIT 1
+        `).bind(friend.id, friend.id, friend.id).first();
+
+        if (shobuCheck) {
+          const groupMsg = `【菖蒲店】個別メッセージが届きました\n\nユーザー名：${friend.display_name || userId}\nメッセージ：${incomingText}\n\n管理画面：https://macbook-repair-admin.vercel.app`;
+          lineClient.pushMessage('Cddd3e9dd960e52b8b1e400744eef28f4', [{ type: 'text', text: groupMsg }]).catch((err) => {
+            console.error('shobu group notification error:', err);
+          });
+        }
+      } catch (err) {
+        console.error('shobu store detection error:', err);
+      }
     }
 
     // 自動返信チェック（このアカウントのルール + グローバルルールのみ）
