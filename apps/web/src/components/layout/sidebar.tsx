@@ -178,11 +178,20 @@ export default function Sidebar() {
   const [staffName, setStaffName] = useState<string | null>(null)
   const [staffRole, setStaffRole] = useState<string | null>(null)
   const [chatUnread, setChatUnread] = useState(0)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
     setStaffName(localStorage.getItem('lh_staff_name'))
     setStaffRole(localStorage.getItem('lh_staff_role'))
+    setSidebarCollapsed(localStorage.getItem('lh_sidebar_collapsed') === 'true')
   }, [])
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(v => {
+      localStorage.setItem('lh_sidebar_collapsed', String(!v))
+      return !v
+    })
+  }
 
   useEffect(() => {
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
@@ -214,15 +223,24 @@ export default function Sidebar() {
   const sidebarContent = (
     <>
       {/* ロゴ */}
-      <div className="px-6 py-5 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: '#06C755' }}>
-            H
+      <div className="px-4 py-5 border-b border-gray-200">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0" style={{ backgroundColor: '#06C755' }}>
+              H
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-gray-900 leading-tight">LINE Harness</p>
+              <p className="text-xs text-gray-400">管理画面</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold text-gray-900 leading-tight">LINE Harness</p>
-            <p className="text-xs text-gray-400">管理画面</p>
-          </div>
+          <button
+            onClick={toggleSidebar}
+            className="hidden lg:flex shrink-0 items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors text-xs"
+            title="サイドバーを閉じる"
+          >
+            ◀
+          </button>
         </div>
       </div>
 
@@ -344,10 +362,28 @@ export default function Sidebar() {
         {sidebarContent}
       </aside>
 
-      {/* デスクトップ: 常時表示 */}
-      <aside id="app-sidebar" className="hidden lg:flex w-64 bg-white border-r border-gray-200 flex-col h-screen sticky top-0">
-        {sidebarContent}
+      {/* デスクトップ: 折りたたみ対応サイドバー */}
+      <aside
+        id="app-sidebar"
+        className={`hidden lg:flex flex-col h-screen sticky top-0 bg-white border-r border-gray-200 overflow-hidden transition-all duration-300 ${
+          sidebarCollapsed ? 'w-0 border-r-0' : 'w-64'
+        }`}
+      >
+        <div className="w-64 flex flex-col flex-1 overflow-hidden">
+          {sidebarContent}
+        </div>
       </aside>
+
+      {/* デスクトップ: 展開ボタン（折りたたみ時のみ表示） */}
+      {sidebarCollapsed && (
+        <button
+          onClick={toggleSidebar}
+          className="hidden lg:flex fixed left-0 top-4 z-50 items-center justify-center w-6 h-10 bg-white border border-l-0 border-gray-200 rounded-r-lg text-gray-400 hover:bg-gray-50 hover:text-gray-700 transition-colors shadow-sm text-xs"
+          title="サイドバーを開く"
+        >
+          ▶
+        </button>
+      )}
     </>
   )
 }
