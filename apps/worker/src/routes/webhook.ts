@@ -631,7 +631,7 @@ function buildQuoteFlex(params: {
       contents: [
         { type: 'button', action: { type: 'message', label: '郵送で依頼する', text: '郵送で依頼する' }, style: 'primary', height: 'sm', color: '#00B900' },
         { type: 'button', action: { type: 'message', label: '店舗に持込む', text: '店舗に持込む' }, style: 'primary', height: 'sm', color: '#00B900' },
-        { type: 'button', action: { type: 'uri', label: '訪問修理で依頼する', uri: 'https://liff.line.me/2010126656-iMP2b4Jw?page=visit-repair' }, style: 'primary', height: 'sm', color: '#06C755' },
+        { type: 'button', action: { type: 'message', label: '訪問修理で依頼する', text: '訪問修理で依頼する' }, style: 'primary', height: 'sm', color: '#06C755' },
         { type: 'button', action: { type: 'message', label: '質問・相談したい', text: '質問・相談したい' }, style: 'secondary', height: 'sm' },
       ],
     },
@@ -910,7 +910,7 @@ async function handleEvent(
       '見積もりを始める', '修理依頼をする', 'ご依頼の流れを教えて', 'よくある質問',
       '店舗の場所は？', 'MacBook Air', 'MacBook Pro', 'その他',
       'モデル名で選ぶ', '年式で選ぶ', 'わからない', 'その他の年式', 'その他・分からない',
-      '郵送で依頼する', '店舗に持込む', '質問・相談したい',
+      '郵送で依頼する', '店舗に持込む', '質問・相談したい', '訪問修理で依頼する',
       '来店予約する', '該当店舗なし', '電話/チャットで相談する',
       '郵送修理に関する質問', '店頭修理に関する質問', '修理端末に関する質問', 'その他の質問',
     ]);
@@ -1308,6 +1308,32 @@ async function handleEvent(
           })),
         ]);
       } catch (err) { console.error('repair msg reservation:', err); }
+      return;
+    }
+
+    // 訪問修理ボタンタップ → タグ付与＋LIFF誘導
+    if (incomingText === '訪問修理で依頼する') {
+      await logFriendAction(db, friend.id, 'delivery_method', '訪問修理で依頼する');
+      await removeTagsByNames(db, friend.id, ['タグなし']);
+      await addTagToFriend(db, friend.id, '訪問修理');
+      try {
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
+          buildMessage('flex', JSON.stringify({
+            type: 'bubble',
+            body: {
+              type: 'box', layout: 'vertical', paddingAll: '20px', spacing: 'md',
+              contents: [
+                { type: 'text', text: '訪問修理ご依頼フォーム', weight: 'bold', size: 'lg', color: '#1a1a1a' },
+                { type: 'text', text: 'ご希望の日時や住所などをご入力ください。', wrap: true, size: 'sm', color: '#555555' },
+              ],
+            },
+            footer: {
+              type: 'box', layout: 'vertical', paddingAll: '16px',
+              contents: [{ type: 'button', action: { type: 'uri', label: '訪問修理フォームへ進む', uri: 'https://liff.line.me/2010126656-iMP2b4Jw?page=visit-repair' }, style: 'primary', height: 'sm', color: '#06C755' }],
+            },
+          })),
+        ]);
+      } catch (err) { console.error('repair msg visit:', err); }
       return;
     }
 

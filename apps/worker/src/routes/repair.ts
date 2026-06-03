@@ -510,8 +510,9 @@ repairRoutes.post('/api/repair/visit-orders', async (c) => {
     await upsertChatOnMessage(c.env.DB, friend.id);
 
     // タグ付与
-    await removeTagsByNames(c.env.DB, friend.id, ['郵送依頼', '店舗持込']);
+    await removeTagsByNames(c.env.DB, friend.id, ['郵送依頼', '店舗持込', 'タグなし']);
     await addTagToFriend(c.env.DB, friend.id, '訪問修理');
+    await addTagToFriend(c.env.DB, friend.id, '訪問修理フォーム回答済み');
 
     // LINE自動返信
     try {
