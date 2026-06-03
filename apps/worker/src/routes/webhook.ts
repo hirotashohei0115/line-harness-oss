@@ -1464,7 +1464,7 @@ async function handleEvent(
         `).bind(friend.id, friend.id, friend.id).first();
 
         if (shobuCheck) {
-          const groupMsg = `【菖蒲店】個別メッセージが届きました\n\nユーザー名：${friend.display_name || userId}\nメッセージ：${incomingText}\n\n管理画面：https://macbook-repair-admin.vercel.app`;
+          const groupMsg = `【菖蒲店】郵送Mac\nユーザー名：${friend.display_name || userId}\nメッセージ：${incomingText}`;
           lineClient.pushMessage('Cddd3e9dd960e52b8b1e400744eef28f4', [{ type: 'text', text: groupMsg }]).catch((err) => {
             console.error('shobu group notification error:', err);
           });
