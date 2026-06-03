@@ -745,6 +745,14 @@ async function handleEvent(
   chatworkApiToken?: string,
   chatworkRoomId?: string,
 ): Promise<void> {
+  const source = event.source;
+  if (source.type === 'group') {
+    console.log('Group message received:', (source as { type: 'group'; groupId: string; userId?: string }).groupId, 'from user:', (source as { type: 'group'; groupId: string; userId?: string }).userId);
+  }
+  if (source.type === 'room') {
+    console.log('Room message received:', (source as { type: 'room'; roomId: string; userId?: string }).roomId, 'from user:', (source as { type: 'room'; roomId: string; userId?: string }).userId);
+  }
+
   if (event.type === 'follow') {
     const userId =
       event.source.type === 'user' ? event.source.userId : undefined;
