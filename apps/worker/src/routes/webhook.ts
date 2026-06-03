@@ -13,6 +13,7 @@ import {
   upsertChatOnMessage,
   getLineAccounts,
   jstNow,
+  toJstString,
   getRepairSymptomsByProduct,
   getRepairPrice,
   getRepairModelPrice,
@@ -674,13 +675,14 @@ async function replyAndLog(
   messages: LineMessage[],
 ): Promise<void> {
   await lineClient.replyMessage(replyToken, messages);
-  const now = jstNow();
-  for (const msg of messages) {
-    const { type, content } = extractLogContent(msg);
+  const baseMs = Date.now();
+  for (let i = 0; i < messages.length; i++) {
+    const { type, content } = extractLogContent(messages[i]);
+    const ts = toJstString(new Date(baseMs + i));
     await db.prepare(
       `INSERT INTO messages_log (id, friend_id, direction, message_type, content, delivery_type, created_at)
        VALUES (?, ?, 'outgoing', ?, ?, 'reply', ?)`,
-    ).bind(crypto.randomUUID(), friendId, type, content, now).run();
+    ).bind(crypto.randomUUID(), friendId, type, content, ts).run();
   }
 }
 
@@ -693,13 +695,14 @@ async function pushAndLog(
 ): Promise<void> {
   await lineClient.pushMessage(lineUserId, messages);
   if (!friendId) return;
-  const now = jstNow();
-  for (const msg of messages) {
-    const { type, content } = extractLogContent(msg);
+  const baseMs = Date.now();
+  for (let i = 0; i < messages.length; i++) {
+    const { type, content } = extractLogContent(messages[i]);
+    const ts = toJstString(new Date(baseMs + i));
     await db.prepare(
       `INSERT INTO messages_log (id, friend_id, direction, message_type, content, delivery_type, created_at)
        VALUES (?, ?, 'outgoing', ?, ?, 'push', ?)`,
-    ).bind(crypto.randomUUID(), friendId, type, content, now).run();
+    ).bind(crypto.randomUUID(), friendId, type, content, ts).run();
   }
 }
 
