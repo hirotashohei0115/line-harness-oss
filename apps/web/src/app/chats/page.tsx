@@ -413,6 +413,7 @@ export default function ChatsPage() {
   const [messageContent, setMessageContent] = useState('')
   const [pendingMessageType, setPendingMessageType] = useState('text')
   const [pendingImage, setPendingImage] = useState<string | null>(null)
+  const [pendingFile, setPendingFile] = useState<{ data: string; name: string } | null>(null)
   const [sending, setSending] = useState(false)
   const [notes, setNotes] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -755,6 +756,7 @@ export default function ChatsPage() {
     setSelectedChatId(chatId)
     setMessageContent('')
     setPendingImage(null)
+    setPendingFile(null)
     setPendingMessageType('text')
     setReadConfirmed(false)
     setEditingName(false)
@@ -775,10 +777,13 @@ export default function ChatsPage() {
 
   const handleSendMessage = async () => {
     if (!selectedChatId || sending) return
-    if (!messageContent.trim() && !pendingImage) return
+    if (!messageContent.trim() && !pendingImage && !pendingFile) return
     setSending(true)
     try {
-      if (pendingImage) {
+      if (pendingFile) {
+        await api.chats.send(selectedChatId, { content: pendingFile.data, messageType: 'file' })
+        setPendingFile(null)
+      } else if (pendingImage) {
         await api.chats.send(selectedChatId, { content: pendingImage, messageType: 'image' })
         setPendingImage(null)
       } else {
@@ -796,11 +801,21 @@ export default function ChatsPage() {
     }
   }
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = () => setPendingImage(reader.result as string)
+    if (file.type === 'application/pdf') {
+      reader.onload = () => {
+        setPendingFile({ data: reader.result as string, name: file.name })
+        setPendingImage(null)
+      }
+    } else {
+      reader.onload = () => {
+        setPendingImage(reader.result as string)
+        setPendingFile(null)
+      }
+    }
     reader.readAsDataURL(file)
     e.target.value = ''
   }
@@ -1367,6 +1382,7 @@ export default function ChatsPage() {
                     // メッセージ表示の分岐
                     const isFlex = msg.messageType === 'flex'
                     const isImage = msg.messageType === 'image'
+                    const isFile = msg.messageType === 'file'
                     let bubbleContent: React.ReactNode
                     if (isFlex) {
                       bubbleContent = (
@@ -1376,6 +1392,28 @@ export default function ChatsPage() {
                       )
                     } else if (isImage) {
                       bubbleContent = <ImageBubble content={msg.content} onClick={() => setZoomedImageContent(msg.content)} />
+                    } else if (isFile) {
+                      bubbleContent = (
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">📄</span>
+                            <span className="text-sm font-medium">PDFファイル</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <a
+                              href={`${WORKER_API_URL}/api/files/${msg.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs px-2 py-1 bg-white/20 hover:bg-white/30 rounded transition-colors"
+                            >プレビュー</a>
+                            <a
+                              href={`${WORKER_API_URL}/api/files/${msg.id}`}
+                              download="file.pdf"
+                              className="text-xs px-2 py-1 bg-white/20 hover:bg-white/30 rounded transition-colors"
+                            >ダウンロード</a>
+                          </div>
+                        </div>
+                      )
                     } else {
                       bubbleContent = <span>{msg.content}</span>
                     }
@@ -1524,11 +1562,22 @@ export default function ChatsPage() {
                     >×</button>
                   </div>
                 )}
+                {/* PDFプレビュー */}
+                {pendingFile && (
+                  <div className="mb-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    <span className="text-lg">📄</span>
+                    <span className="text-sm text-gray-700 flex-1 truncate">{pendingFile.name}</span>
+                    <button
+                      onClick={() => setPendingFile(null)}
+                      className="w-5 h-5 bg-gray-600 text-white rounded-full text-xs flex items-center justify-center hover:bg-gray-800 flex-shrink-0"
+                    >×</button>
+                  </div>
+                )}
                 <div className="flex items-start gap-2">
-                  {/* 📎 画像添付 */}
-                  <label className="flex-shrink-0 px-2 py-2 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mt-0.5 cursor-pointer" title="画像を添付">
+                  {/* 📎 画像・PDF添付 */}
+                  <label className="flex-shrink-0 px-2 py-2 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mt-0.5 cursor-pointer" title="画像・PDFを添付">
                     📎
-                    <input type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={handleImageSelect} />
+                    <input type="file" accept="image/jpeg,image/png,image/gif,application/pdf" className="hidden" onChange={handleFileSelect} />
                   </label>
                   <button
                     onClick={() => { setShowTemplates((v) => !v); setTemplateSearch('') }}
@@ -1549,7 +1598,7 @@ export default function ChatsPage() {
                   />
                   <button
                     onClick={handleSendMessage}
-                    disabled={sending || (!messageContent.trim() && !pendingImage)}
+                    disabled={sending || (!messageContent.trim() && !pendingImage && !pendingFile)}
                     className="flex-shrink-0 px-4 py-2 text-sm font-medium text-white rounded-lg transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed mt-0.5"
                     style={{ backgroundColor: '#06C755' }}
                   >

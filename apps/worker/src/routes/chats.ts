@@ -436,6 +436,11 @@ chats.post('/api/chats/:id/send', async (c) => {
           previewImageUrl: body.content,
         }]);
       }
+    } else if (messageType === 'file') {
+      const workerOrigin = c.env.WORKER_URL || new URL(c.req.url).origin;
+      const fileUrl = `${workerOrigin}/api/files/${logId}`;
+      const textMsg = `📄 PDFファイルが送信されました。\n下記URLよりご確認ください。\n${fileUrl}`;
+      await lineClient.pushTextMessage(friend.line_user_id, textMsg);
     } else {
       await lineClient.pushTextMessage(friend.line_user_id, body.content);
     }
@@ -531,6 +536,38 @@ chats.get('/api/images/:messageId', async (c) => {
   return new Response(bytes, {
     headers: {
       'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=86400',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+});
+
+// GET /api/files/:id — public, serves base64 PDF as binary
+chats.get('/api/files/:id', async (c) => {
+  const messageId = c.req.param('id');
+
+  const row = await c.env.DB
+    .prepare('SELECT content, message_type FROM messages_log WHERE id = ? LIMIT 1')
+    .bind(messageId)
+    .first<{ content: string; message_type: string }>();
+
+  if (!row || row.message_type !== 'file' || !row.content.startsWith('data:application/pdf')) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  const commaIdx = row.content.indexOf(',');
+  const base64Data = row.content.slice(commaIdx + 1);
+
+  const binaryStr = atob(base64Data);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+
+  return new Response(bytes, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline; filename="file.pdf"',
       'Cache-Control': 'public, max-age=86400',
       'Access-Control-Allow-Origin': '*',
     },
