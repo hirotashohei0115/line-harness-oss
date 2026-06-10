@@ -430,7 +430,7 @@ export default function NotificationsPage() {
                 </div>
 
                 {/* Chatwork Room ID */}
-                {rule.conditions?.chatworkRoomId && (
+                {Boolean(rule.conditions?.chatworkRoomId) && (
                   <p className="text-xs text-gray-500">
                     Chatwork Room: <span className="font-mono">{String(rule.conditions.chatworkRoomId)}</span>
                   </p>
