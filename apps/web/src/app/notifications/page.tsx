@@ -81,19 +81,22 @@ const ccPrompts = [
   },
 ]
 
+const EMPTY_FORM: CreateFormState = {
+  name: '',
+  eventType: '',
+  channels: '',
+  chatworkApiToken: '',
+  chatworkRoomId: '',
+}
+
 export default function NotificationsPage() {
   const [rules, setRules] = useState<NotificationRule[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState<CreateFormState>({
-    name: '',
-    eventType: '',
-    channels: '',
-    chatworkApiToken: '',
-    chatworkRoomId: '',
-  })
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState<CreateFormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -139,7 +142,33 @@ export default function NotificationsPage() {
 
   useEffect(() => { load() }, [load])
 
-  const handleCreate = async () => {
+  const openCreate = () => {
+    setEditingId(null)
+    setForm(EMPTY_FORM)
+    setFormError('')
+    setShowForm(true)
+  }
+
+  const openEdit = (rule: NotificationRule) => {
+    setEditingId(rule.id)
+    setForm({
+      name: rule.name,
+      eventType: rule.eventType,
+      channels: rule.channels.join(', '),
+      chatworkApiToken: String(rule.conditions?.chatworkApiToken ?? ''),
+      chatworkRoomId: String(rule.conditions?.chatworkRoomId ?? ''),
+    })
+    setFormError('')
+    setShowForm(true)
+  }
+
+  const closeForm = () => {
+    setShowForm(false)
+    setEditingId(null)
+    setFormError('')
+  }
+
+  const handleSave = async () => {
     if (!form.name.trim()) {
       setFormError('ルール名を入力してください')
       return
@@ -165,21 +194,30 @@ export default function NotificationsPage() {
     setSaving(true)
     setFormError('')
     try {
-      const res = await api.notifications.rules.create({
-        name: form.name,
-        eventType: form.eventType,
-        conditions,
-        channels,
-      })
+      let res
+      if (editingId) {
+        res = await api.notifications.rules.update(editingId, {
+          name: form.name,
+          eventType: form.eventType,
+          conditions,
+          channels,
+        })
+      } else {
+        res = await api.notifications.rules.create({
+          name: form.name,
+          eventType: form.eventType,
+          conditions,
+          channels,
+        })
+      }
       if (res.success) {
-        setShowCreate(false)
-        setForm({ name: '', eventType: '', channels: '', chatworkApiToken: '', chatworkRoomId: '' })
+        closeForm()
         loadRules()
       } else {
         setFormError(res.error)
       }
     } catch {
-      setFormError('作成に失敗しました')
+      setFormError(editingId ? '更新に失敗しました' : '作成に失敗しました')
     } finally {
       setSaving(false)
     }
@@ -215,7 +253,7 @@ export default function NotificationsPage() {
         title="通知ルール設定"
         action={
           <button
-            onClick={() => setShowCreate(true)}
+            onClick={openCreate}
             className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-opacity hover:opacity-90"
             style={{ backgroundColor: '#06C755' }}
           >
@@ -231,10 +269,10 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      {/* Create form */}
-      {showCreate && (
+      {/* Create / Edit form */}
+      {showForm && (
         <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-sm font-semibold text-gray-800 mb-4">新規ルールを作成</h2>
+          <h2 className="text-sm font-semibold text-gray-800 mb-4">{editingId ? 'ルールを編集' : '新規ルールを作成'}</h2>
           <div className="space-y-4 max-w-lg">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">ルール名 <span className="text-red-500">*</span></label>
@@ -297,15 +335,15 @@ export default function NotificationsPage() {
 
             <div className="flex gap-2">
               <button
-                onClick={handleCreate}
+                onClick={handleSave}
                 disabled={saving}
                 className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 transition-opacity"
                 style={{ backgroundColor: '#06C755' }}
               >
-                {saving ? '作成中...' : '作成'}
+                {saving ? (editingId ? '更新中...' : '作成中...') : (editingId ? '更新' : '作成')}
               </button>
               <button
-                onClick={() => { setShowCreate(false); setFormError('') }}
+                onClick={closeForm}
                 className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 キャンセル
@@ -332,7 +370,7 @@ export default function NotificationsPage() {
               </div>
             ))}
           </div>
-        ) : rules.length === 0 && !showCreate ? (
+        ) : rules.length === 0 && !showForm ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
             <p className="text-gray-500">通知ルールがありません。「新規ルール」から作成してください。</p>
           </div>
@@ -385,12 +423,20 @@ export default function NotificationsPage() {
                 {/* Footer */}
                 <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100">
                   <span className="text-xs text-gray-400">{formatDatetime(rule.createdAt)}</span>
-                  <button
-                    onClick={() => handleDelete(rule.id)}
-                    className="px-3 py-1 text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                  >
-                    削除
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openEdit(rule)}
+                      className="px-3 py-1 text-xs font-medium text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                    >
+                      編集
+                    </button>
+                    <button
+                      onClick={() => handleDelete(rule.id)}
+                      className="px-3 py-1 text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                    >
+                      削除
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
