@@ -32,7 +32,7 @@ interface CreateFormState {
   name: string
   eventType: string
   channels: string
-  conditions: string
+  chatworkRoomId: string
 }
 
 const statusConfig: Record<
@@ -90,7 +90,7 @@ export default function NotificationsPage() {
     name: '',
     eventType: '',
     channels: '',
-    conditions: '{}',
+    chatworkRoomId: '',
   })
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
@@ -147,12 +147,9 @@ export default function NotificationsPage() {
       return
     }
 
-    let conditions: Record<string, unknown> = {}
-    try {
-      conditions = JSON.parse(form.conditions)
-    } catch {
-      setFormError('条件のJSONが不正です')
-      return
+    const conditions: Record<string, unknown> = {}
+    if (form.chatworkRoomId.trim()) {
+      conditions.chatworkRoomId = form.chatworkRoomId.trim()
     }
 
     const channels = form.channels
@@ -171,7 +168,7 @@ export default function NotificationsPage() {
       })
       if (res.success) {
         setShowCreate(false)
-        setForm({ name: '', eventType: '', channels: '', conditions: '{}' })
+        setForm({ name: '', eventType: '', channels: '', chatworkRoomId: '' })
         loadRules()
       } else {
         setFormError(res.error)
@@ -269,14 +266,15 @@ export default function NotificationsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">条件 (JSON)</label>
-              <textarea
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
-                rows={3}
-                placeholder='{"tagId": "xxx"}'
-                value={form.conditions}
-                onChange={(e) => setForm({ ...form, conditions: e.target.value })}
+              <label className="block text-xs font-medium text-gray-600 mb-1">Chatwork ルームID</label>
+              <input
+                type="text"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="例: 123456789"
+                value={form.chatworkRoomId}
+                onChange={(e) => setForm({ ...form, chatworkRoomId: e.target.value })}
               />
+              <p className="text-xs text-gray-400 mt-1">空欄の場合は環境変数のデフォルトルームに送信されます</p>
             </div>
 
             {formError && <p className="text-xs text-red-600">{formError}</p>}
@@ -360,6 +358,13 @@ export default function NotificationsPage() {
                     </span>
                   ))}
                 </div>
+
+                {/* Chatwork Room ID */}
+                {rule.conditions?.chatworkRoomId && (
+                  <p className="text-xs text-gray-500">
+                    Chatwork Room: <span className="font-mono">{String(rule.conditions.chatworkRoomId)}</span>
+                  </p>
+                )}
 
                 {/* Footer */}
                 <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100">

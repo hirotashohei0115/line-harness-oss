@@ -705,6 +705,10 @@ repairRoutes.post('/api/contact-form', async (c) => {
           const channels: string[] = JSON.parse(rule.channels);
           if (!channels.includes('chatwork')) continue;
 
+          const conditions = JSON.parse(rule.conditions) as Record<string, unknown>;
+          const roomId = (conditions.chatworkRoomId as string | undefined) || c.env.CHATWORK_ROOM_ID;
+          if (!roomId) continue;
+
           const msgTitle = '【お問い合わせフォーム送信】';
           const msgBody = `[info][title]${msgTitle}[/title]お名前：${name}\n電話番号：${phone}\n機種：${model}\n症状：${symptom}[/info]`;
 
@@ -717,7 +721,7 @@ repairRoutes.post('/api/contact-form', async (c) => {
           });
 
           try {
-            await sendChatworkMessage(c.env.CHATWORK_API_TOKEN, c.env.CHATWORK_ROOM_ID, msgBody);
+            await sendChatworkMessage(c.env.CHATWORK_API_TOKEN!, roomId, msgBody);
             await updateNotificationStatus(c.env.DB, notifRecord.id, 'sent');
           } catch {
             await updateNotificationStatus(c.env.DB, notifRecord.id, 'failed');
