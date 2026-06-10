@@ -930,6 +930,21 @@ export default function ChatsPage() {
     setFriendTags(prev => [...prev, tag!])
   }
 
+  const removeTagByName = async (friendId: string, tagName: string) => {
+    const tag = friendTags.find(t => t.name === tagName)
+    if (!tag) return
+    await fetchApi(`/api/friends/${friendId}/tags/${tag.id}`, { method: 'DELETE' })
+    setFriendTags(prev => prev.filter(t => t.id !== tag.id))
+  }
+
+  const syncCallResultTag = async (friendId: string, newTagName: string) => {
+    const others = ['受注', '検討中', '失注'].filter(t => t !== newTagName)
+    for (const name of others) {
+      await removeTagByName(friendId, name)
+    }
+    await addTagByName(friendId, newTagName)
+  }
+
   const handleSetCallResult = async (result: string) => {
     if (!chatDetail?.friendId || savingCallResult) return
     if (result === '受注') {
@@ -961,7 +976,7 @@ export default function ChatsPage() {
         body: JSON.stringify({ call_result: showReasonForm, call_result_reason: reasonText }),
       })
       setRepairAttrs(prev => ({ ...prev, call_result: showReasonForm, call_result_reason: reasonText }))
-      await addTagByName(chatDetail.friendId, showReasonForm)
+      await syncCallResultTag(chatDetail.friendId, showReasonForm)
       setShowReasonForm(null)
     } catch {
       alert('保存に失敗しました')
@@ -993,7 +1008,7 @@ export default function ChatsPage() {
         order_due_date: orderForm.dueDate,
         order_notes: orderForm.notes,
       }))
-      await addTagByName(chatDetail.friendId, '受注')
+      await syncCallResultTag(chatDetail.friendId, '受注')
       setShowOrderForm(false)
     } catch {
       alert('保存に失敗しました')
