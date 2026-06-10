@@ -698,38 +698,37 @@ repairRoutes.post('/api/contact-form', async (c) => {
     }
 
     // Chatwork通知: contact_form_submitted イベントのアクティブルールを検索
-    if (c.env.CHATWORK_API_TOKEN && c.env.CHATWORK_ROOM_ID) {
-      try {
-        const notifRules = await getActiveNotificationRulesByEvent(c.env.DB, 'contact_form_submitted');
-        for (const rule of notifRules) {
-          const channels: string[] = JSON.parse(rule.channels);
-          if (!channels.includes('chatwork')) continue;
+    try {
+      const notifRules = await getActiveNotificationRulesByEvent(c.env.DB, 'contact_form_submitted');
+      for (const rule of notifRules) {
+        const channels: string[] = JSON.parse(rule.channels);
+        if (!channels.includes('chatwork')) continue;
 
-          const conditions = JSON.parse(rule.conditions) as Record<string, unknown>;
-          const roomId = (conditions.chatworkRoomId as string | undefined) || c.env.CHATWORK_ROOM_ID;
-          if (!roomId) continue;
+        const conditions = JSON.parse(rule.conditions) as Record<string, unknown>;
+        const apiToken = (conditions.chatworkApiToken as string | undefined) || c.env.CHATWORK_API_TOKEN;
+        const roomId = (conditions.chatworkRoomId as string | undefined) || c.env.CHATWORK_ROOM_ID;
+        if (!apiToken || !roomId) continue;
 
-          const msgTitle = '【お問い合わせフォーム送信】';
-          const msgBody = `[info][title]${msgTitle}[/title]お名前：${name}\n電話番号：${phone}\n機種：${model}\n症状：${symptom}[/info]`;
+        const msgTitle = '【お問い合わせフォーム送信】';
+        const msgBody = `[info][title]${msgTitle}[/title]お名前：${name}\n電話番号：${phone}\n機種：${model}\n症状：${symptom}[/info]`;
 
-          const notifRecord = await createNotification(c.env.DB, {
-            ruleId: rule.id,
-            eventType: 'contact_form_submitted',
-            title: msgTitle,
-            body: msgBody,
-            channel: 'chatwork',
-          });
+        const notifRecord = await createNotification(c.env.DB, {
+          ruleId: rule.id,
+          eventType: 'contact_form_submitted',
+          title: msgTitle,
+          body: msgBody,
+          channel: 'chatwork',
+        });
 
-          try {
-            await sendChatworkMessage(c.env.CHATWORK_API_TOKEN!, roomId, msgBody);
-            await updateNotificationStatus(c.env.DB, notifRecord.id, 'sent');
-          } catch {
-            await updateNotificationStatus(c.env.DB, notifRecord.id, 'failed');
-          }
+        try {
+          await sendChatworkMessage(apiToken, roomId, msgBody);
+          await updateNotificationStatus(c.env.DB, notifRecord.id, 'sent');
+        } catch {
+          await updateNotificationStatus(c.env.DB, notifRecord.id, 'failed');
         }
-      } catch (err) {
-        console.error('notification dispatch error:', err);
       }
+    } catch (err) {
+      console.error('notification dispatch error:', err);
     }
 
     return c.json({ success: true });

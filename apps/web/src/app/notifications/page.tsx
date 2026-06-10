@@ -32,6 +32,7 @@ interface CreateFormState {
   name: string
   eventType: string
   channels: string
+  chatworkApiToken: string
   chatworkRoomId: string
 }
 
@@ -90,6 +91,7 @@ export default function NotificationsPage() {
     name: '',
     eventType: '',
     channels: '',
+    chatworkApiToken: '',
     chatworkRoomId: '',
   })
   const [saving, setSaving] = useState(false)
@@ -148,6 +150,9 @@ export default function NotificationsPage() {
     }
 
     const conditions: Record<string, unknown> = {}
+    if (form.chatworkApiToken.trim()) {
+      conditions.chatworkApiToken = form.chatworkApiToken.trim()
+    }
     if (form.chatworkRoomId.trim()) {
       conditions.chatworkRoomId = form.chatworkRoomId.trim()
     }
@@ -168,7 +173,7 @@ export default function NotificationsPage() {
       })
       if (res.success) {
         setShowCreate(false)
-        setForm({ name: '', eventType: '', channels: '', chatworkRoomId: '' })
+        setForm({ name: '', eventType: '', channels: '', chatworkApiToken: '', chatworkRoomId: '' })
         loadRules()
       } else {
         setFormError(res.error)
@@ -264,6 +269,17 @@ export default function NotificationsPage() {
                 value={form.channels}
                 onChange={(e) => setForm({ ...form, channels: e.target.value })}
               />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Chatwork APIトークン</label>
+              <input
+                type="password"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Chatwork の APIトークン"
+                value={form.chatworkApiToken}
+                onChange={(e) => setForm({ ...form, chatworkApiToken: e.target.value })}
+              />
+              <p className="text-xs text-gray-400 mt-1">空欄の場合は環境変数のデフォルトトークンを使用します</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Chatwork ルームID</label>
