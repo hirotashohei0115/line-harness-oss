@@ -710,7 +710,9 @@ repairRoutes.post('/api/contact-form', async (c) => {
         if (!apiToken || !roomId) continue;
 
         const msgTitle = rule.name;
-        const toPrefix = conditions.chatworkToId ? `[To:${conditions.chatworkToId}]\n` : '';
+        const toPrefix = conditions.chatworkToId
+          ? (conditions.chatworkToId as string).split(',').map(id => `[To:${id.trim()}]`).join('') + '\n'
+          : '';
         const msgBody = `${toPrefix}[info][title]${msgTitle}[/title]お名前：${name}\n電話番号：${phone}\n機種：${model}\n症状：${symptom}[/info]`;
 
         const notifRecord = await createNotification(c.env.DB, {

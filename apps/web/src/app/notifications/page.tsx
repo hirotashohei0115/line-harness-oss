@@ -341,7 +341,7 @@ export default function NotificationsPage() {
               <input
                 type="text"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="例: 12345678（空欄の場合はTOなし）"
+                placeholder="例: 12345678,87654321（カンマ区切りで複数指定可）"
                 value={form.chatworkToId}
                 onChange={(e) => setForm({ ...form, chatworkToId: e.target.value })}
               />
