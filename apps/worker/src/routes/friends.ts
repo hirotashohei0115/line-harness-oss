@@ -8,8 +8,12 @@ import {
   getFriendTags,
   getScenarios,
   enrollFriendInScenario,
+  getActiveNotificationRulesByEvent,
+  createNotification,
+  updateNotificationStatus,
   jstNow,
 } from '@line-crm/db';
+import { sendChatworkMessage } from '../lib/chatwork.js';
 import type { Friend as DbFriend, Tag as DbTag } from '@line-crm/db';
 import { fireEvent } from '../services/event-bus.js';
 import { buildMessage } from '../services/step-delivery.js';
@@ -286,8 +290,45 @@ friends.post('/api/friends/:id/tags', async (c) => {
       }
     }
 
-    // イベントバス発火: tag_change
+    // イベントバス発火
+    await fireEvent(db, 'tag_added', { friendId, eventData: { tagId: body.tagId, action: 'add' } });
     await fireEvent(db, 'tag_change', { friendId, eventData: { tagId: body.tagId, action: 'add' } });
+
+    // tag_added 通知ルールでChatwork/LINE通知
+    try {
+      const tagRow = await db.prepare('SELECT name FROM tags WHERE id = ?').bind(body.tagId).first<{ name: string }>();
+      const tagName = tagRow?.name ?? '';
+
+      const notifRules = await getActiveNotificationRulesByEvent(db, 'tag_added');
+      for (const rule of notifRules) {
+        const channels: string[] = JSON.parse(rule.channels);
+        const conditions = JSON.parse(rule.conditions) as Record<string, unknown>;
+
+        if (conditions.tagName && conditions.tagName !== tagName) continue;
+
+        if (channels.includes('chatwork')) {
+          const apiToken = (conditions.chatworkApiToken as string | undefined) || c.env.CHATWORK_API_TOKEN;
+          const roomId = (conditions.chatworkRoomId as string | undefined) || c.env.CHATWORK_ROOM_ID;
+          if (!apiToken || !roomId) continue;
+          const toPrefix = conditions.chatworkToId
+            ? (conditions.chatworkToId as string).split(',').map((id) => `[To:${id.trim()}]`).join('') + '\n'
+            : '';
+          const friendRow = await db.prepare('SELECT display_name FROM friends WHERE id = ? LIMIT 1').bind(friendId).first<{ display_name: string }>();
+          const msgBody = `${toPrefix}[info][title]${rule.name}[/title]タグ付与：${tagName}\nユーザー：${friendRow?.display_name ?? friendId}[/info]`;
+          const notifRecord = await createNotification(db, {
+            ruleId: rule.id, eventType: 'tag_added', title: rule.name, body: msgBody, channel: 'chatwork',
+          });
+          try {
+            await sendChatworkMessage(apiToken, roomId, msgBody);
+            await updateNotificationStatus(db, notifRecord.id, 'sent');
+          } catch {
+            await updateNotificationStatus(db, notifRecord.id, 'failed');
+          }
+        }
+      }
+    } catch (err) {
+      console.error('tag_added notification error:', err);
+    }
 
     return c.json({ success: true, data: null }, 201);
   } catch (err) {
