@@ -23,6 +23,7 @@ export interface CreateLineAccountInput {
   name: string;
   channelAccessToken: string;
   channelSecret: string;
+  adminUrl?: string;
 }
 
 export async function createLineAccount(
@@ -34,10 +35,10 @@ export async function createLineAccount(
 
   await db
     .prepare(
-      `INSERT INTO line_accounts (id, channel_id, name, channel_access_token, channel_secret, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+      `INSERT INTO line_accounts (id, channel_id, name, channel_access_token, channel_secret, admin_url, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     )
-    .bind(id, input.channelId, input.name, input.channelAccessToken, input.channelSecret, now, now)
+    .bind(id, input.channelId, input.name, input.channelAccessToken, input.channelSecret, input.adminUrl ?? null, now, now)
     .run();
 
   return (await getLineAccountById(db, id))!;
