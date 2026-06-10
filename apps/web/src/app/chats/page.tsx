@@ -433,6 +433,7 @@ export default function ChatsPage() {
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [tagInput, setTagInput] = useState('')
   const [addingTag, setAddingTag] = useState(false)
+  const [savingCallResult, setSavingCallResult] = useState(false)
   const [allMarks, setAllMarks] = useState<ContactMark[]>([])
   const [selectedFriendMarkId, setSelectedFriendMarkId] = useState<string | null>(null)
   const [filterTagIds, setFilterTagIds] = useState<string[]>([])
@@ -903,6 +904,23 @@ export default function ChatsPage() {
       alert(`保存に失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`)
     } finally {
       setSavingRepair(false)
+    }
+  }
+
+  const handleSetCallResult = async (result: string) => {
+    if (!chatDetail?.friendId || savingCallResult) return
+    setSavingCallResult(true)
+    try {
+      const newValue = repairAttrs.call_result === result ? '' : result
+      await fetchApi(`/api/repair/attributes/${chatDetail.friendId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ call_result: newValue }),
+      })
+      setRepairAttrs(prev => ({ ...prev, call_result: newValue }))
+    } catch {
+      alert('保存に失敗しました')
+    } finally {
+      setSavingCallResult(false)
     }
   }
 
@@ -1958,6 +1976,32 @@ export default function ChatsPage() {
                         style={{ backgroundColor: '#06C755' }}
                       >{addingTag ? '...' : '追加'}</button>
                     </div>
+                  </div>
+                </div>
+
+                {/* 電話結果 */}
+                <div className="border-t border-gray-200">
+                  <div className="px-3 py-2 bg-white flex items-center">
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">電話結果</p>
+                  </div>
+                  <div className="px-3 pb-3 flex gap-2">
+                    {[
+                      { label: '受注', color: 'bg-green-500 hover:bg-green-600', activeColor: 'ring-2 ring-green-400' },
+                      { label: '検討中', color: 'bg-yellow-400 hover:bg-yellow-500', activeColor: 'ring-2 ring-yellow-300' },
+                      { label: '失注', color: 'bg-red-500 hover:bg-red-600', activeColor: 'ring-2 ring-red-400' },
+                    ].map(({ label, color, activeColor }) => {
+                      const isActive = repairAttrs.call_result === label
+                      return (
+                        <button
+                          key={label}
+                          onClick={() => void handleSetCallResult(label)}
+                          disabled={savingCallResult}
+                          className={`flex-1 py-1.5 rounded text-xs font-semibold text-white transition-all disabled:opacity-50 ${color} ${isActive ? activeColor : 'opacity-60'}`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
                 </>
