@@ -284,6 +284,32 @@ const CONSULT_FAQS: Record<string, FaqCategory> = {
 
 // ---- Repair Flow Flex builders ----
 
+function buildContactFormFlex(formUrl: string): string {
+  return JSON.stringify({
+    type: 'bubble',
+    body: {
+      type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px',
+      contents: [
+        { type: 'text', text: 'お問い合わせフォーム', weight: 'bold', size: 'lg', color: '#1e293b' },
+        { type: 'text', text: 'お名前・電話番号・機種・症状をご入力ください\n担当者より直接お電話いたします📞', size: 'sm', color: '#64748b', wrap: true, margin: 'md' },
+        { type: 'separator', margin: 'lg' },
+        {
+          type: 'box', layout: 'vertical', margin: 'lg',
+          contents: [
+            {
+              type: 'button',
+              action: { type: 'uri', label: 'フォームへ進む →', uri: formUrl },
+              style: 'primary',
+              height: 'sm',
+              color: '#00B900',
+            },
+          ],
+        },
+      ],
+    },
+  });
+}
+
 function buildProductSelectFlex(): string {
   return JSON.stringify({
     type: 'bubble',
@@ -795,13 +821,23 @@ async function handleEvent(
        VALUES (?, ?, 'incoming', 'text', '【友達追加】', NULL, NULL, 0, ?)`
     ).bind(crypto.randomUUID(), friend.id, jstNow()).run();
 
-    // 機種選択Flex（新規・再フォロー共通で送信）
+    // ウェルカムメッセージ（新規・再フォロー共通で送信）
+    // liffUrl が設定されている場合（staging）はフォームボタン、それ以外は機種選択Flex
     try {
-      await replyAndLog(db, lineClient, event.replyToken, friend.id, [
-        { type: 'image', originalContentUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb', previewImageUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb' },
-        { type: 'text', text: 'お見積りを作成させて頂きますのでお客様の端末情報を下記選択肢よりお選び下さい💻\n\n※修理時にデータに触れる事はございません！\nデータそのままで修理可能です✨' },
-        buildMessage('flex', buildProductSelectFlex()),
-      ]);
+      if (liffUrl) {
+        const formUrl = `${liffUrl.trim()}?page=contact-form`;
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
+          { type: 'image', originalContentUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb', previewImageUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb' },
+          { type: 'text', text: 'ご相談ありがとうございます！\n\n下記フォームよりお名前・電話番号・機種・症状をご入力ください。\n担当者より直接お電話させていただきます📞\n\n※修理時にデータに触れる事はございません！\nデータそのままで修理可能です✨' },
+          buildMessage('flex', buildContactFormFlex(formUrl)),
+        ]);
+      } else {
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
+          { type: 'image', originalContentUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb', previewImageUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb' },
+          { type: 'text', text: 'お見積りを作成させて頂きますのでお客様の端末情報を下記選択肢よりお選び下さい💻\n\n※修理時にデータに触れる事はございません！\nデータそのままで修理可能です✨' },
+          buildMessage('flex', buildProductSelectFlex()),
+        ]);
+      }
     } catch (err) {
       console.error('Failed to send welcome message:', err);
     }

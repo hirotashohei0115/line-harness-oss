@@ -1761,6 +1761,7 @@ export default function ChatsPage() {
                     const symptom = repairAttrs?.repair_symptom_name
                     const modelName = repairAttrs?.repair_model_name
                     const year = repairAttrs?.repair_year
+                    const phone = repairAttrs?.phone
                     const rawInch = repairAttrs?.repair_inch_size
                     const inchDisplay = rawInch
                       ? String(rawInch).includes('インチ') ? rawInch : `${rawInch}インチ`
@@ -1801,6 +1802,13 @@ export default function ChatsPage() {
                           <div>
                             <p className="text-[10px] text-gray-400 mb-0.5">症状</p>
                             <p className="font-medium">{symptom}</p>
+                          </div>
+                        )}
+
+                        {phone && (
+                          <div>
+                            <p className="text-[10px] text-gray-400 mb-0.5">電話番号</p>
+                            <p className="font-medium">{phone}</p>
                           </div>
                         )}
 

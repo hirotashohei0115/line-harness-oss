@@ -57,6 +57,7 @@ export async function authMiddleware(c: Context<Env>, next: Next): Promise<Respo
     path.startsWith('/t/') ||
     path.startsWith('/r/') ||
     path.startsWith('/api/liff/') ||
+    path === '/api/contact-form' ||
     path === '/api/repair/mail-orders' ||
     path.startsWith('/api/repair/mail-orders/') ||
     path === '/api/repair/visit-orders' ||
