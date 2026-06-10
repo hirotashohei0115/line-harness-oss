@@ -745,14 +745,14 @@ repairRoutes.post('/api/contact-form', async (c) => {
 // POST /api/repair/order/:friendId — 受注情報保存 + 店舗通知
 repairRoutes.post('/api/repair/order/:friendId', async (c) => {
   const friendId = c.req.param('friendId');
-  let body: { orderType?: string; orderStore?: string; orderAmount?: string; orderDueDate?: string; orderNotes?: string };
+  let body: { orderType?: string; orderStore?: string; orderAmount?: string; orderDueDate?: string; orderVisitDate?: string; orderNotes?: string };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ success: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const { orderType = '', orderStore = '', orderAmount = '', orderDueDate = '', orderNotes = '' } = body;
+  const { orderType = '', orderStore = '', orderAmount = '', orderDueDate = '', orderVisitDate = '', orderNotes = '' } = body;
 
   try {
     await setFriendAttribute(c.env.DB, friendId, 'call_result', '受注');
@@ -760,6 +760,7 @@ repairRoutes.post('/api/repair/order/:friendId', async (c) => {
     await setFriendAttribute(c.env.DB, friendId, 'order_store', orderStore);
     await setFriendAttribute(c.env.DB, friendId, 'order_amount', orderAmount);
     await setFriendAttribute(c.env.DB, friendId, 'order_due_date', orderDueDate);
+    await setFriendAttribute(c.env.DB, friendId, 'order_visit_date', orderVisitDate);
     await setFriendAttribute(c.env.DB, friendId, 'order_notes', orderNotes);
 
     // 友だち情報・修理情報を取得して通知メッセージを組み立て
@@ -783,6 +784,7 @@ repairRoutes.post('/api/repair/order/:friendId', async (c) => {
       a.repair_symptom_name ? `症状：${a.repair_symptom_name}` : null,
       `修理方法：${orderType}`,
       orderStore ? `店舗：${orderStore}` : (a.repair_store ? `店舗：${a.repair_store}` : null),
+      orderVisitDate ? `来店予定日：${orderVisitDate}` : null,
       orderAmount ? `見積金額：${orderAmount}円` : null,
       orderDueDate ? `納期：${orderDueDate}` : null,
       orderNotes ? `備考：${orderNotes}` : null,

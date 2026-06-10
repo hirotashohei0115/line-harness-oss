@@ -435,7 +435,7 @@ export default function ChatsPage() {
   const [addingTag, setAddingTag] = useState(false)
   const [savingCallResult, setSavingCallResult] = useState(false)
   const [showOrderForm, setShowOrderForm] = useState(false)
-  const [orderForm, setOrderForm] = useState({ type: '来店', store: '', amount: '', dueDate: '', notes: '' })
+  const [orderForm, setOrderForm] = useState({ type: '来店', store: '', amount: '', dueDate: '', visitDate: '', notes: '' })
   const [showReasonForm, setShowReasonForm] = useState<string | null>(null)
   const [reasonText, setReasonText] = useState('')
   const [allMarks, setAllMarks] = useState<ContactMark[]>([])
@@ -953,6 +953,7 @@ export default function ChatsPage() {
         store: repairAttrs.order_store || repairAttrs.repair_store || '',
         amount: repairAttrs.order_amount || '',
         dueDate: repairAttrs.order_due_date || '',
+        visitDate: repairAttrs.order_visit_date || '',
         notes: repairAttrs.order_notes || '',
       })
       setShowOrderForm(prev => !prev)
@@ -996,6 +997,7 @@ export default function ChatsPage() {
           orderStore: orderForm.store,
           orderAmount: orderForm.amount,
           orderDueDate: orderForm.dueDate,
+          orderVisitDate: orderForm.visitDate,
           orderNotes: orderForm.notes,
         }),
       })
@@ -1006,6 +1008,7 @@ export default function ChatsPage() {
         order_store: orderForm.store,
         order_amount: orderForm.amount,
         order_due_date: orderForm.dueDate,
+        order_visit_date: orderForm.visitDate,
         order_notes: orderForm.notes,
       }))
       await syncCallResultTag(chatDetail.friendId, '受注')
@@ -2149,14 +2152,27 @@ export default function ChatsPage() {
                           <span className="text-xs text-gray-500">円</span>
                         </div>
                       </div>
+                      {/* 来店予定日（来店のみ） */}
+                      {orderForm.type === '来店' && (
+                        <div>
+                          <p className="text-[11px] font-medium text-gray-600 mb-1">来店予定日</p>
+                          <input
+                            type="text"
+                            value={orderForm.visitDate}
+                            onChange={e => setOrderForm(f => ({ ...f, visitDate: e.target.value }))}
+                            placeholder="例: 6/15（土）14時"
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                          />
+                        </div>
+                      )}
                       {/* 納期 */}
                       <div>
-                        <p className="text-[11px] font-medium text-gray-600 mb-1">納期</p>
+                        <p className="text-[11px] font-medium text-gray-600 mb-1">納期（返却目安）</p>
                         <input
                           type="text"
                           value={orderForm.dueDate}
                           onChange={e => setOrderForm(f => ({ ...f, dueDate: e.target.value }))}
-                          placeholder="例: 2026/06/20"
+                          placeholder="例: 1週間、2週間"
                           className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
                         />
                       </div>
@@ -2195,6 +2211,7 @@ export default function ChatsPage() {
                     <div className="mx-3 mb-3 p-2.5 bg-green-50 rounded border border-green-200 text-[11px] text-gray-700 space-y-0.5">
                       {repairAttrs.order_type && <p>修理方法：{repairAttrs.order_type}</p>}
                       {repairAttrs.order_store && <p>店舗：{repairAttrs.order_store}</p>}
+                      {repairAttrs.order_visit_date && <p>来店予定日：{repairAttrs.order_visit_date}</p>}
                       {repairAttrs.order_amount && <p>見積金額：{repairAttrs.order_amount}円</p>}
                       {repairAttrs.order_due_date && <p>納期：{repairAttrs.order_due_date}</p>}
                       {repairAttrs.order_notes && <p>備考：{repairAttrs.order_notes}</p>}
