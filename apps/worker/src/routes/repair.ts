@@ -350,6 +350,37 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       }
     }
 
+    // tag_added 通知ルール: 梱包キットタグ付与時
+    const kitTagName = packagingKit ? '梱包キット希望する' : '梱包キット希望しない';
+    try {
+      const notifRules = await getActiveNotificationRulesByEvent(c.env.DB, 'tag_added');
+      for (const rule of notifRules) {
+        const channels: string[] = JSON.parse(rule.channels);
+        const conditions = JSON.parse(rule.conditions) as Record<string, unknown>;
+        if (conditions.tagName && conditions.tagName !== kitTagName) continue;
+        if (channels.includes('chatwork')) {
+          const apiToken = (conditions.chatworkApiToken as string | undefined) || c.env.CHATWORK_API_TOKEN;
+          const roomId = (conditions.chatworkRoomId as string | undefined) || c.env.CHATWORK_ROOM_ID;
+          if (!apiToken || !roomId) continue;
+          const toPrefix = conditions.chatworkToId
+            ? (conditions.chatworkToId as string).split(',').map((id) => `[To:${id.trim()}]`).join('') + '\n'
+            : '';
+          const msgBody = `${toPrefix}[info][title]${rule.name}[/title]タグ付与：${kitTagName}\nユーザー：${name}様\n電話番号：${phone}\n配送先：${deliveryStore}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+          const notifRecord = await createNotification(c.env.DB, {
+            ruleId: rule.id, eventType: 'tag_added', title: rule.name, body: msgBody, channel: 'chatwork',
+          });
+          try {
+            await sendChatworkMessage(apiToken, roomId, msgBody);
+            await updateNotificationStatus(c.env.DB, notifRecord.id, 'sent');
+          } catch {
+            await updateNotificationStatus(c.env.DB, notifRecord.id, 'failed');
+          }
+        }
+      }
+    } catch (err) {
+      console.error('tag_added notification (mail-orders) error:', err);
+    }
+
     return c.json({ success: true, data: { id } }, 201);
   } catch (err) {
     console.error('POST /api/repair/mail-orders error:', err);
