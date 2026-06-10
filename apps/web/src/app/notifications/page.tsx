@@ -34,6 +34,7 @@ interface CreateFormState {
   channels: string
   chatworkApiToken: string
   chatworkRoomId: string
+  chatworkToId: string
 }
 
 const statusConfig: Record<
@@ -87,6 +88,7 @@ const EMPTY_FORM: CreateFormState = {
   channels: '',
   chatworkApiToken: '',
   chatworkRoomId: '',
+  chatworkToId: '',
 }
 
 export default function NotificationsPage() {
@@ -157,6 +159,7 @@ export default function NotificationsPage() {
       channels: rule.channels.join(', '),
       chatworkApiToken: String(rule.conditions?.chatworkApiToken ?? ''),
       chatworkRoomId: String(rule.conditions?.chatworkRoomId ?? ''),
+      chatworkToId: String(rule.conditions?.chatworkToId ?? ''),
     })
     setFormError('')
     setShowForm(true)
@@ -184,6 +187,9 @@ export default function NotificationsPage() {
     }
     if (form.chatworkRoomId.trim()) {
       conditions.chatworkRoomId = form.chatworkRoomId.trim()
+    }
+    if (form.chatworkToId.trim()) {
+      conditions.chatworkToId = form.chatworkToId.trim()
     }
 
     const channels = form.channels
@@ -329,6 +335,16 @@ export default function NotificationsPage() {
                 onChange={(e) => setForm({ ...form, chatworkRoomId: e.target.value })}
               />
               <p className="text-xs text-gray-400 mt-1">空欄の場合は環境変数のデフォルトルームに送信されます</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Chatwork TO（アカウントID）</label>
+              <input
+                type="text"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="例: 12345678（空欄の場合はTOなし）"
+                value={form.chatworkToId}
+                onChange={(e) => setForm({ ...form, chatworkToId: e.target.value })}
+              />
             </div>
 
             {formError && <p className="text-xs text-red-600">{formError}</p>}
