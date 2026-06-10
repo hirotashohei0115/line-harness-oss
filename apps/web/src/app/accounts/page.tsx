@@ -47,7 +47,7 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ channelId: '', name: '', channelAccessToken: '', channelSecret: '' })
+  const [form, setForm] = useState({ channelId: '', name: '', channelAccessToken: '', channelSecret: '', adminUrl: '' })
   const [editingAdminUrl, setEditingAdminUrl] = useState<string | null>(null)
   const [adminUrlDraft, setAdminUrlDraft] = useState('')
 
@@ -77,8 +77,8 @@ export default function AccountsPage() {
     }
     setError('')
     try {
-      await api.lineAccounts.create(form)
-      setForm({ channelId: '', name: '', channelAccessToken: '', channelSecret: '' })
+      await api.lineAccounts.create({ ...form, adminUrl: form.adminUrl || undefined })
+      setForm({ channelId: '', name: '', channelAccessToken: '', channelSecret: '', adminUrl: '' })
       setShowCreate(false)
       load()
     } catch {
@@ -166,6 +166,18 @@ export default function AccountsPage() {
                 onChange={(e) => setForm({ ...form, channelSecret: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                 required
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                管理画面URL <span className="text-gray-400 font-normal">（任意）別環境の管理画面に切り替える場合</span>
+              </label>
+              <input
+                type="url"
+                value={form.adminUrl}
+                onChange={(e) => setForm({ ...form, adminUrl: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                placeholder="https://staging-admin.example.com または http://localhost:3001"
               />
             </div>
           </div>

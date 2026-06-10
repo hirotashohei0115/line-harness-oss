@@ -117,6 +117,7 @@ lineAccounts.post('/api/line-accounts', requireRole('owner', 'admin'), async (c)
       name: string;
       channelAccessToken: string;
       channelSecret: string;
+      adminUrl?: string;
     }>();
 
     if (!body.channelId || !body.name || !body.channelAccessToken || !body.channelSecret) {
@@ -126,7 +127,7 @@ lineAccounts.post('/api/line-accounts', requireRole('owner', 'admin'), async (c)
       );
     }
 
-    const account = await createLineAccount(c.env.DB, body);
+    const account = await createLineAccount(c.env.DB, { ...body, adminUrl: body.adminUrl || undefined });
     return c.json({ success: true, data: serializeLineAccountFull(account) }, 201);
   } catch (err) {
     console.error('POST /api/line-accounts error:', err);
