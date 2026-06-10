@@ -244,6 +244,8 @@ export const api = {
     delete: (id: string) => fetchApi<ApiResponse<null>>(`/api/cross-analyses/${id}`, { method: 'DELETE' }),
     run: (data: { name?: string; period?: { from: string; to: string }; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] } }) =>
       fetchApi<ApiResponse<CrossRunResult>>('/api/cross-analyses/run', { method: 'POST', body: JSON.stringify(data) }),
+    users: (data: { period: { from: string; to: string }; axis1: { type: 'tag' | 'contact_mark'; itemIds: string[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds: string[] } }) =>
+      fetchApi<ApiResponse<{ id: string; displayName: string; pictureUrl: string | null; lineUserId: string }[]>>('/api/cross-analyses/users', { method: 'POST', body: JSON.stringify(data) }),
   },
   scenarios: {
     list: (params?: { accountId?: string }) => {

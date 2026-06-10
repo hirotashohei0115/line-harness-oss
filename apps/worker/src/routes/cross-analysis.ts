@@ -131,6 +131,45 @@ crossAnalysisRoutes.get('/api/cross-analyses', async (c) => {
   }
 });
 
+// POST /api/cross-analyses/users — fetch friend list matching cell conditions (must be BEFORE /:id)
+crossAnalysisRoutes.post('/api/cross-analyses/users', async (c) => {
+  try {
+    const body = await c.req.json<{
+      period: { from: string; to: string };
+      axis1: { type: AxisType; itemIds: string[] };
+      axis2: { type: AxisType; itemIds: string[] };
+    }>();
+
+    const fromTs = `${body.period.from}T00:00:00`;
+    const toTs = `${body.period.to}T23:59:59`;
+    const cond1 = buildGroupCondition(body.axis1.type, body.axis1.itemIds);
+    const cond2 = buildGroupCondition(body.axis2.type, body.axis2.itemIds);
+
+    const conditions = ['f.created_at >= ?', 'f.created_at <= ?'];
+    const params: unknown[] = [fromTs, toTs];
+    if (cond1.sql !== '1=0') { conditions.push(cond1.sql); params.push(...cond1.params); }
+    if (cond2.sql !== '1=0') { conditions.push(cond2.sql); params.push(...cond2.params); }
+
+    const result = await c.env.DB
+      .prepare(`SELECT DISTINCT f.id, f.display_name, f.picture_url, f.line_user_id FROM friends f WHERE ${conditions.join(' AND ')} ORDER BY f.display_name ASC`)
+      .bind(...params)
+      .all<{ id: string; display_name: string; picture_url: string | null; line_user_id: string }>();
+
+    return c.json({
+      success: true,
+      data: result.results.map((r) => ({
+        id: r.id,
+        displayName: r.display_name,
+        pictureUrl: r.picture_url,
+        lineUserId: r.line_user_id,
+      })),
+    });
+  } catch (err) {
+    console.error('POST /api/cross-analyses/users error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 // POST /api/cross-analyses/run  (must be BEFORE /:id)
 crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
   try {

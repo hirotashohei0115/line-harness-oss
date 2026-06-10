@@ -207,12 +207,37 @@ export default function CrossAnalysisForm({ initial }: Props) {
   const [running, setRunning] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [modalCell, setModalCell] = useState<{ a1Name: string; a2Name: string; count: number } | null>(null)
+
+  type ModalCell = {
+    a1Name: string
+    a2Name: string
+    count: number
+    axis1Type: AxisType
+    axis2Type: AxisType
+    axis1ItemIds: string[]
+    axis2ItemIds: string[]
+    period: { from: string; to: string }
+  }
+  const [modalCell, setModalCell] = useState<ModalCell | null>(null)
+  const [modalUsers, setModalUsers] = useState<{ id: string; displayName: string; pictureUrl: string | null }[]>([])
+  const [modalLoading, setModalLoading] = useState(false)
 
   useEffect(() => {
     api.tags.list().then((r) => { if (r.success) setTags(r.data) }).catch(() => {})
     api.marks.list().then((r) => { if (r.success) setMarks(r.data) }).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!modalCell || modalCell.count === 0) { setModalUsers([]); return }
+    setModalLoading(true)
+    api.crossAnalyses.users({
+      period: modalCell.period,
+      axis1: { type: modalCell.axis1Type, itemIds: modalCell.axis1ItemIds },
+      axis2: { type: modalCell.axis2Type, itemIds: modalCell.axis2ItemIds },
+    }).then((r) => {
+      if (r.success) setModalUsers(r.data)
+    }).catch(() => {}).finally(() => setModalLoading(false))
+  }, [modalCell])
 
   const getAxisItems = (type: AxisType): AxisItem[] => {
     if (type === 'tag') return tags.map((t) => ({ id: t.id, name: t.name, color: t.color || '#3B82F6' }))
@@ -403,11 +428,22 @@ export default function CrossAnalysisForm({ initial }: Props) {
                     </td>
                     {result.axis2Items.map((a2) => {
                       const count = result.cells[a1.id]?.[a2.id] ?? 0
+                      const a1Group = axis1Groups.find(g => g.id === a1.id)
+                      const a2Group = axis2Groups.find(g => g.id === a2.id)
                       return (
                         <td key={a2.id} className="border border-gray-200 px-3 py-2 text-center">
                           <button
-                            onClick={() => setModalCell({ a1Name: a1.name, a2Name: a2.name, count })}
-                            className={`text-sm font-medium hover:underline ${count > 0 ? 'text-blue-600' : 'text-gray-400'}`}
+                            onClick={() => {
+                              setModalUsers([])
+                              setModalCell({
+                                a1Name: a1.name, a2Name: a2.name, count,
+                                axis1Type, axis2Type,
+                                axis1ItemIds: a1Group?.itemIds ?? [],
+                                axis2ItemIds: a2Group?.itemIds ?? [],
+                                period: result.period,
+                              })
+                            }}
+                            className={`text-sm font-medium hover:underline ${count > 0 ? 'text-blue-600 cursor-pointer' : 'text-gray-400 cursor-default'}`}
                           >{count}</button>
                         </td>
                       )
@@ -437,11 +473,39 @@ export default function CrossAnalysisForm({ initial }: Props) {
       {/* Modal */}
       {modalCell && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setModalCell(null)}>
-          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-base font-bold text-gray-900 mb-1">{modalCell.a1Name} × {modalCell.a2Name}</h3>
-            <p className="text-3xl font-bold text-blue-600 mb-4">{modalCell.count} 人</p>
-            <p className="text-xs text-gray-400 mb-4">※ 詳細なユーザー一覧は友だち管理画面でご確認ください</p>
-            <button onClick={() => setModalCell(null)} className="w-full py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded-lg">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4 flex flex-col max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">{modalCell.a1Name} × {modalCell.a2Name}</h3>
+                <p className="text-2xl font-bold text-blue-600 mt-0.5">{modalCell.count} 人</p>
+              </div>
+              <button onClick={() => setModalCell(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none ml-4">✕</button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 -mx-2 px-2">
+              {modalLoading ? (
+                <div className="py-8 text-center text-sm text-gray-400">読み込み中...</div>
+              ) : modalCell.count === 0 ? (
+                <div className="py-8 text-center text-sm text-gray-400">該当するユーザーはいません</div>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {modalUsers.map((u) => (
+                    <li key={u.id} className="flex items-center gap-3 py-2.5">
+                      {u.pictureUrl ? (
+                        <img src={u.pictureUrl} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs text-gray-500">{u.displayName?.[0] ?? '?'}</span>
+                        </div>
+                      )}
+                      <span className="text-sm text-gray-800 truncate">{u.displayName || '（名前なし）'}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <button onClick={() => setModalCell(null)} className="mt-4 w-full py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 rounded-lg">
               閉じる
             </button>
           </div>
