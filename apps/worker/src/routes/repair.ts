@@ -6,6 +6,7 @@ import {
   createRepairQuote,
   getRepairQuotesByFriend,
   upsertChatOnMessage,
+  setFriendAttribute,
   jstNow,
 } from '@line-crm/db';
 import type { RepairQuote } from '@line-crm/db';
@@ -23,7 +24,12 @@ async function setContactMark(db: D1Database, friendId: string, markId: string):
 
 async function addTagToFriend(db: D1Database, friendId: string, tagName: string): Promise<void> {
   try {
-    const tag = await db.prepare('SELECT id FROM tags WHERE name = ?').bind(tagName).first<{ id: string }>();
+    let tag = await db.prepare('SELECT id FROM tags WHERE name = ?').bind(tagName).first<{ id: string }>();
+    if (!tag) {
+      const newId = crypto.randomUUID();
+      await db.prepare('INSERT OR IGNORE INTO tags (id, name) VALUES (?, ?)').bind(newId, tagName).run();
+      tag = await db.prepare('SELECT id FROM tags WHERE name = ?').bind(tagName).first<{ id: string }>();
+    }
     if (!tag) return;
     await db.prepare('INSERT OR IGNORE INTO friend_tags (friend_id, tag_id) VALUES (?, ?)').bind(friendId, tag.id).run();
   } catch (err) {
@@ -539,6 +545,158 @@ repairRoutes.post('/api/repair/visit-orders', async (c) => {
     return c.json({ success: true, data: { id } }, 201);
   } catch (err) {
     console.error('POST /api/repair/visit-orders error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// GET /api/repair/model-prices — admin: list all model prices
+repairRoutes.get('/api/repair/model-prices', async (c) => {
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT id, model_number, product_type, year, inch_size, symptom, price, delivery_days
+       FROM repair_model_prices
+       ORDER BY product_type, year, inch_size, symptom`,
+    ).all<{
+      id: string;
+      model_number: string;
+      product_type: string;
+      year: number;
+      inch_size: number;
+      symptom: string;
+      price: number | null;
+      delivery_days: string | null;
+    }>();
+    return c.json({ success: true, data: rows.results });
+  } catch (err) {
+    console.error('GET /api/repair/model-prices error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// PUT /api/repair/model-prices/:id — admin: update price and delivery_days
+repairRoutes.put('/api/repair/model-prices/:id', async (c) => {
+  const id = c.req.param('id');
+  let body: { price?: number | null; deliveryDays?: string | null };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error: 'Invalid JSON body' }, 400);
+  }
+
+  try {
+    const now = new Date().toISOString().slice(0, 23);
+    await c.env.DB.prepare(
+      `UPDATE repair_model_prices SET price = ?, delivery_days = ?, updated_at = ? WHERE id = ?`,
+    ).bind(body.price ?? null, body.deliveryDays ?? null, now, id).run();
+    return c.json({ success: true });
+  } catch (err) {
+    console.error('PUT /api/repair/model-prices/:id error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// POST /api/contact-form — お問い合わせフォーム送信（フォローイベント新フロー用）
+repairRoutes.post('/api/contact-form', async (c) => {
+  let body: { lineUserId?: string; name?: string; phone?: string; model?: string; symptom?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error: 'Invalid JSON body' }, 400);
+  }
+
+  const { lineUserId, name, phone, model, symptom } = body;
+  if (!lineUserId || !name || !phone || !model || !symptom) {
+    return c.json({ success: false, error: 'Missing required fields' }, 400);
+  }
+
+  try {
+    // 友だち情報とLINEアカウントのトークンを取得
+    const row = await c.env.DB
+      .prepare(
+        `SELECT f.id, f.line_account_id, la.channel_access_token
+         FROM friends f
+         LEFT JOIN line_accounts la ON la.id = f.line_account_id
+         WHERE f.line_user_id = ? LIMIT 1`,
+      )
+      .bind(lineUserId)
+      .first<{ id: string; line_account_id: string | null; channel_access_token: string | null }>();
+
+    const accessToken = row?.channel_access_token || c.env.LINE_CHANNEL_ACCESS_TOKEN;
+    const lineClient = new LineClient(accessToken);
+
+    const replyText = `【ご相談内容のご確認】\n\nお名前：${name}様\n電話番号：${phone}\n機種：${model}\n症状：${symptom}\n\n担当者より直接お電話させていただきます。\n今しばらくお待ちください🙏\n\n受付時間：10:00〜20:00`;
+    await lineClient.pushMessage(lineUserId, [{ type: 'text', text: replyText }]);
+
+    if (row?.id) {
+      // 受信メッセージとしてチャットに記録
+      const formContent = `【お問い合わせフォーム送信】\n━━━━━━━━━━\nお名前：${name}\n電話番号：${phone}\n機種：${model}\n症状：${symptom}\n━━━━━━━━━━`;
+      await c.env.DB
+        .prepare(
+          `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
+           VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 0, ?)`,
+        )
+        .bind(crypto.randomUUID(), row.id, formContent, jstNow())
+        .run();
+
+      // 送信メッセージもログに記録
+      await c.env.DB
+        .prepare(
+          `INSERT INTO messages_log (id, friend_id, direction, message_type, content, delivery_type, created_at)
+           VALUES (?, ?, 'outgoing', 'text', ?, 'push', ?)`,
+        )
+        .bind(crypto.randomUUID(), row.id, replyText, jstNow())
+        .run();
+
+      await upsertChatOnMessage(c.env.DB, row.id);
+      await addTagToFriend(c.env.DB, row.id, '見積り依頼あり');
+      await setContactMark(c.env.DB, row.id, 'mark_29');
+
+      // 表示名をフォーム入力の名前で更新
+      await c.env.DB
+        .prepare('UPDATE friends SET display_name = ?, updated_at = ? WHERE id = ?')
+        .bind(name, jstNow(), row.id)
+        .run();
+
+      // 電話番号を属性として保存
+      await setFriendAttribute(c.env.DB, row.id, 'phone', phone);
+
+      // 修理情報パネル用の属性をセット
+      const productName = model.startsWith('MacBook Air') ? 'MacBook Air'
+        : model.startsWith('MacBook Pro') ? 'MacBook Pro'
+        : 'その他';
+      const modelRest = model.startsWith('MacBook Air')
+        ? model.slice('MacBook Air'.length).trim()
+        : model.startsWith('MacBook Pro')
+          ? model.slice('MacBook Pro'.length).trim()
+          : '';
+      await setFriendAttribute(c.env.DB, row.id, 'repair_product_name', productName);
+      await setFriendAttribute(c.env.DB, row.id, 'repair_symptom_name', symptom);
+      if (modelRest) {
+        await setFriendAttribute(c.env.DB, row.id, 'repair_model_name', modelRest);
+      }
+
+      // 修理情報（repair_quote）を作成
+      const productId = productName === 'MacBook Air'
+        ? 'prod-air-0001-0000-0000-000000000001'
+        : productName === 'MacBook Pro'
+          ? 'prod-pro-0001-0000-0000-000000000002'
+          : 'prod-oth-0001-0000-0000-000000000003';
+      const symptomRow = await c.env.DB
+        .prepare('SELECT id FROM repair_symptoms WHERE name = ? LIMIT 1')
+        .bind(symptom)
+        .first<{ id: string }>();
+      await createRepairQuote(c.env.DB, {
+        friendId: row.id,
+        productId,
+        symptomId: symptomRow?.id ?? null,
+        modelName: modelRest || model,
+        requestType: 'consult',
+      });
+    }
+
+    return c.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/contact-form error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
 });

@@ -15,6 +15,7 @@
  */
 
 import { initBooking } from './booking.js';
+import { initContactForm } from './contact-form.js';
 import { initForm } from './form.js';
 import { initMailRepair } from './mail-repair.js';
 import { initReservation } from './reservation.js';
@@ -59,7 +60,14 @@ function getPage(): string | null {
   const path = window.location.pathname.replace(/^\/+/, '');
   if (path === 'book') return 'book';
   const params = new URLSearchParams(window.location.search);
-  return params.get('page');
+  if (params.get('page')) return params.get('page');
+  // LINE encodes query params into liff.state before init — check it directly
+  const liffState = params.get('liff.state');
+  if (liffState) {
+    const stateParams = new URLSearchParams(decodeURIComponent(liffState).replace(/^\?/, ''));
+    if (stateParams.get('page')) return stateParams.get('page');
+  }
+  return null;
 }
 
 function getRedirectUrl(): string | null {
@@ -257,6 +265,14 @@ async function linkAndAddFlow() {
 
 async function main() {
   try {
+    const page = getPage();
+
+    // contact-form manages its own liff.init (uses a different LIFF ID for staging)
+    if (page === 'contact-form') {
+      await initContactForm();
+      return;
+    }
+
     await liff.init({ liffId: LIFF_ID });
 
     if (!liff.isLoggedIn()) {
@@ -264,7 +280,6 @@ async function main() {
       return;
     }
 
-    const page = getPage();
     if (page === 'book') {
       await initBooking();
     } else if (page === 'form') {
