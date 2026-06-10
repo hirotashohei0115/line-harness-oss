@@ -434,6 +434,8 @@ export default function ChatsPage() {
   const [tagInput, setTagInput] = useState('')
   const [addingTag, setAddingTag] = useState(false)
   const [savingCallResult, setSavingCallResult] = useState(false)
+  const [showOrderForm, setShowOrderForm] = useState(false)
+  const [orderForm, setOrderForm] = useState({ type: '来店', amount: '', dueDate: '', notes: '' })
   const [allMarks, setAllMarks] = useState<ContactMark[]>([])
   const [selectedFriendMarkId, setSelectedFriendMarkId] = useState<string | null>(null)
   const [filterTagIds, setFilterTagIds] = useState<string[]>([])
@@ -909,6 +911,17 @@ export default function ChatsPage() {
 
   const handleSetCallResult = async (result: string) => {
     if (!chatDetail?.friendId || savingCallResult) return
+    if (result === '受注') {
+      // 既存の受注情報をフォームに反映
+      setOrderForm({
+        type: repairAttrs.order_type || '来店',
+        amount: repairAttrs.order_amount || '',
+        dueDate: repairAttrs.order_due_date || '',
+        notes: repairAttrs.order_notes || '',
+      })
+      setShowOrderForm(prev => !prev)
+      return
+    }
     setSavingCallResult(true)
     try {
       const newValue = repairAttrs.call_result === result ? '' : result
@@ -917,6 +930,36 @@ export default function ChatsPage() {
         body: JSON.stringify({ call_result: newValue }),
       })
       setRepairAttrs(prev => ({ ...prev, call_result: newValue }))
+      setShowOrderForm(false)
+    } catch {
+      alert('保存に失敗しました')
+    } finally {
+      setSavingCallResult(false)
+    }
+  }
+
+  const handleOrderSave = async () => {
+    if (!chatDetail?.friendId || savingCallResult) return
+    setSavingCallResult(true)
+    try {
+      await fetchApi(`/api/repair/order/${chatDetail.friendId}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          orderType: orderForm.type,
+          orderAmount: orderForm.amount,
+          orderDueDate: orderForm.dueDate,
+          orderNotes: orderForm.notes,
+        }),
+      })
+      setRepairAttrs(prev => ({
+        ...prev,
+        call_result: '受注',
+        order_type: orderForm.type,
+        order_amount: orderForm.amount,
+        order_due_date: orderForm.dueDate,
+        order_notes: orderForm.notes,
+      }))
+      setShowOrderForm(false)
     } catch {
       alert('保存に失敗しました')
     } finally {
@@ -1979,30 +2022,118 @@ export default function ChatsPage() {
                   </div>
                 </div>
 
-                {/* 電話結果 */}
+                {/* 電話見積り結果 */}
                 <div className="border-t border-gray-200">
                   <div className="px-3 py-2 bg-white flex items-center">
-                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">電話結果</p>
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">電話見積り結果</p>
                   </div>
-                  <div className="px-3 pb-3 flex gap-2">
+                  <div className="px-3 pb-2 flex gap-2">
                     {[
-                      { label: '受注', color: 'bg-green-500 hover:bg-green-600', activeColor: 'ring-2 ring-green-400' },
-                      { label: '検討中', color: 'bg-yellow-400 hover:bg-yellow-500', activeColor: 'ring-2 ring-yellow-300' },
-                      { label: '失注', color: 'bg-red-500 hover:bg-red-600', activeColor: 'ring-2 ring-red-400' },
-                    ].map(({ label, color, activeColor }) => {
+                      { label: '受注', color: 'bg-green-500 hover:bg-green-600', ring: 'ring-2 ring-green-400' },
+                      { label: '検討中', color: 'bg-yellow-400 hover:bg-yellow-500', ring: 'ring-2 ring-yellow-300' },
+                      { label: '失注', color: 'bg-red-500 hover:bg-red-600', ring: 'ring-2 ring-red-400' },
+                    ].map(({ label, color, ring }) => {
                       const isActive = repairAttrs.call_result === label
                       return (
                         <button
                           key={label}
                           onClick={() => void handleSetCallResult(label)}
                           disabled={savingCallResult}
-                          className={`flex-1 py-1.5 rounded text-xs font-semibold text-white transition-all disabled:opacity-50 ${color} ${isActive ? activeColor : 'opacity-60'}`}
+                          className={`flex-1 py-1.5 rounded text-xs font-semibold text-white transition-all disabled:opacity-50 ${color} ${isActive ? ring : 'opacity-60'}`}
                         >
                           {label}
                         </button>
                       )
                     })}
                   </div>
+
+                  {/* 受注フォーム */}
+                  {showOrderForm && (
+                    <div className="mx-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2.5">
+                      {/* 修理方法 */}
+                      <div>
+                        <p className="text-[11px] font-medium text-gray-600 mb-1">修理方法</p>
+                        <div className="flex gap-3">
+                          {['来店', '郵送'].map(t => (
+                            <label key={t} className="flex items-center gap-1 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="orderType"
+                                value={t}
+                                checked={orderForm.type === t}
+                                onChange={() => setOrderForm(f => ({ ...f, type: t }))}
+                                className="accent-green-500"
+                              />
+                              <span className="text-xs text-gray-700">{t}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      {/* 見積金額 */}
+                      <div>
+                        <p className="text-[11px] font-medium text-gray-600 mb-1">見積金額</p>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={orderForm.amount}
+                            onChange={e => setOrderForm(f => ({ ...f, amount: e.target.value }))}
+                            placeholder="例: 25000"
+                            className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                          />
+                          <span className="text-xs text-gray-500">円</span>
+                        </div>
+                      </div>
+                      {/* 納期 */}
+                      <div>
+                        <p className="text-[11px] font-medium text-gray-600 mb-1">納期</p>
+                        <input
+                          type="text"
+                          value={orderForm.dueDate}
+                          onChange={e => setOrderForm(f => ({ ...f, dueDate: e.target.value }))}
+                          placeholder="例: 2026/06/20"
+                          className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                        />
+                      </div>
+                      {/* 備考 */}
+                      <div>
+                        <p className="text-[11px] font-medium text-gray-600 mb-1">備考</p>
+                        <textarea
+                          value={orderForm.notes}
+                          onChange={e => setOrderForm(f => ({ ...f, notes: e.target.value }))}
+                          placeholder="自由入力"
+                          rows={2}
+                          className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500 resize-none"
+                        />
+                      </div>
+                      {/* ボタン */}
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => void handleOrderSave()}
+                          disabled={savingCallResult}
+                          className="flex-1 py-1.5 rounded text-xs font-semibold text-white disabled:opacity-50 bg-green-500 hover:bg-green-600 transition-colors"
+                        >
+                          {savingCallResult ? '保存中...' : '保存して通知'}
+                        </button>
+                        <button
+                          onClick={() => setShowOrderForm(false)}
+                          className="px-3 py-1.5 rounded text-xs font-medium text-gray-600 bg-gray-200 hover:bg-gray-300 transition-colors"
+                        >
+                          キャンセル
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 受注済み表示 */}
+                  {repairAttrs.call_result === '受注' && !showOrderForm && (repairAttrs.order_type || repairAttrs.order_amount) && (
+                    <div className="mx-3 mb-3 p-2.5 bg-green-50 rounded border border-green-200 text-[11px] text-gray-700 space-y-0.5">
+                      {repairAttrs.order_type && <p>修理方法：{repairAttrs.order_type}</p>}
+                      {repairAttrs.order_amount && <p>見積金額：{repairAttrs.order_amount}円</p>}
+                      {repairAttrs.order_due_date && <p>納期：{repairAttrs.order_due_date}</p>}
+                      {repairAttrs.order_notes && <p>備考：{repairAttrs.order_notes}</p>}
+                    </div>
+                  )}
                 </div>
                 </>
                 )}

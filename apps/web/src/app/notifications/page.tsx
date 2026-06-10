@@ -299,6 +299,7 @@ export default function NotificationsPage() {
               >
                 <option value="">選択してください</option>
                 <option value="contact_form_submitted">contact_form_submitted（お問い合わせフォーム送信）</option>
+                <option value="order_received">order_received（受注）</option>
                 <option value="friend_add">friend_add（友だち追加）</option>
                 <option value="message_received">message_received（メッセージ受信）</option>
                 <option value="tag_added">tag_added（タグ付与）</option>

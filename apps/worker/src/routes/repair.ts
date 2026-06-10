@@ -741,4 +741,84 @@ repairRoutes.post('/api/contact-form', async (c) => {
   }
 });
 
+// POST /api/repair/order/:friendId — 受注情報保存 + 店舗通知
+repairRoutes.post('/api/repair/order/:friendId', async (c) => {
+  const friendId = c.req.param('friendId');
+  let body: { orderType?: string; orderAmount?: string; orderDueDate?: string; orderNotes?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error: 'Invalid JSON body' }, 400);
+  }
+
+  const { orderType = '', orderAmount = '', orderDueDate = '', orderNotes = '' } = body;
+
+  try {
+    await setFriendAttribute(c.env.DB, friendId, 'call_result', '受注');
+    await setFriendAttribute(c.env.DB, friendId, 'order_type', orderType);
+    await setFriendAttribute(c.env.DB, friendId, 'order_amount', orderAmount);
+    await setFriendAttribute(c.env.DB, friendId, 'order_due_date', orderDueDate);
+    await setFriendAttribute(c.env.DB, friendId, 'order_notes', orderNotes);
+
+    // 友だち情報・修理情報を取得して通知メッセージを組み立て
+    const friend = await c.env.DB
+      .prepare('SELECT display_name FROM friends WHERE id = ? LIMIT 1')
+      .bind(friendId)
+      .first<{ display_name: string }>();
+
+    const attrs = await c.env.DB
+      .prepare(`SELECT key, value FROM friend_attributes WHERE friend_id = ? AND key IN ('phone','repair_product_name','repair_model_name','repair_symptom_name','repair_store')`)
+      .bind(friendId)
+      .all<{ key: string; value: string }>();
+    const a: Record<string, string> = {};
+    for (const row of attrs.results) a[row.key] = row.value;
+
+    const name = friend?.display_name ?? '不明';
+    const lines = [
+      `お名前：${name}`,
+      a.phone ? `電話番号：${a.phone}` : null,
+      a.repair_product_name ? `機種：${a.repair_product_name}${a.repair_model_name ? ' ' + a.repair_model_name : ''}` : null,
+      a.repair_symptom_name ? `症状：${a.repair_symptom_name}` : null,
+      `修理方法：${orderType}`,
+      orderAmount ? `見積金額：${orderAmount}円` : null,
+      orderDueDate ? `納期：${orderDueDate}` : null,
+      orderNotes ? `備考：${orderNotes}` : null,
+      a.repair_store ? `担当店舗：${a.repair_store}` : null,
+    ].filter(Boolean).join('\n');
+
+    // notification_rules の order_received ルールで通知
+    try {
+      const notifRules = await getActiveNotificationRulesByEvent(c.env.DB, 'order_received');
+      for (const rule of notifRules) {
+        const channels: string[] = JSON.parse(rule.channels);
+        if (!channels.includes('chatwork')) continue;
+        const conditions = JSON.parse(rule.conditions) as Record<string, unknown>;
+        const apiToken = (conditions.chatworkApiToken as string | undefined) || c.env.CHATWORK_API_TOKEN;
+        const roomId = (conditions.chatworkRoomId as string | undefined) || c.env.CHATWORK_ROOM_ID;
+        if (!apiToken || !roomId) continue;
+        const toPrefix = conditions.chatworkToId
+          ? (conditions.chatworkToId as string).split(',').map(id => `[To:${id.trim()}]`).join('') + '\n'
+          : '';
+        const msgBody = `${toPrefix}[info][title]${rule.name}[/title]${lines}[/info]`;
+        const notifRecord = await createNotification(c.env.DB, {
+          ruleId: rule.id, eventType: 'order_received', title: rule.name, body: msgBody, channel: 'chatwork',
+        });
+        try {
+          await sendChatworkMessage(apiToken, roomId, msgBody);
+          await updateNotificationStatus(c.env.DB, notifRecord.id, 'sent');
+        } catch {
+          await updateNotificationStatus(c.env.DB, notifRecord.id, 'failed');
+        }
+      }
+    } catch (err) {
+      console.error('order_received notification error:', err);
+    }
+
+    return c.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/repair/order/:friendId error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 export { repairRoutes };
