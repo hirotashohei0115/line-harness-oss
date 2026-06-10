@@ -246,20 +246,24 @@ export default function NotificationsPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">イベントタイプ <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="例: friend_add, message_received, tag_added"
+              <select
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
                 value={form.eventType}
                 onChange={(e) => setForm({ ...form, eventType: e.target.value })}
-              />
+              >
+                <option value="">選択してください</option>
+                <option value="contact_form_submitted">contact_form_submitted（お問い合わせフォーム送信）</option>
+                <option value="friend_add">friend_add（友だち追加）</option>
+                <option value="message_received">message_received（メッセージ受信）</option>
+                <option value="tag_added">tag_added（タグ付与）</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">通知チャンネル</label>
               <input
                 type="text"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="email,slack,webhook (カンマ区切り)"
+                placeholder="chatwork,slack,webhook (カンマ区切り)"
                 value={form.channels}
                 onChange={(e) => setForm({ ...form, channels: e.target.value })}
               />
