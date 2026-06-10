@@ -435,7 +435,7 @@ export default function ChatsPage() {
   const [addingTag, setAddingTag] = useState(false)
   const [savingCallResult, setSavingCallResult] = useState(false)
   const [showOrderForm, setShowOrderForm] = useState(false)
-  const [orderForm, setOrderForm] = useState({ type: '来店', amount: '', dueDate: '', notes: '' })
+  const [orderForm, setOrderForm] = useState({ type: '来店', store: '', amount: '', dueDate: '', notes: '' })
   const [allMarks, setAllMarks] = useState<ContactMark[]>([])
   const [selectedFriendMarkId, setSelectedFriendMarkId] = useState<string | null>(null)
   const [filterTagIds, setFilterTagIds] = useState<string[]>([])
@@ -915,6 +915,7 @@ export default function ChatsPage() {
       // 既存の受注情報をフォームに反映
       setOrderForm({
         type: repairAttrs.order_type || '来店',
+        store: repairAttrs.order_store || repairAttrs.repair_store || '',
         amount: repairAttrs.order_amount || '',
         dueDate: repairAttrs.order_due_date || '',
         notes: repairAttrs.order_notes || '',
@@ -946,6 +947,7 @@ export default function ChatsPage() {
         method: 'POST',
         body: JSON.stringify({
           orderType: orderForm.type,
+          orderStore: orderForm.store,
           orderAmount: orderForm.amount,
           orderDueDate: orderForm.dueDate,
           orderNotes: orderForm.notes,
@@ -955,6 +957,7 @@ export default function ChatsPage() {
         ...prev,
         call_result: '受注',
         order_type: orderForm.type,
+        order_store: orderForm.store,
         order_amount: orderForm.amount,
         order_due_date: orderForm.dueDate,
         order_notes: orderForm.notes,
@@ -2069,6 +2072,21 @@ export default function ChatsPage() {
                           ))}
                         </div>
                       </div>
+                      {/* 店舗 */}
+                      <div>
+                        <p className="text-[11px] font-medium text-gray-600 mb-1">店舗</p>
+                        <select
+                          value={orderForm.store}
+                          onChange={e => setOrderForm(f => ({ ...f, store: e.target.value }))}
+                          className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500 bg-white"
+                        >
+                          <option value="">（未選択）</option>
+                          {['青森店','盛岡店','宇都宮店','菖蒲店','成田店','幕張店','錦糸町店','五反田店','長岡店','岐阜店','木津川店','大分店',
+                            '郵送修理センター盛岡店','郵送修理センター菖蒲店','郵送修理センター岐阜店','郵送修理センター大分店'].map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
                       {/* 見積金額 */}
                       <div>
                         <p className="text-[11px] font-medium text-gray-600 mb-1">見積金額</p>
@@ -2129,6 +2147,7 @@ export default function ChatsPage() {
                   {repairAttrs.call_result === '受注' && !showOrderForm && (repairAttrs.order_type || repairAttrs.order_amount) && (
                     <div className="mx-3 mb-3 p-2.5 bg-green-50 rounded border border-green-200 text-[11px] text-gray-700 space-y-0.5">
                       {repairAttrs.order_type && <p>修理方法：{repairAttrs.order_type}</p>}
+                      {repairAttrs.order_store && <p>店舗：{repairAttrs.order_store}</p>}
                       {repairAttrs.order_amount && <p>見積金額：{repairAttrs.order_amount}円</p>}
                       {repairAttrs.order_due_date && <p>納期：{repairAttrs.order_due_date}</p>}
                       {repairAttrs.order_notes && <p>備考：{repairAttrs.order_notes}</p>}

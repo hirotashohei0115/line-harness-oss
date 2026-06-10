@@ -745,18 +745,19 @@ repairRoutes.post('/api/contact-form', async (c) => {
 // POST /api/repair/order/:friendId — 受注情報保存 + 店舗通知
 repairRoutes.post('/api/repair/order/:friendId', async (c) => {
   const friendId = c.req.param('friendId');
-  let body: { orderType?: string; orderAmount?: string; orderDueDate?: string; orderNotes?: string };
+  let body: { orderType?: string; orderStore?: string; orderAmount?: string; orderDueDate?: string; orderNotes?: string };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ success: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const { orderType = '', orderAmount = '', orderDueDate = '', orderNotes = '' } = body;
+  const { orderType = '', orderStore = '', orderAmount = '', orderDueDate = '', orderNotes = '' } = body;
 
   try {
     await setFriendAttribute(c.env.DB, friendId, 'call_result', '受注');
     await setFriendAttribute(c.env.DB, friendId, 'order_type', orderType);
+    await setFriendAttribute(c.env.DB, friendId, 'order_store', orderStore);
     await setFriendAttribute(c.env.DB, friendId, 'order_amount', orderAmount);
     await setFriendAttribute(c.env.DB, friendId, 'order_due_date', orderDueDate);
     await setFriendAttribute(c.env.DB, friendId, 'order_notes', orderNotes);
@@ -781,10 +782,10 @@ repairRoutes.post('/api/repair/order/:friendId', async (c) => {
       a.repair_product_name ? `機種：${a.repair_product_name}${a.repair_model_name ? ' ' + a.repair_model_name : ''}` : null,
       a.repair_symptom_name ? `症状：${a.repair_symptom_name}` : null,
       `修理方法：${orderType}`,
+      orderStore ? `店舗：${orderStore}` : (a.repair_store ? `店舗：${a.repair_store}` : null),
       orderAmount ? `見積金額：${orderAmount}円` : null,
       orderDueDate ? `納期：${orderDueDate}` : null,
       orderNotes ? `備考：${orderNotes}` : null,
-      a.repair_store ? `担当店舗：${a.repair_store}` : null,
     ].filter(Boolean).join('\n');
 
     // notification_rules の order_received ルールで通知
