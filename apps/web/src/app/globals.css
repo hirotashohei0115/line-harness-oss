@@ -1,1 +1,18 @@
 @import "tailwindcss";
+
+/* Fullscreen mode: hide sidebar and reset main padding */
+:fullscreen #app-sidebar,
+:-webkit-full-screen #app-sidebar {
+  display: none !important;
+}
+:fullscreen #app-mobile-header,
+:-webkit-full-screen #app-mobile-header {
+  display: none !important;
+}
+:fullscreen main,
+:-webkit-full-screen main {
+  padding-top: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-bottom: 0 !important;
+}

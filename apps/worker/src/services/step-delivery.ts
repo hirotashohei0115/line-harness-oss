@@ -6,6 +6,7 @@ import {
   completeFriendScenario,
   getFriendById,
   jstNow,
+  upsertChatOnOutgoingMessage,
 } from '@line-crm/db';
 import type { LineClient } from '@line-crm/line-sdk';
 import type { Message } from '@line-crm/line-sdk';
@@ -185,6 +186,9 @@ async function processSingleDelivery(
     )
     .bind(logId, friend.id, currentStep.message_type, currentStep.message_content, currentStep.id, jstNow())
     .run();
+
+  // Update chats table so the conversation appears at the top of the admin chat list
+  await upsertChatOnOutgoingMessage(db, friend.id);
 
   // Determine next step (find the step after currentStep in the sorted list)
   const currentIndex = steps.indexOf(currentStep);

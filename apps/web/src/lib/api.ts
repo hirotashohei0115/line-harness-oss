@@ -30,6 +30,80 @@ import type { Broadcast } from '@line-crm/shared'
 /** Broadcast type from API (now camelCase after worker serialization) */
 export type ApiBroadcast = Broadcast
 
+export type ContactMark = {
+  id: string
+  name: string
+  color: string
+  sortOrder: number
+  isDefault: boolean
+  createdAt: string
+}
+
+export type FunnelStep = {
+  id: string
+  funnelId: string
+  name: string
+  stepOrder: number
+  conditionType: 'tag' | 'contact_mark' | 'action'
+  conditionIds: string[]
+  createdAt: string
+}
+
+export type Funnel = {
+  id: string
+  name: string
+  description: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type FunnelWithSteps = Funnel & { steps: FunnelStep[] }
+
+export type FunnelAnalyzeResult = {
+  funnel: Funnel
+  period: { from: string; to: string }
+  total: number
+  steps: { name: string; reached: number; notReached: number; rate: number; prevRate: number; totalRate: number; dropoff: number }[]
+}
+
+export type FunnelStepUser = {
+  id: string
+  displayName: string | null
+  pictureUrl: string | null
+  contactMarkId: string | null
+  chatId: string | null
+  lastMessageAt: string | null
+}
+
+export type AxisGroup = {
+  id: string
+  name: string
+  itemIds: string[]
+}
+
+export type CrossAnalysis = {
+  id: string
+  name: string
+  axis1Type: 'tag' | 'contact_mark'
+  axis1ItemIds: string[]
+  axis1Groups: AxisGroup[]
+  axis2Type: 'tag' | 'contact_mark'
+  axis2ItemIds: string[]
+  axis2Groups: AxisGroup[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type CrossRunResult = {
+  name: string
+  period: { from: string; to: string }
+  axis1Items: { id: string; name: string }[]
+  axis2Items: { id: string; name: string }[]
+  cells: Record<string, Record<string, number>>
+  rowTotals: Record<string, number>
+  colTotals: Record<string, number>
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
 
 /**
@@ -52,7 +126,18 @@ export async function fetchApi<T>(path: string, options?: RequestInit): Promise<
       ...options?.headers,
     },
   })
-  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  if (!res.ok) {
+    if (res.status === 401) {
+      // セッション切れをグローバルに通知（AppShellがモーダル表示）
+      if (typeof window !== 'undefined') {
+        import('@/components/app-shell').then(({ triggerSessionExpired }) => {
+          triggerSessionExpired()
+        }).catch(() => {})
+      }
+    }
+    const body = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(body.error ?? `API error: ${res.status}`)
+  }
   return res.json() as Promise<T>
 }
 
@@ -60,10 +145,12 @@ export type FriendListParams = {
   offset?: string
   limit?: string
   tagId?: string
+  tagIds?: string
+  markId?: string
   accountId?: string
 }
 
-export type FriendWithTags = Friend & { tags: Tag[] }
+export type FriendWithTags = Friend & { tags: Tag[]; contactMarkId?: string | null; isPinned?: boolean; pinnedAt?: string | null }
 
 export const api = {
   friends: {
@@ -72,6 +159,8 @@ export const api = {
       if (params?.offset) query.offset = params.offset
       if (params?.limit) query.limit = params.limit
       if (params?.tagId) query.tagId = params.tagId
+      if (params?.tagIds) query.tagIds = params.tagIds
+      if (params?.markId) query.markId = params.markId
       if (params?.accountId) query.lineAccountId = params.accountId
       return fetchApi<ApiResponse<PaginatedResponse<FriendWithTags>>>(
         '/api/friends?' + new URLSearchParams(query)
@@ -92,6 +181,18 @@ export const api = {
       fetchApi<ApiResponse<null>>(`/api/friends/${friendId}/tags/${tagId}`, {
         method: 'DELETE',
       }),
+    updateMark: (friendId: string, markId: string | null) =>
+      fetchApi<ApiResponse<null>>(`/api/friends/${friendId}/mark`, {
+        method: 'PATCH',
+        body: JSON.stringify({ markId }),
+      }),
+    pin: (friendId: string, pinned: boolean) =>
+      fetchApi<ApiResponse<null>>(`/api/friends/${friendId}/pin`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pinned }),
+      }),
+    search: (q: string) =>
+      fetchApi<ApiResponse<string[]>>(`/api/friends/search?q=${encodeURIComponent(q)}`),
   },
   tags: {
     list: () =>
@@ -103,6 +204,46 @@ export const api = {
       }),
     delete: (id: string) =>
       fetchApi<ApiResponse<null>>(`/api/tags/${id}`, { method: 'DELETE' }),
+  },
+  marks: {
+    list: () =>
+      fetchApi<ApiResponse<ContactMark[]>>('/api/marks'),
+    create: (data: { name: string; color: string; sortOrder?: number }) =>
+      fetchApi<ApiResponse<ContactMark>>('/api/marks', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: { name?: string; color?: string; sortOrder?: number }) =>
+      fetchApi<ApiResponse<ContactMark>>(`/api/marks/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      fetchApi<ApiResponse<null>>(`/api/marks/${id}`, { method: 'DELETE' }),
+  },
+  funnels: {
+    list: () => fetchApi<ApiResponse<Funnel[]>>('/api/funnels'),
+    get: (id: string) => fetchApi<ApiResponse<FunnelWithSteps>>(`/api/funnels/${id}`),
+    create: (data: { name: string; description?: string; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark' | 'action'; condition_ids: string[] }[] }) =>
+      fetchApi<ApiResponse<FunnelWithSteps>>('/api/funnels', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { name?: string; description?: string | null; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark' | 'action'; condition_ids: string[] }[] }) =>
+      fetchApi<ApiResponse<FunnelWithSteps>>(`/api/funnels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) => fetchApi<ApiResponse<null>>(`/api/funnels/${id}`, { method: 'DELETE' }),
+    analyze: (id: string, from: string, to: string) =>
+      fetchApi<ApiResponse<FunnelAnalyzeResult>>(`/api/funnels/${id}/analyze?from=${from}&to=${to}`),
+    stepUsers: (id: string, stepIndex: number, variant: 'reached' | 'not_reached' | 'base', from: string, to: string) =>
+      fetchApi<ApiResponse<{ users: FunnelStepUser[] }>>(`/api/funnels/${id}/step-users?stepIndex=${stepIndex}&variant=${variant}&from=${from}&to=${to}`),
+  },
+  crossAnalyses: {
+    list: () => fetchApi<ApiResponse<CrossAnalysis[]>>('/api/cross-analyses'),
+    get: (id: string) => fetchApi<ApiResponse<CrossAnalysis>>(`/api/cross-analyses/${id}`),
+    create: (data: { name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] } }) =>
+      fetchApi<ApiResponse<CrossAnalysis>>('/api/cross-analyses', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<{ name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] } }>) =>
+      fetchApi<ApiResponse<CrossAnalysis>>(`/api/cross-analyses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) => fetchApi<ApiResponse<null>>(`/api/cross-analyses/${id}`, { method: 'DELETE' }),
+    run: (data: { name?: string; period?: { from: string; to: string }; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] } }) =>
+      fetchApi<ApiResponse<CrossRunResult>>('/api/cross-analyses/run', { method: 'POST', body: JSON.stringify(data) }),
   },
   scenarios: {
     list: (params?: { accountId?: string }) => {
@@ -221,7 +362,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    update: (id: string, data: Partial<Pick<LineAccount, 'name' | 'channelAccessToken' | 'channelSecret' | 'isActive'>>) =>
+    update: (id: string, data: Partial<Pick<LineAccount, 'name' | 'channelAccessToken' | 'channelSecret' | 'isActive'>> & { adminUrl?: string | null }) =>
       fetchApi<ApiResponse<LineAccount>>(`/api/line-accounts/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -292,6 +433,15 @@ export const api = {
       ),
     delete: (id: string) =>
       fetchApi<ApiResponse<null>>(`/api/templates/${id}`, { method: 'DELETE' }),
+    duplicate: (id: string) =>
+      fetchApi<ApiResponse<{ id: string; name: string }>>(`/api/templates/${id}/duplicate`, { method: 'POST' }),
+    patch: (id: string, data: Partial<{ name: string; category: string; messageType: string; messageContent: string }>) =>
+      fetchApi<ApiResponse<{ id: string; name: string; category: string; messageType: string; messageContent: string }>>(
+        `/api/templates/${id}`,
+        { method: 'PATCH', body: JSON.stringify(data) },
+      ),
+    reorder: (orders: { id: string; sort_order: number }[]) =>
+      fetchApi<ApiResponse<null>>('/api/templates/reorder', { method: 'PATCH', body: JSON.stringify({ orders }) }),
   },
   automations: {
     list: (params?: { accountId?: string }) => {
@@ -325,11 +475,12 @@ export const api = {
       ),
   },
   chats: {
-    list: (params?: { status?: string; operatorId?: string; accountId?: string }) => {
+    list: (params?: { status?: string; operatorId?: string; accountId?: string; unread?: boolean }) => {
       const query: Record<string, string> = {}
       if (params?.status) query.status = params.status
       if (params?.operatorId) query.operatorId = params.operatorId
       if (params?.accountId) query.lineAccountId = params.accountId
+      if (params?.unread) query.unread = 'true'
       return fetchApi<ApiResponse<Chat[]>>(
         '/api/chats?' + new URLSearchParams(query),
       )
@@ -353,6 +504,12 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    unreadCount: (params?: { accountId?: string }) => {
+      const q = params?.accountId ? `?lineAccountId=${encodeURIComponent(params.accountId)}` : ''
+      return fetchApi<ApiResponse<{ count: number }>>(`/api/chats/unread-count${q}`)
+    },
+    readAll: (id: string) =>
+      fetchApi<ApiResponse<null>>(`/api/chats/${id}/read-all`, { method: 'POST' }),
   },
   reminders: {
     list: (params?: { accountId?: string }) => {

@@ -1,13 +1,16 @@
-name = "line-harness"
+name = "macbook-repair-worker"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 workers_dev = true
-account_id = "c40947ff58a767be74a53be79a89d68a"
+account_id = "d072cd36796fe9511a2ba4c0f047ea9f"
+
+[dev]
+port = 8787
 
 [[d1_databases]]
 binding = "DB"
-database_name = "line-harness"
-database_id = "7efe7c20-01ae-4d65-be08-0d7b4202e8a1"
+database_name = "macbook-repair-db"
+database_id = "c3c1a77c-6d5a-49fc-81ee-78c248ad6a23"
 
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "0 1 * * *"]

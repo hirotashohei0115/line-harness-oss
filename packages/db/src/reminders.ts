@@ -101,6 +101,13 @@ export async function enrollFriendInReminder(
   db: D1Database,
   input: { friendId: string; reminderId: string; targetDate: string },
 ): Promise<FriendReminderRow> {
+  // Prevent duplicate active enrollment for the same friend + reminder
+  const existing = await db
+    .prepare(`SELECT * FROM friend_reminders WHERE friend_id = ? AND reminder_id = ? AND status = 'active' LIMIT 1`)
+    .bind(input.friendId, input.reminderId)
+    .first<FriendReminderRow>();
+  if (existing) return existing;
+
   const id = crypto.randomUUID();
   const now = jstNow();
   await db.prepare(`INSERT INTO friend_reminders (id, friend_id, reminder_id, target_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)

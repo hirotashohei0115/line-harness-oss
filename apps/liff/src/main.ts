@@ -16,6 +16,9 @@
 
 import { initBooking } from './booking.js';
 import { initForm } from './form.js';
+import { initMailRepair } from './mail-repair.js';
+import { initReservation } from './reservation.js';
+import { initVisitRepair } from './visit-repair.js';
 
 declare const liff: {
   init(config: { liffId: string }): Promise<void>;
@@ -34,7 +37,7 @@ function detectLiffId(): string {
   const params = new URLSearchParams(window.location.search);
   const fromParam = params.get('liffId');
   if (fromParam) return fromParam;
-  return import.meta.env?.VITE_LIFF_ID || '';
+  return '2010126656-iMP2b4Jw';
 }
 const LIFF_ID = detectLiffId();
 const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:8787';
@@ -268,6 +271,12 @@ async function main() {
       const params = new URLSearchParams(window.location.search);
       const formId = params.get('id');
       await initForm(formId);
+    } else if (page === 'mail-repair') {
+      await initMailRepair();
+    } else if (page === 'reservation') {
+      await initReservation();
+    } else if (page === 'visit-repair') {
+      await initVisitRepair();
     } else {
       await linkAndAddFlow();
     }

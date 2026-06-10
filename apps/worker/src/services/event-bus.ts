@@ -219,9 +219,16 @@ async function executeAction(
       await removeTagFromFriend(db, friendId!, action.params.tagId);
       break;
 
-    case 'start_scenario':
-      await enrollFriendInScenario(db, friendId!, action.params.scenarioId);
+    case 'start_scenario': {
+      const existingScenario = await db
+        .prepare(`SELECT id FROM friend_scenarios WHERE friend_id = ? AND scenario_id = ? AND status = 'active'`)
+        .bind(friendId!, action.params.scenarioId)
+        .first<{ id: string }>();
+      if (!existingScenario) {
+        await enrollFriendInScenario(db, friendId!, action.params.scenarioId);
+      }
       break;
+    }
 
     case 'send_message': {
       if (!lineAccessToken || !friendId) break;

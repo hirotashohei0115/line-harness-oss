@@ -7,17 +7,27 @@ export interface TemplateRow {
   category: string;
   message_type: string;
   message_content: string;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
 
-export async function getTemplates(db: D1Database, category?: string): Promise<TemplateRow[]> {
+export async function getTemplates(db: D1Database, category?: string, accountId?: string): Promise<TemplateRow[]> {
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+
   if (category) {
-    const result = await db.prepare(`SELECT * FROM templates WHERE category = ? ORDER BY created_at DESC`)
-      .bind(category).all<TemplateRow>();
-    return result.results;
+    conditions.push('category = ?');
+    values.push(category);
   }
-  const result = await db.prepare(`SELECT * FROM templates ORDER BY created_at DESC`).all<TemplateRow>();
+  if (accountId) {
+    conditions.push('(line_account_id = ? OR line_account_id IS NULL)');
+    values.push(accountId);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const result = await db.prepare(`SELECT * FROM templates ${where} ORDER BY sort_order ASC, created_at ASC`)
+    .bind(...values).all<TemplateRow>();
   return result.results;
 }
 
@@ -56,4 +66,10 @@ export async function updateTemplate(
 
 export async function deleteTemplate(db: D1Database, id: string): Promise<void> {
   await db.prepare(`DELETE FROM templates WHERE id = ?`).bind(id).run();
+}
+
+export async function reorderTemplates(db: D1Database, orders: { id: string; sort_order: number }[]): Promise<void> {
+  for (const { id, sort_order } of orders) {
+    await db.prepare(`UPDATE templates SET sort_order = ? WHERE id = ?`).bind(sort_order, id).run();
+  }
 }

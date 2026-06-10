@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { Tag } from '@line-crm/shared'
 import { api } from '@/lib/api'
 import type { FriendWithTags } from '@/lib/api'
+import type { ContactMark } from '@/lib/api'
 import Header from '@/components/layout/header'
 import FriendTable from '@/components/friends/friend-table'
 import CcPromptButton from '@/components/cc-prompt-button'
@@ -34,10 +35,12 @@ export default function FriendsPage() {
   const { selectedAccountId } = useAccount()
   const [friends, setFriends] = useState<FriendWithTags[]>([])
   const [allTags, setAllTags] = useState<Tag[]>([])
+  const [allMarks, setAllMarks] = useState<ContactMark[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [hasNextPage, setHasNextPage] = useState(false)
   const [selectedTagId, setSelectedTagId] = useState('')
+  const [selectedMarkId, setSelectedMarkId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -50,6 +53,15 @@ export default function FriendsPage() {
     }
   }, [])
 
+  const loadMarks = useCallback(async () => {
+    try {
+      const res = await api.marks.list()
+      if (res.success) setAllMarks(res.data)
+    } catch {
+      // non-blocking
+    }
+  }, [])
+
   const loadFriends = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -59,6 +71,7 @@ export default function FriendsPage() {
         limit: String(PAGE_SIZE),
       }
       if (selectedTagId) params.tagId = selectedTagId
+      if (selectedMarkId) params.markId = selectedMarkId
       if (selectedAccountId) params.accountId = selectedAccountId
 
       const res = await api.friends.list(params)
@@ -74,15 +87,19 @@ export default function FriendsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, selectedTagId, selectedAccountId])
+  }, [page, selectedTagId, selectedMarkId, selectedAccountId])
 
   useEffect(() => {
     loadTags()
   }, [loadTags])
 
   useEffect(() => {
+    loadMarks()
+  }, [loadMarks])
+
+  useEffect(() => {
     setPage(1)
-  }, [selectedTagId, selectedAccountId])
+  }, [selectedTagId, selectedMarkId, selectedAccountId])
 
   useEffect(() => {
     loadFriends()
@@ -108,6 +125,19 @@ export default function FriendsPage() {
             <option value="">すべて</option>
             {allTags.map((tag) => (
               <option key={tag.id} value={tag.id}>{tag.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600 font-medium whitespace-nowrap">マーク:</label>
+          <select
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] bg-white focus:outline-none focus:ring-2 focus:ring-green-500 flex-1 sm:flex-none"
+            value={selectedMarkId}
+            onChange={(e) => setSelectedMarkId(e.target.value)}
+          >
+            <option value="">すべて</option>
+            {allMarks.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
         </div>
@@ -143,6 +173,7 @@ export default function FriendsPage() {
         <FriendTable
           friends={friends}
           allTags={allTags}
+          allMarks={allMarks}
           onRefresh={loadFriends}
         />
       )}

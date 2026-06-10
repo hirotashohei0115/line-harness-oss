@@ -555,3 +555,130 @@ CREATE TABLE IF NOT EXISTS staff_members (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_members_api_key ON staff_members(api_key);
 CREATE INDEX IF NOT EXISTS idx_staff_members_role ON staff_members(role);
+
+-- ============================================================
+-- MacBook Repair Quote Flow
+-- ============================================================
+CREATE TABLE IF NOT EXISTS repair_products (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active  INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
+CREATE TABLE IF NOT EXISTS repair_models (
+  id         TEXT PRIMARY KEY,
+  product_id TEXT NOT NULL REFERENCES repair_products (id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  year       INTEGER,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active  INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_repair_models_product ON repair_models (product_id);
+
+CREATE TABLE IF NOT EXISTS repair_symptoms (
+  id         TEXT PRIMARY KEY,
+  product_id TEXT NOT NULL REFERENCES repair_products (id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active  INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_repair_symptoms_product ON repair_symptoms (product_id);
+
+CREATE TABLE IF NOT EXISTS repair_prices (
+  id                 TEXT PRIMARY KEY,
+  product_id         TEXT NOT NULL REFERENCES repair_products (id) ON DELETE CASCADE,
+  symptom_id         TEXT NOT NULL REFERENCES repair_symptoms (id) ON DELETE CASCADE,
+  price_from         INTEGER NOT NULL,
+  price_to           INTEGER,
+  delivery_days_from INTEGER NOT NULL DEFAULT 1,
+  delivery_days_to   INTEGER,
+  notes              TEXT,
+  created_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repair_prices_product_symptom ON repair_prices (product_id, symptom_id);
+
+CREATE TABLE IF NOT EXISTS repair_quotes (
+  id                 TEXT PRIMARY KEY,
+  friend_id          TEXT NOT NULL REFERENCES friends (id) ON DELETE CASCADE,
+  -- NOTE: repair_products cascade-deletes repair_models/repair_symptoms first; SET NULL fires correctly.
+  product_id         TEXT REFERENCES repair_products (id) ON DELETE SET NULL,
+  model_id           TEXT REFERENCES repair_models (id) ON DELETE SET NULL,
+  symptom_id         TEXT REFERENCES repair_symptoms (id) ON DELETE SET NULL,
+  model_name         TEXT,
+  year               INTEGER,
+  price_from         INTEGER,
+  price_to           INTEGER,
+  delivery_days_from INTEGER,
+  delivery_days_to   INTEGER,
+  request_type       TEXT CHECK (request_type IN ('mail', 'store', 'consult')),
+  status             TEXT NOT NULL DEFAULT 'quoted' CHECK (status IN ('quoted', 'ordered', 'cancelled')),
+  follow_sent        INTEGER NOT NULL DEFAULT 0,
+  created_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_repair_quotes_friend   ON repair_quotes (friend_id);
+CREATE INDEX IF NOT EXISTS idx_repair_quotes_product  ON repair_quotes (product_id);
+CREATE INDEX IF NOT EXISTS idx_repair_quotes_status   ON repair_quotes (status);
+
+CREATE TABLE IF NOT EXISTS friend_attributes (
+  id         TEXT PRIMARY KEY,
+  friend_id  TEXT NOT NULL REFERENCES friends (id) ON DELETE CASCADE,
+  key        TEXT NOT NULL,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  UNIQUE (friend_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_friend_attributes_friend ON friend_attributes (friend_id);
+
+-- ============================================================
+-- MacBook Model-based Repair Prices
+-- ============================================================
+CREATE TABLE IF NOT EXISTS repair_model_prices (
+  id           TEXT PRIMARY KEY,
+  model_number TEXT NOT NULL,
+  product_type TEXT NOT NULL CHECK (product_type IN ('air', 'pro', 'other')),
+  year         INTEGER NOT NULL,
+  inch_size    REAL NOT NULL,
+  symptom       TEXT NOT NULL,
+  price         INTEGER,
+  delivery_days TEXT,
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_repair_model_prices_model ON repair_model_prices (model_number);
+CREATE INDEX IF NOT EXISTS idx_repair_model_prices_symptom ON repair_model_prices (symptom);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repair_model_prices_unique ON repair_model_prices (model_number, symptom);
+
+
+-- ============================================================
+-- Mail Orders (郵送修理依頼)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS mail_orders (
+  id               TEXT PRIMARY KEY,
+  friend_id        TEXT NOT NULL REFERENCES friends(id) ON DELETE CASCADE,
+  name             TEXT NOT NULL,
+  postal_code      TEXT NOT NULL,
+  address          TEXT NOT NULL,
+  phone            TEXT NOT NULL,
+  packaging_kit    INTEGER NOT NULL DEFAULT 0,
+  delivery_store   TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'pending',
+  created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_mail_orders_friend ON mail_orders (friend_id);
+CREATE INDEX IF NOT EXISTS idx_mail_orders_status ON mail_orders (status);
