@@ -652,6 +652,7 @@ repairRoutes.post('/api/contact-form', async (c) => {
 
       await upsertChatOnMessage(c.env.DB, row.id);
       await addTagToFriend(c.env.DB, row.id, '見積り依頼あり');
+      await removeTagsByNames(c.env.DB, row.id, ['タグなし']);
       await setContactMark(c.env.DB, row.id, 'mark_29');
 
       // 表示名をフォーム入力の名前で更新
