@@ -13,6 +13,7 @@ export interface AccountWithStats {
   displayName?: string
   pictureUrl?: string
   basicId?: string
+  adminUrl?: string | null
   isActive: boolean
   stats?: {
     friendCount: number

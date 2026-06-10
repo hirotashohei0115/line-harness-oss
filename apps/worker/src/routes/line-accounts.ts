@@ -17,6 +17,7 @@ function serializeLineAccount(row: DbLineAccount) {
     id: row.id,
     channelId: row.channel_id,
     name: row.name,
+    adminUrl: row.admin_url ?? null,
     isActive: Boolean(row.is_active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -109,7 +110,7 @@ lineAccounts.get('/api/line-accounts/:id', async (c) => {
 });
 
 // POST /api/line-accounts - create
-lineAccounts.post('/api/line-accounts', requireRole('owner'), async (c) => {
+lineAccounts.post('/api/line-accounts', requireRole('owner', 'admin'), async (c) => {
   try {
     const body = await c.req.json<{
       channelId: string;
@@ -134,13 +135,14 @@ lineAccounts.post('/api/line-accounts', requireRole('owner'), async (c) => {
 });
 
 // PUT /api/line-accounts/:id - update
-lineAccounts.put('/api/line-accounts/:id', requireRole('owner'), async (c) => {
+lineAccounts.put('/api/line-accounts/:id', requireRole('owner', 'admin'), async (c) => {
   try {
     const id = c.req.param('id')!;
     const body = await c.req.json<{
       name?: string;
       channelAccessToken?: string;
       channelSecret?: string;
+      adminUrl?: string | null;
       isActive?: boolean;
     }>();
 
@@ -148,6 +150,7 @@ lineAccounts.put('/api/line-accounts/:id', requireRole('owner'), async (c) => {
       name: body.name,
       channel_access_token: body.channelAccessToken,
       channel_secret: body.channelSecret,
+      admin_url: body.adminUrl !== undefined ? (body.adminUrl || null) : undefined,
       is_active: body.isActive !== undefined ? (body.isActive ? 1 : 0) : undefined,
     });
 
@@ -162,7 +165,7 @@ lineAccounts.put('/api/line-accounts/:id', requireRole('owner'), async (c) => {
 });
 
 // DELETE /api/line-accounts/:id - delete
-lineAccounts.delete('/api/line-accounts/:id', requireRole('owner'), async (c) => {
+lineAccounts.delete('/api/line-accounts/:id', requireRole('owner', 'admin'), async (c) => {
   try {
     await deleteLineAccount(c.env.DB, c.req.param('id')!);
     return c.json({ success: true, data: null });

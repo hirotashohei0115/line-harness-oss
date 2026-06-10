@@ -362,7 +362,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    update: (id: string, data: Partial<Pick<LineAccount, 'name' | 'channelAccessToken' | 'channelSecret' | 'isActive'>>) =>
+    update: (id: string, data: Partial<Pick<LineAccount, 'name' | 'channelAccessToken' | 'channelSecret' | 'isActive'>> & { adminUrl?: string | null }) =>
       fetchApi<ApiResponse<LineAccount>>(`/api/line-accounts/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
