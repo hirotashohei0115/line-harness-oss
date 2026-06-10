@@ -335,13 +335,31 @@ export default function NotificationsPage() {
             )}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">通知チャンネル</label>
-              <input
-                type="text"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="chatwork,slack,webhook (カンマ区切り)"
-                value={form.channels}
-                onChange={(e) => setForm({ ...form, channels: e.target.value })}
-              />
+              <div className="flex gap-4 mt-1">
+                {[
+                  { value: 'chatwork', label: 'チャットワーク' },
+                  { value: 'line', label: 'LINE' },
+                ].map(({ value, label }) => {
+                  const selected = form.channels.split(',').map(c => c.trim()).filter(Boolean)
+                  const checked = selected.includes(value)
+                  return (
+                    <label key={value} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          const next = checked
+                            ? selected.filter(c => c !== value)
+                            : [...selected, value]
+                          setForm({ ...form, channels: next.join(',') })
+                        }}
+                        className="accent-green-500 w-4 h-4"
+                      />
+                      <span className="text-sm text-gray-700">{label}</span>
+                    </label>
+                  )
+                })}
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Chatwork APIトークン</label>
