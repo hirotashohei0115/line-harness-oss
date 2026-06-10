@@ -436,6 +436,8 @@ export default function ChatsPage() {
   const [savingCallResult, setSavingCallResult] = useState(false)
   const [showOrderForm, setShowOrderForm] = useState(false)
   const [orderForm, setOrderForm] = useState({ type: '来店', store: '', amount: '', dueDate: '', notes: '' })
+  const [showReasonForm, setShowReasonForm] = useState<string | null>(null)
+  const [reasonText, setReasonText] = useState('')
   const [allMarks, setAllMarks] = useState<ContactMark[]>([])
   const [selectedFriendMarkId, setSelectedFriendMarkId] = useState<string | null>(null)
   const [filterTagIds, setFilterTagIds] = useState<string[]>([])
@@ -909,10 +911,28 @@ export default function ChatsPage() {
     }
   }
 
+  const addTagByName = async (friendId: string, tagName: string) => {
+    let tag = allTags.find(t => t.name === tagName)
+    if (!tag) {
+      const createRes = await fetchApi<{ success: boolean; data: Tag }>(`/api/tags`, {
+        method: 'POST',
+        body: JSON.stringify({ name: tagName }),
+      })
+      if (!createRes.success) return
+      tag = createRes.data
+      setAllTags(prev => [...prev, tag!])
+    }
+    if (friendTags.some(t => t.id === tag!.id)) return
+    await fetchApi(`/api/friends/${friendId}/tags`, {
+      method: 'POST',
+      body: JSON.stringify({ tagId: tag.id }),
+    })
+    setFriendTags(prev => [...prev, tag!])
+  }
+
   const handleSetCallResult = async (result: string) => {
     if (!chatDetail?.friendId || savingCallResult) return
     if (result === '受注') {
-      // 既存の受注情報をフォームに反映
       setOrderForm({
         type: repairAttrs.order_type || '来店',
         store: repairAttrs.order_store || repairAttrs.repair_store || '',
@@ -921,17 +941,28 @@ export default function ChatsPage() {
         notes: repairAttrs.order_notes || '',
       })
       setShowOrderForm(prev => !prev)
+      setShowReasonForm(null)
       return
     }
+    if (result === '検討中' || result === '失注') {
+      setReasonText(repairAttrs.call_result_reason || '')
+      setShowReasonForm(showReasonForm === result ? null : result)
+      setShowOrderForm(false)
+      return
+    }
+  }
+
+  const handleReasonSave = async () => {
+    if (!chatDetail?.friendId || !showReasonForm || savingCallResult) return
     setSavingCallResult(true)
     try {
-      const newValue = repairAttrs.call_result === result ? '' : result
       await fetchApi(`/api/repair/attributes/${chatDetail.friendId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ call_result: newValue }),
+        body: JSON.stringify({ call_result: showReasonForm, call_result_reason: reasonText }),
       })
-      setRepairAttrs(prev => ({ ...prev, call_result: newValue }))
-      setShowOrderForm(false)
+      setRepairAttrs(prev => ({ ...prev, call_result: showReasonForm, call_result_reason: reasonText }))
+      await addTagByName(chatDetail.friendId, showReasonForm)
+      setShowReasonForm(null)
     } catch {
       alert('保存に失敗しました')
     } finally {
@@ -962,6 +993,7 @@ export default function ChatsPage() {
         order_due_date: orderForm.dueDate,
         order_notes: orderForm.notes,
       }))
+      await addTagByName(chatDetail.friendId, '受注')
       setShowOrderForm(false)
     } catch {
       alert('保存に失敗しました')
@@ -2151,6 +2183,42 @@ export default function ChatsPage() {
                       {repairAttrs.order_amount && <p>見積金額：{repairAttrs.order_amount}円</p>}
                       {repairAttrs.order_due_date && <p>納期：{repairAttrs.order_due_date}</p>}
                       {repairAttrs.order_notes && <p>備考：{repairAttrs.order_notes}</p>}
+                    </div>
+                  )}
+
+                  {/* 検討中/失注 理由フォーム */}
+                  {showReasonForm && (
+                    <div className="mx-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
+                      <p className="text-xs font-medium text-gray-600">{showReasonForm}の理由</p>
+                      <textarea
+                        value={reasonText}
+                        onChange={e => setReasonText(e.target.value)}
+                        rows={3}
+                        placeholder="理由を入力..."
+                        className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => void handleReasonSave()}
+                          disabled={savingCallResult}
+                          className="flex-1 py-1.5 rounded text-xs font-semibold text-white disabled:opacity-50 bg-blue-500 hover:bg-blue-600 transition-colors"
+                        >
+                          保存
+                        </button>
+                        <button
+                          onClick={() => setShowReasonForm(null)}
+                          className="flex-1 py-1.5 rounded text-xs font-semibold text-gray-600 bg-gray-200 hover:bg-gray-300 transition-colors"
+                        >
+                          キャンセル
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 検討中/失注 理由表示 */}
+                  {(repairAttrs.call_result === '検討中' || repairAttrs.call_result === '失注') && !showReasonForm && repairAttrs.call_result_reason && (
+                    <div className={`mx-3 mb-3 p-2.5 rounded border text-[11px] text-gray-700 ${repairAttrs.call_result === '失注' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                      <p>理由：{repairAttrs.call_result_reason}</p>
                     </div>
                   )}
                 </div>
