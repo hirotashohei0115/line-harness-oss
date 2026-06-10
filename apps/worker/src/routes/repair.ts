@@ -709,7 +709,7 @@ repairRoutes.post('/api/contact-form', async (c) => {
         const roomId = (conditions.chatworkRoomId as string | undefined) || c.env.CHATWORK_ROOM_ID;
         if (!apiToken || !roomId) continue;
 
-        const msgTitle = '【お問い合わせフォーム送信】';
+        const msgTitle = rule.name;
         const msgBody = `[info][title]${msgTitle}[/title]お名前：${name}\n電話番号：${phone}\n機種：${model}\n症状：${symptom}[/info]`;
 
         const notifRecord = await createNotification(c.env.DB, {
