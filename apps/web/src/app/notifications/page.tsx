@@ -39,9 +39,15 @@ interface CreateFormState {
   eventType: string
   channels: string
   store: string
+  tagName: string
   chatworkApiToken: string
   chatworkRoomId: string
   chatworkToId: string
+}
+
+interface Tag {
+  id: string
+  name: string
 }
 
 const statusConfig: Record<
@@ -94,6 +100,7 @@ const EMPTY_FORM: CreateFormState = {
   eventType: '',
   channels: '',
   store: '',
+  tagName: '',
   chatworkApiToken: '',
   chatworkRoomId: '',
   chatworkToId: '',
@@ -110,6 +117,7 @@ export default function NotificationsPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [allTags, setAllTags] = useState<Tag[]>([])
 
   const loadRules = useCallback(async () => {
     try {
@@ -152,6 +160,12 @@ export default function NotificationsPage() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    api.tags.list().then((res) => {
+      if (res.success) setAllTags(res.data as Tag[])
+    }).catch(() => {})
+  }, [])
+
   const openCreate = () => {
     setEditingId(null)
     setForm(EMPTY_FORM)
@@ -166,6 +180,7 @@ export default function NotificationsPage() {
       eventType: rule.eventType,
       channels: rule.channels.join(', '),
       store: String(rule.conditions?.store ?? ''),
+      tagName: String(rule.conditions?.tagName ?? ''),
       chatworkApiToken: String(rule.conditions?.chatworkApiToken ?? ''),
       chatworkRoomId: String(rule.conditions?.chatworkRoomId ?? ''),
       chatworkToId: String(rule.conditions?.chatworkToId ?? ''),
@@ -193,6 +208,9 @@ export default function NotificationsPage() {
     const conditions: Record<string, unknown> = {}
     if (form.store) {
       conditions.store = form.store
+    }
+    if (form.tagName) {
+      conditions.tagName = form.tagName
     }
     if (form.chatworkApiToken.trim()) {
       conditions.chatworkApiToken = form.chatworkApiToken.trim()
@@ -331,6 +349,22 @@ export default function NotificationsPage() {
                   ))}
                 </select>
                 <p className="text-xs text-gray-400 mt-1">選択した店舗で受注したときのみ通知されます</p>
+              </div>
+            )}
+            {form.eventType === 'tag_added' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">対象タグ</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  value={form.tagName}
+                  onChange={(e) => setForm({ ...form, tagName: e.target.value })}
+                >
+                  <option value="">すべてのタグ（タグ未指定）</option>
+                  {allTags.map(t => (
+                    <option key={t.id} value={t.name}>{t.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">選択したタグが付与されたときのみ通知されます</p>
               </div>
             )}
             <div>
@@ -480,6 +514,12 @@ export default function NotificationsPage() {
                 {Boolean(rule.conditions?.store) && (
                   <p className="text-xs text-gray-500">
                     対象店舗: <span className="font-medium text-gray-700">{String(rule.conditions.store)}</span>
+                  </p>
+                )}
+                {/* 対象タグ */}
+                {Boolean(rule.conditions?.tagName) && (
+                  <p className="text-xs text-gray-500">
+                    対象タグ: <span className="font-medium text-gray-700">{String(rule.conditions.tagName)}</span>
                   </p>
                 )}
                 {/* Chatwork Room ID */}
