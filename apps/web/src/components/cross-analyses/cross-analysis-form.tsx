@@ -490,7 +490,11 @@ export default function CrossAnalysisForm({ initial }: Props) {
               ) : (
                 <ul className="divide-y divide-gray-100">
                   {modalUsers.map((u) => (
-                    <li key={u.id} className="flex items-center gap-3 py-2.5">
+                    <li
+                      key={u.id}
+                      className="flex items-center gap-3 py-2.5 cursor-pointer hover:bg-gray-50 rounded-lg px-1 transition-colors"
+                      onClick={() => { router.push(`/chats?friendId=${u.id}`); setModalCell(null) }}
+                    >
                       {u.pictureUrl ? (
                         <img src={u.pictureUrl} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
                       ) : (
@@ -498,7 +502,8 @@ export default function CrossAnalysisForm({ initial }: Props) {
                           <span className="text-xs text-gray-500">{u.displayName?.[0] ?? '?'}</span>
                         </div>
                       )}
-                      <span className="text-sm text-gray-800 truncate">{u.displayName || '（名前なし）'}</span>
+                      <span className="text-sm text-gray-800 truncate flex-1">{u.displayName || '（名前なし）'}</span>
+                      <span className="text-xs text-blue-400 flex-shrink-0">チャット →</span>
                     </li>
                   ))}
                 </ul>

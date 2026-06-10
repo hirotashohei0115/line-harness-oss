@@ -464,6 +464,7 @@ export default function ChatsPage() {
   const prevChatsRef = useRef<Chat[]>([])
   const isAtBottomRef = useRef(true)
   const notifPermRef = useRef(false)
+  const hasAutoSelectedRef = useRef(false)
 
   const handleTogglePin = async (chat: Chat) => {
     const newPinned = !chat.isPinned
@@ -714,6 +715,25 @@ export default function ChatsPage() {
   useEffect(() => {
     loadChats()
   }, [loadChats])
+
+  // URLパラメータ friendId が指定されている場合、対応するチャットを自動選択
+  useEffect(() => {
+    if (hasAutoSelectedRef.current || chats.length === 0 || typeof window === 'undefined') return
+    const friendId = new URLSearchParams(window.location.search).get('friendId')
+    if (!friendId) return
+    hasAutoSelectedRef.current = true
+    const chat = chats.find(c => c.friendId === friendId)
+    if (chat) {
+      isAtBottomRef.current = true
+      setSelectedChatId(chat.id)
+      setSelectedFriendId(null)
+      setMessageContent('')
+    } else {
+      setSelectedFriendId(friendId)
+    }
+    window.history.replaceState({}, '', window.location.pathname)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chats])
 
   useEffect(() => {
     if (selectedChatId) {

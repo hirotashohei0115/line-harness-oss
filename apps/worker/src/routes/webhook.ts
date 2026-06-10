@@ -1500,8 +1500,10 @@ async function handleEvent(
               SELECT delivery_store AS store_name FROM mail_orders WHERE friend_id = ?
               UNION
               SELECT store AS store_name FROM repair_quotes WHERE friend_id = ? AND store IS NOT NULL
+              UNION
+              SELECT t.name AS store_name FROM friend_tags ft JOIN tags t ON t.id = ft.tag_id WHERE ft.friend_id = ?
             )
-          `).bind(friend.id, friend.id, friend.id).all<{ store_name: string }>();
+          `).bind(friend.id, friend.id, friend.id, friend.id).all<{ store_name: string }>();
 
           const storeNames = storeRows.results.map(r => r.store_name ?? '');
 
@@ -1526,8 +1528,10 @@ async function handleEvent(
             SELECT delivery_store AS s FROM mail_orders WHERE friend_id = ? AND delivery_store LIKE '%菖蒲%'
             UNION
             SELECT store AS s FROM repair_quotes WHERE friend_id = ? AND store LIKE '%菖蒲%'
+            UNION
+            SELECT t.name AS s FROM friend_tags ft JOIN tags t ON t.id = ft.tag_id WHERE ft.friend_id = ? AND t.name LIKE '%菖蒲%'
           ) LIMIT 1
-        `).bind(friend.id, friend.id, friend.id).first();
+        `).bind(friend.id, friend.id, friend.id, friend.id).first();
 
         if (shobuCheck) {
           const groupMsg = `【菖蒲店】郵送Mac\nユーザー名：${friend.display_name || userId}\nメッセージ：${incomingText}`;
