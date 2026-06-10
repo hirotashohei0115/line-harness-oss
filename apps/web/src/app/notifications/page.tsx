@@ -28,10 +28,17 @@ interface Notification {
   createdAt: string
 }
 
+const STORE_LIST = [
+  '青森店','盛岡店','宇都宮店','菖蒲店','成田店','幕張店',
+  '錦糸町店','五反田店','長岡店','岐阜店','木津川店','大分店',
+  '郵送修理センター盛岡店','郵送修理センター菖蒲店','郵送修理センター岐阜店','郵送修理センター大分店',
+]
+
 interface CreateFormState {
   name: string
   eventType: string
   channels: string
+  store: string
   chatworkApiToken: string
   chatworkRoomId: string
   chatworkToId: string
@@ -86,6 +93,7 @@ const EMPTY_FORM: CreateFormState = {
   name: '',
   eventType: '',
   channels: '',
+  store: '',
   chatworkApiToken: '',
   chatworkRoomId: '',
   chatworkToId: '',
@@ -157,6 +165,7 @@ export default function NotificationsPage() {
       name: rule.name,
       eventType: rule.eventType,
       channels: rule.channels.join(', '),
+      store: String(rule.conditions?.store ?? ''),
       chatworkApiToken: String(rule.conditions?.chatworkApiToken ?? ''),
       chatworkRoomId: String(rule.conditions?.chatworkRoomId ?? ''),
       chatworkToId: String(rule.conditions?.chatworkToId ?? ''),
@@ -182,6 +191,9 @@ export default function NotificationsPage() {
     }
 
     const conditions: Record<string, unknown> = {}
+    if (form.store) {
+      conditions.store = form.store
+    }
     if (form.chatworkApiToken.trim()) {
       conditions.chatworkApiToken = form.chatworkApiToken.trim()
     }
@@ -305,6 +317,22 @@ export default function NotificationsPage() {
                 <option value="tag_added">tag_added（タグ付与）</option>
               </select>
             </div>
+            {form.eventType === 'order_received' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">対象店舗</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  value={form.store}
+                  onChange={(e) => setForm({ ...form, store: e.target.value })}
+                >
+                  <option value="">すべての店舗（店舗未指定）</option>
+                  {STORE_LIST.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">選択した店舗で受注したときのみ通知されます</p>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">通知チャンネル</label>
               <input
@@ -430,6 +458,12 @@ export default function NotificationsPage() {
                   ))}
                 </div>
 
+                {/* 対象店舗 */}
+                {Boolean(rule.conditions?.store) && (
+                  <p className="text-xs text-gray-500">
+                    対象店舗: <span className="font-medium text-gray-700">{String(rule.conditions.store)}</span>
+                  </p>
+                )}
                 {/* Chatwork Room ID */}
                 {Boolean(rule.conditions?.chatworkRoomId) && (
                   <p className="text-xs text-gray-500">

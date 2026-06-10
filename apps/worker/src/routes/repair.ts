@@ -795,6 +795,8 @@ repairRoutes.post('/api/repair/order/:friendId', async (c) => {
         const channels: string[] = JSON.parse(rule.channels);
         if (!channels.includes('chatwork')) continue;
         const conditions = JSON.parse(rule.conditions) as Record<string, unknown>;
+        // 対象店舗が設定されている場合、選択された店舗と一致するルールのみ通知
+        if (conditions.store && conditions.store !== orderStore) continue;
         const apiToken = (conditions.chatworkApiToken as string | undefined) || c.env.CHATWORK_API_TOKEN;
         const roomId = (conditions.chatworkRoomId as string | undefined) || c.env.CHATWORK_ROOM_ID;
         if (!apiToken || !roomId) continue;
