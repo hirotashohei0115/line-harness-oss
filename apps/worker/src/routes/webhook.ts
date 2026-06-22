@@ -76,7 +76,7 @@ webhook.post('/webhook', async (c) => {
   const processingPromise = (async () => {
     for (const event of body.events) {
       try {
-        await handleEvent(db, lineClient, event, channelAccessToken, matchedAccountId, c.env.WORKER_URL || new URL(c.req.url).origin, c.env.LIFF_URL, c.env.CHATWORK_API_TOKEN, c.env.CHATWORK_ROOM_ID);
+        await handleEvent(db, lineClient, event, channelAccessToken, matchedAccountId, c.env.WORKER_URL || new URL(c.req.url).origin, c.env.LIFF_URL, c.env.CHATWORK_API_TOKEN, c.env.CHATWORK_ROOM_ID, c.env.LINE_CHANNEL_ACCESS_TOKEN);
       } catch (err) {
         console.error('Error handling webhook event:', err);
       }
@@ -740,6 +740,16 @@ async function setContactMark(db: D1Database, friendId: string, markId: string):
   }
 }
 
+async function setContactMarkByName(db: D1Database, friendId: string, markName: string): Promise<void> {
+  try {
+    const mark = await db.prepare('SELECT id FROM contact_marks WHERE name = ? LIMIT 1').bind(markName).first<{ id: string }>();
+    if (!mark) return;
+    await db.prepare('UPDATE friends SET contact_mark_id = ? WHERE id = ?').bind(mark.id, friendId).run();
+  } catch (err) {
+    console.error('setContactMarkByName error:', err);
+  }
+}
+
 async function addTagToFriend(db: D1Database, friendId: string, tagName: string): Promise<void> {
   try {
     const tag = await db.prepare('SELECT id FROM tags WHERE name = ?').bind(tagName).first<{ id: string }>();
@@ -773,6 +783,7 @@ async function handleEvent(
   liffUrl?: string,
   chatworkApiToken?: string,
   chatworkRoomId?: string,
+  mainLineAccessToken?: string,
 ): Promise<void> {
   const source = event.source;
   if (source.type === 'group') {
@@ -822,10 +833,12 @@ async function handleEvent(
     ).bind(crypto.randomUUID(), friend.id, jstNow()).run();
 
     // ウェルカムメッセージ（新規・再フォロー共通で送信）
-    // liffUrl が設定されている場合（staging）はフォームボタン、それ以外は機種選択Flex
+    // liffUrl が設定されている場合はフォームボタン、それ以外は機種選択Flex
     try {
       if (liffUrl) {
-        const formUrl = `${liffUrl.trim()}?page=contact-form`;
+        const liffIdMatch = liffUrl.match(/liff\.line\.me\/([^?&/]+)/);
+        const liffIdParam = liffIdMatch ? `&liffId=${liffIdMatch[1]}` : '';
+        const formUrl = `${liffUrl.trim()}?page=contact-form${liffIdParam}`;
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
           { type: 'image', originalContentUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb', previewImageUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb' },
           { type: 'text', text: 'ご相談ありがとうございます！\n\n下記フォームよりお名前・電話番号・機種・症状をご入力ください。\n担当者より直接お電話させていただきます📞\n\n※修理時にデータに触れる事はございません！\nデータそのままで修理可能です✨' },
@@ -1140,6 +1153,7 @@ async function handleEvent(
       if (incomingText === 'その他') {
         try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch (err) { console.error('repair msg other product:', err); }
       } else {
+        await setContactMarkByName(db, friend.id, '製品選択済み');
         try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildModelMethodFlex(incomingText, p.key))]); } catch (err) { console.error('repair msg select_product:', err); }
       }
       return;
@@ -1150,10 +1164,13 @@ async function handleEvent(
       const productKey = (await getFriendAttribute(db, friend.id, 'repair_product_key')) ?? 'other';
       // モデル名選択フローに入る際、前回セッションの年式を消去（その他・分からない の分岐判定に使うため）
       await setFriendAttribute(db, friend.id, 'repair_year', '');
+      await setContactMarkByName(db, friend.id, 'メニュー選択済み');
       try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildModelSelectFlex(productKey))]); } catch (err) { console.error('repair msg choose_model_method:', err); }
       return;
     }
     if (incomingText === '年式で選ぶ') {
+      await setFriendAttribute(db, friend.id, 'repair_model_name', '');
+      await setContactMarkByName(db, friend.id, 'メニュー選択済み');
       try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildYearSelectFlex())]); } catch (err) { console.error('repair msg choose_year_method:', err); }
       return;
     }
@@ -1219,6 +1236,7 @@ async function handleEvent(
         const yearStr = await getFriendAttribute(db, friend.id, 'repair_year');
         const inchSize = await getFriendAttribute(db, friend.id, 'repair_inch_size');
         await setFriendAttribute(db, friend.id, 'repair_symptom_id', symptomId);
+        await setContactMarkByName(db, friend.id, '症状選択済み');
 
         let priceFrom: number | null = null;
         let priceTo: number | null = null;
@@ -1250,6 +1268,7 @@ async function handleEvent(
             return;
           }
           priceFrom = row.price; deliveryDays = row.delivery_days; resolvedModelName = row.model_number;
+          await setFriendAttribute(db, friend.id, 'repair_model_name', row.model_number);
         } else {
           const price = await getRepairPrice(db, productId, symptomId);
           if (price) { priceFrom = price.price_from; priceTo = price.price_to; deliveryFrom = price.delivery_days_from; deliveryTo = price.delivery_days_to; }
@@ -1535,7 +1554,8 @@ async function handleEvent(
 
         if (shobuCheck) {
           const groupMsg = `【菖蒲店】郵送Mac\nユーザー名：${friend.display_name || userId}\nメッセージ：${incomingText}`;
-          lineClient.pushMessage('Cddd3e9dd960e52b8b1e400744eef28f4', [{ type: 'text', text: groupMsg }]).catch((err) => {
+          const groupClient = mainLineAccessToken ? new LineClient(mainLineAccessToken) : lineClient;
+          groupClient.pushMessage('Cddd3e9dd960e52b8b1e400744eef28f4', [{ type: 'text', text: groupMsg }]).catch((err) => {
             console.error('shobu group notification error:', err);
           });
         }
@@ -1592,6 +1612,34 @@ async function handleEvent(
       eventData: { text: incomingText, matched },
     }, lineAccessToken, lineAccountId);
 
+    return;
+  }
+
+  // スタンプメッセージ → messages_log に保存してチャットに表示
+  if (event.type === 'message' && event.message.type === 'sticker') {
+    const userId = event.source.type === 'user' ? event.source.userId : undefined;
+    if (!userId) return;
+    let friend = await getFriendByLineUserId(db, userId);
+    if (!friend) {
+      let profile;
+      try { profile = await lineClient.getProfile(userId); } catch { /* ignore */ }
+      friend = await upsertFriend(db, {
+        lineUserId: userId,
+        displayName: profile?.displayName ?? null,
+        pictureUrl: profile?.pictureUrl ?? null,
+        statusMessage: profile?.statusMessage ?? null,
+      });
+      if (lineAccountId) {
+        await db.prepare('UPDATE friends SET line_account_id = ? WHERE id = ? AND line_account_id IS NULL')
+          .bind(lineAccountId, friend.id).run();
+      }
+    }
+    const { packageId, stickerId } = event.message as unknown as { packageId: string; stickerId: string };
+    await db.prepare(
+      `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
+       VALUES (?, ?, 'incoming', 'sticker', ?, NULL, NULL, 0, ?)`
+    ).bind(crypto.randomUUID(), friend.id, JSON.stringify({ packageId, stickerId }), jstNow()).run();
+    await upsertChatOnMessage(db, friend.id);
     return;
   }
 
@@ -1668,6 +1716,7 @@ async function handleEvent(
         consult_category:  () => `【相談カテゴリ】${params.get('category') ?? ''}`,
         consult_phone:     () => '電話で相談',
         faq_question:      () => '質問を選択',
+        mail_shipped:      () => '発送完了',
       };
       const logContent = displayText || actionLabels[action ?? '']?.() || event.postback.data;
       const now = jstNow();
@@ -2031,6 +2080,18 @@ async function handleEvent(
         ]);
       } catch (err) {
         console.error('Failed to send consult phone text:', err);
+      }
+      return;
+    }
+
+    if (action === 'mail_shipped') {
+      await setContactMarkByName(db, friend.id, '発送完了/到着まち');
+      try {
+        await replyAndLog(db, lineClient, event.replyToken, friend.id, [
+          { type: 'text', text: '発送完了のご連絡ありがとうございます！\n発送伝票と申し込みフォームのお名前が違う場合は、発送伝票に記載のお名前か、伝票の共有をお願い致します。\n届いた端末とLINEを照合する際に使用させて頂きます。' },
+        ]);
+      } catch (err) {
+        console.error('Failed to send mail_shipped reply:', err);
       }
       return;
     }

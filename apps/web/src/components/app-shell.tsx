@@ -27,6 +27,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [sessionExpired, setSessionExpired] = useState(false)
+  const isLoginPage = pathname === '/login' || pathname === '/login/'
 
   // 401ハンドラを登録
   useEffect(() => {
@@ -57,14 +58,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (pathname === '/login') return
+    if (pathname === '/login' || pathname === '/login/') return
     tryRefreshToken()
-    // 1時間ごとにチェック
     const id = setInterval(tryRefreshToken, 60 * 60 * 1000)
     return () => clearInterval(id)
   }, [pathname, tryRefreshToken])
 
-  if (pathname === '/login') {
+  // ログイン後の遷移でセッション切れ状態をリセット
+  useEffect(() => {
+    if (!isLoginPage && sessionExpired && localStorage.getItem('lh_api_key')) {
+      setSessionExpired(false)
+    }
+  }, [pathname, sessionExpired, isLoginPage])
+  if (isLoginPage) {
     return <>{children}</>
   }
 
@@ -82,7 +88,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {sessionExpired && <SessionExpiredModal onLogin={handleLogin} />}
         <div className="flex min-h-screen">
           <Sidebar />
-          <main className="flex-1 pt-[72px] px-4 pb-6 sm:px-6 lg:pt-8 lg:px-8 lg:pb-8 overflow-auto">
+          <main className="flex-1 pt-[72px] px-4 pb-24 sm:px-6 lg:pt-8 lg:px-8 lg:pb-24 overflow-auto">
             {children}
           </main>
         </div>

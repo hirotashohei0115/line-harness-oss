@@ -14,3 +14,16 @@ database_id = "c3c1a77c-6d5a-49fc-81ee-78c248ad6a23"
 
 [triggers]
 crons = ["*/5 * * * *", "0 1 * * *"]
+
+[env.staging]
+name = "macbook-repair-worker-staging"
+account_id = "011be021c47bfc2e33d820594e78f078"
+workers_dev = true
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "macbook-repair-db-staging"
+database_id = "e8eac972-35c5-4281-af4b-fe74c80283c0"
+
+[env.staging.triggers]
+crons = ["*/5 * * * *", "0 1 * * *"]

@@ -61,6 +61,8 @@ friends.get('/api/friends', async (c) => {
     const markId = c.req.query('markId');
     const tagIdsParam = c.req.query('tagIds')
     const tagIds = tagIdsParam ? tagIdsParam.split(',').filter(Boolean) : []
+    const dateFrom = c.req.query('dateFrom');
+    const dateTo = c.req.query('dateTo');
 
     const db = c.env.DB;
 
@@ -83,6 +85,14 @@ friends.get('/api/friends', async (c) => {
       const ph = tagIds.map(() => '?').join(',')
       conditions.push(`EXISTS (SELECT 1 FROM friend_tags ft WHERE ft.friend_id = f.id AND ft.tag_id IN (${ph}))`)
       binds.push(...tagIds)
+    }
+    if (dateFrom) {
+      conditions.push('f.created_at >= ?');
+      binds.push(`${dateFrom}T00:00:00`);
+    }
+    if (dateTo) {
+      conditions.push('f.created_at <= ?');
+      binds.push(`${dateTo}T23:59:59`);
     }
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 

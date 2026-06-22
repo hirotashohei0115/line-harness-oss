@@ -212,6 +212,26 @@ const FLEX_PART_LABELS: Record<string, string> = {
   text: 'テキスト', image: '画像', button: 'ボタン', separator: '区切り線', spacer: '余白',
 }
 
+function parseCustomFlexJson(json: string): { parts: FlexPart[]; settings: FlexEditorSettings } {
+  const fallback = { parts: [], settings: { bgColor: '#ffffff' } }
+  try {
+    const bubble = JSON.parse(json)
+    const contents: Record<string, unknown>[] = bubble?.body?.contents ?? []
+    const bgColor = (bubble?.styles?.body?.backgroundColor as string) ?? '#ffffff'
+    const heightToSize: Record<string, string> = { '10px': 'sm', '20px': 'md', '30px': 'lg', '40px': 'xl' }
+    const parts: FlexPart[] = contents.map((item) => {
+      const id = crypto.randomUUID()
+      if (item.type === 'text') return { id, type: 'text' as const, text: item.text as string, size: item.size as string, color: item.color as string, bold: item.weight === 'bold', align: item.align as string }
+      if (item.type === 'image') return { id, type: 'image' as const, url: item.url as string, size: item.size as string, aspectRatio: item.aspectRatio as string, aspectMode: item.aspectMode as string }
+      if (item.type === 'button') { const action = item.action as Record<string, string>; return { id, type: 'button' as const, label: action?.label, url: action?.uri, style: item.style as string, color: item.color as string } }
+      if (item.type === 'separator') return { id, type: 'separator' as const }
+      if (item.type === 'box') return { id, type: 'spacer' as const, size: heightToSize[item.height as string] ?? 'md' }
+      return null
+    }).filter(Boolean) as FlexPart[]
+    return { parts, settings: { bgColor } }
+  } catch { return fallback }
+}
+
 function buildCustomFlexJson(parts: FlexPart[], settings: FlexEditorSettings): string {
   const spacerH: Record<string, string> = { sm: '10px', md: '20px', lg: '30px', xl: '40px' }
   const contents = parts.map(p => {
@@ -689,6 +709,8 @@ export default function TemplatesPage() {
   const [editCategory, setEditCategory] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
+  const [editFlexParts, setEditFlexParts] = useState<FlexPart[]>([])
+  const [editFlexSettings, setEditFlexSettings] = useState<FlexEditorSettings>({ bgColor: '#ffffff' })
   const [allCategories, setAllCategories] = useState<string[]>([])
 
   // Sync store card fields → form.messageContent (real-time JSON generation)
@@ -702,6 +724,13 @@ export default function TemplatesPage() {
     if (form.messageType !== 'custom_flex') return
     setForm(prev => ({ ...prev, messageContent: buildCustomFlexJson(customFlexParts, customFlexSettings) }))
   }, [customFlexParts, customFlexSettings, form.messageType])
+
+  // Sync edit flex parts/settings → editContent
+  useEffect(() => {
+    if (!editingTemplate || !isFlexEditable(editingTemplate)) return
+    setEditContent(buildCustomFlexJson(editFlexParts, editFlexSettings))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editFlexParts, editFlexSettings, editingTemplate?.messageType, editingTemplate?.id])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -769,6 +798,8 @@ export default function TemplatesPage() {
       if (!storeCard.storeName.trim()) { setFormError('店舗名を入力してください'); return }
     } else if (form.messageType === 'custom_flex') {
       if (customFlexParts.length === 0) { setFormError('パーツを1つ以上追加してください'); return }
+      const invalidBtn = customFlexParts.find(p => p.type === 'button' && p.url && !/^(https?:\/\/|tel:|mailto:)/.test(p.url))
+      if (invalidBtn) { setFormError(`ボタンのURLが無効です: "${invalidBtn.url}" — https:// か tel: で始めてください`); return }
     } else if (!form.messageContent.trim()) {
       setFormError(form.messageType === 'image' ? '画像を選択してください' : 'メッセージ内容を入力してください')
       return
@@ -831,18 +862,38 @@ export default function TemplatesPage() {
     }
   }
 
+  const isFlexEditable = (template: Template) => {
+    if (template.messageType === 'custom_flex') return true
+    if (template.messageType === 'flex') {
+      try {
+        const p = JSON.parse(template.messageContent)
+        return p.type === 'bubble' && Array.isArray(p.body?.contents)
+      } catch { return false }
+    }
+    return false
+  }
+
   const handleEditOpen = (template: Template) => {
     setEditingTemplate(template)
     setEditName(template.name)
     setEditContent(template.messageContent)
     setEditCategory(template.category || '')
     setEditError('')
+    if (isFlexEditable(template)) {
+      const { parts, settings } = parseCustomFlexJson(template.messageContent)
+      setEditFlexParts(parts)
+      setEditFlexSettings(settings)
+    }
   }
 
   const handleEditSave = async () => {
     if (!editingTemplate) return
     if (!editName.trim()) { setEditError('テンプレート名を入力してください'); return }
     if (!editContent.trim()) { setEditError('メッセージ内容を入力してください'); return }
+    if (isFlexEditable(editingTemplate)) {
+      const invalidBtn = editFlexParts.find(p => p.type === 'button' && p.url && !/^(https?:\/\/|tel:|mailto:)/.test(p.url))
+      if (invalidBtn) { setEditError(`ボタンのURLが無効です: "${invalidBtn.url}" — https:// か tel: で始めてください`); return }
+    }
     setEditSaving(true)
     setEditError('')
     try {
@@ -911,11 +962,14 @@ export default function TemplatesPage() {
 
       {/* Edit modal */}
       {editingTemplate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingTemplate(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 p-6" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={() => setEditingTemplate(null)}>
+          <div
+            className={`bg-white rounded-xl shadow-xl w-full mx-4 p-6 my-auto ${isFlexEditable(editingTemplate) ? 'max-w-5xl' : 'max-w-3xl'}`}
+            onClick={e => e.stopPropagation()}
+          >
             <h2 className="text-sm font-semibold text-gray-800 mb-4">テンプレートを編集</h2>
             <div className="flex gap-8 items-start">
-            <div className="flex-1 space-y-4">
+            <div className="flex-1 space-y-4 min-w-0">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">テンプレート名 <span className="text-red-500">*</span></label>
                 <input
@@ -937,12 +991,21 @@ export default function TemplatesPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">メッセージ内容 <span className="text-red-500">*</span></label>
-                <textarea
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
-                  rows={6}
-                  value={editContent}
-                  onChange={e => setEditContent(e.target.value)}
-                />
+                {isFlexEditable(editingTemplate) ? (
+                  <FlexVisualEditor
+                    parts={editFlexParts}
+                    setParts={setEditFlexParts}
+                    settings={editFlexSettings}
+                    setSettings={setEditFlexSettings}
+                  />
+                ) : (
+                  <textarea
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                    rows={6}
+                    value={editContent}
+                    onChange={e => setEditContent(e.target.value)}
+                  />
+                )}
               </div>
               {editError && <p className="text-xs text-red-600">{editError}</p>}
               <div className="flex gap-2 pt-1">
@@ -962,7 +1025,7 @@ export default function TemplatesPage() {
                 </button>
               </div>
             </div>
-            <LinePreviewPanel messageType={editingTemplate.messageType} content={editContent} />
+            <LinePreviewPanel messageType={isFlexEditable(editingTemplate) ? 'flex' : editingTemplate.messageType} content={editContent} />
             </div>
           </div>
         </div>

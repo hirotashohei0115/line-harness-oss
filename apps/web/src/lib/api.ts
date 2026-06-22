@@ -148,6 +148,8 @@ export type FriendListParams = {
   tagIds?: string
   markId?: string
   accountId?: string
+  dateFrom?: string
+  dateTo?: string
 }
 
 export type FriendWithTags = Friend & { tags: Tag[]; contactMarkId?: string | null; isPinned?: boolean; pinnedAt?: string | null }
@@ -162,6 +164,8 @@ export const api = {
       if (params?.tagIds) query.tagIds = params.tagIds
       if (params?.markId) query.markId = params.markId
       if (params?.accountId) query.lineAccountId = params.accountId
+      if (params?.dateFrom) query.dateFrom = params.dateFrom
+      if (params?.dateTo) query.dateTo = params.dateTo
       return fetchApi<ApiResponse<PaginatedResponse<FriendWithTags>>>(
         '/api/friends?' + new URLSearchParams(query)
       )

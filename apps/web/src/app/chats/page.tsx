@@ -319,6 +319,20 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
     if (msg.messageType === 'image') {
       return <ImageBubble content={msg.content} onClick={() => setZoomedImageContent(msg.content)} />
     }
+    if (msg.messageType === 'sticker') {
+      try {
+        const { stickerId } = JSON.parse(msg.content) as { packageId: string; stickerId: string }
+        return (
+          <img
+            src={`https://stickershop.line-scdn.net/stickershop/v1/sticker/${stickerId}/android/sticker.png`}
+            alt="スタンプ"
+            className="w-24 h-24 object-contain"
+          />
+        )
+      } catch {
+        return <span className="text-sm text-gray-500">【スタンプ】</span>
+      }
+    }
     return <span className="text-sm whitespace-pre-wrap break-words">{msg.content}</span>
   }
 
@@ -465,6 +479,10 @@ export default function ChatsPage() {
   const isAtBottomRef = useRef(true)
   const notifPermRef = useRef(false)
   const hasAutoSelectedRef = useRef(false)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return 224
+    return Number(localStorage.getItem('chat_sidebar_width') || '224')
+  })
 
   const handleTogglePin = async (chat: Chat) => {
     const newPinned = !chat.isPinned
@@ -998,6 +1016,7 @@ export default function ChatsPage() {
       })
       setRepairAttrs(prev => ({ ...prev, call_result: showReasonForm, call_result_reason: reasonText }))
       await syncCallResultTag(chatDetail.friendId, showReasonForm)
+      await addTagByName(chatDetail.friendId, '要後追い')
       setShowReasonForm(null)
     } catch {
       alert('保存に失敗しました')
@@ -1122,6 +1141,24 @@ export default function ChatsPage() {
     const el = e.currentTarget
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 240) + 'px'
+  }
+
+  const handleSidebarDragStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = sidebarWidth
+    const onMove = (me: MouseEvent) => {
+      const newWidth = Math.max(160, Math.min(560, startWidth + (startX - me.clientX)))
+      setSidebarWidth(newWidth)
+    }
+    const onUp = (me: MouseEvent) => {
+      const finalWidth = Math.max(160, Math.min(560, startWidth + (startX - me.clientX)))
+      localStorage.setItem('chat_sidebar_width', String(finalWidth))
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
   }
 
   return (
@@ -1517,6 +1554,7 @@ export default function ChatsPage() {
                     const isFlex = msg.messageType === 'flex'
                     const isImage = msg.messageType === 'image'
                     const isFile = msg.messageType === 'file'
+                    const isSticker = msg.messageType === 'sticker'
                     let bubbleContent: React.ReactNode
                     if (isFlex) {
                       bubbleContent = (
@@ -1526,6 +1564,19 @@ export default function ChatsPage() {
                       )
                     } else if (isImage) {
                       bubbleContent = <ImageBubble content={msg.content} onClick={() => setZoomedImageContent(msg.content)} />
+                    } else if (isSticker) {
+                      try {
+                        const { stickerId } = JSON.parse(msg.content) as { packageId: string; stickerId: string }
+                        bubbleContent = (
+                          <img
+                            src={`https://stickershop.line-scdn.net/stickershop/v1/sticker/${stickerId}/android/sticker.png`}
+                            alt="スタンプ"
+                            className="w-24 h-24 object-contain"
+                          />
+                        )
+                      } catch {
+                        bubbleContent = <span className="text-sm text-gray-500">【スタンプ】</span>
+                      }
                     } else if (isFile) {
                       bubbleContent = (
                         <div className="flex flex-col gap-1.5">
@@ -1570,15 +1621,15 @@ export default function ChatsPage() {
                           {/* メッセージバブル — 画像/flexはパディングなし */}
                           <div
                             className={`max-w-[320px] text-sm break-words whitespace-pre-wrap ${
-                              isFlex || isImage ? '' : 'px-3 py-2'
+                              isFlex || isImage || isSticker ? '' : 'px-3 py-2'
                             } ${
                               isOutgoing
                                 ? 'rounded-tl-2xl rounded-tr-md rounded-bl-2xl rounded-br-2xl text-white'
                                 : 'rounded-tl-md rounded-tr-2xl rounded-bl-2xl rounded-br-2xl bg-white text-gray-900'
                             } ${
-                              (isFlex || isImage) ? 'bg-transparent' : ''
+                              (isFlex || isImage || isSticker) ? 'bg-transparent' : ''
                             }`}
-                            style={isOutgoing && !isFlex && !isImage ? { backgroundColor: '#06C755' } : undefined}
+                            style={isOutgoing && !isFlex && !isImage && !isSticker ? { backgroundColor: '#06C755' } : undefined}
                           >
                             {bubbleContent}
                           </div>
@@ -1725,10 +1776,9 @@ export default function ChatsPage() {
                     value={messageContent}
                     onChange={(e) => setMessageContent(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    onInput={handleTextareaInput}
                     placeholder="メッセージを入力..."
-                    className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
-                    style={{ minHeight: '120px', maxHeight: '200px' }}
+                    className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 resize-y"
+                    style={{ minHeight: '120px', maxHeight: '480px' }}
                   />
                   <button
                     onClick={handleSendMessage}
@@ -1744,9 +1794,17 @@ export default function ChatsPage() {
               </div>
 
               {/* Repair Info Sidebar */}
-              <div className={`flex-shrink-0 flex-col border-l border-gray-200 bg-gray-50 overflow-y-auto transition-all duration-200 ${
-                rightCollapsed ? 'w-8 overflow-hidden' : (layoutMode === 'info' ? 'w-96' : 'w-56')
-              } flex`}>
+              <div
+                className={`relative flex-shrink-0 flex-col border-l border-gray-200 bg-gray-50 overflow-y-auto ${rightCollapsed ? 'w-8 overflow-hidden transition-all duration-200' : ''} flex`}
+                style={!rightCollapsed ? { width: sidebarWidth } : undefined}
+              >
+                {!rightCollapsed && (
+                  <div
+                    className="absolute top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-400/25 transition-colors z-10"
+                    style={{ left: '-4px' }}
+                    onMouseDown={handleSidebarDragStart}
+                  />
+                )}
                 {rightCollapsed ? (
                   <button
                     onClick={() => setRightCollapsed(false)}
@@ -1918,14 +1976,16 @@ export default function ChatsPage() {
                           </div>
                         )}
 
-                        {modelName && (
+                        {(modelName || year || inchDisplay) && (
                           <div>
                             <p className="text-[10px] text-gray-400 mb-0.5">モデル</p>
                             <p className="font-medium">
-                              {modelName}
+                              {modelName || ''}
                               {(year || inchDisplay) && (
-                                <span className="font-normal text-gray-500">
-                                  {`（${[year ? `${year}年` : '', inchDisplay].filter(Boolean).join(' ')}）`}
+                                <span className={`font-normal text-gray-500${modelName ? '' : ' font-medium text-gray-700'}`}>
+                                  {modelName
+                                    ? `（${[year ? `${year}年` : '', inchDisplay].filter(Boolean).join(' ')}）`
+                                    : [year ? `${year}年` : '', inchDisplay].filter(Boolean).join(' ')}
                                 </span>
                               )}
                             </p>

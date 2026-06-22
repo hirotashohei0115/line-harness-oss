@@ -25,6 +25,16 @@ async function setContactMark(db: D1Database, friendId: string, markId: string):
   }
 }
 
+async function setContactMarkByName(db: D1Database, friendId: string, markName: string): Promise<void> {
+  try {
+    const mark = await db.prepare('SELECT id FROM contact_marks WHERE name = ? LIMIT 1').bind(markName).first<{ id: string }>();
+    if (!mark) return;
+    await db.prepare('UPDATE friends SET contact_mark_id = ? WHERE id = ?').bind(mark.id, friendId).run();
+  } catch (err) {
+    console.error('setContactMarkByName error:', err);
+  }
+}
+
 async function addTagToFriend(db: D1Database, friendId: string, tagName: string): Promise<void> {
   try {
     let tag = await db.prepare('SELECT id FROM tags WHERE name = ?').bind(tagName).first<{ id: string }>();
@@ -271,8 +281,12 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
     // チャット一覧に表示されるよう chats エントリを更新
     await upsertChatOnMessage(c.env.DB, friend.id);
 
-    // フォーム送信完了マーク: 梱包キット希望→mark_27、それ以外→mark_03
-    await setContactMark(c.env.DB, friend.id, packagingKit ? 'mark_27' : 'mark_03');
+    // フォーム送信完了マーク: 梱包キット希望→mark_27、それ以外→発送待ち
+    if (packagingKit) {
+      await setContactMark(c.env.DB, friend.id, 'mark_27');
+    } else {
+      await setContactMarkByName(c.env.DB, friend.id, '発送待ち');
+    }
 
     // repair_quotesの希望店舗を更新（チャット画面「修理情報」に反映）
     const storeShortName = deliveryStore.includes('菖蒲') ? '菖蒲店'
@@ -331,11 +345,26 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       : `リペアマスター菖蒲店\n〒346-0106\n埼玉県久喜市菖蒲町菖蒲6005-1\nモラージュ菖蒲 1F\nTEL: 070-1271-7186`;
     const closingMsg = packagingKit
       ? `梱包キットを発送いたします📦\n今しばらくお待ちください。\n梱包キットが到着されましたら上記の郵送先へご発送お願いします。`
-      : `端末の発送をお待ちしております📦\n着払いにてご発送ください。`;
+      : `端末の発送をお待ちしております📦\n着払いにてご発送ください。\n発送が完了致しましたら、発送完了ボタンをタッチお願いします。`;
     const thankMsg = `郵送修理のご依頼ありがとうございます！\n\n以下の内容で承りました。\n━━━━━━━━━━\nお名前：${name}様\n郵便番号：${postalCode}\nご住所：${address}\n電話番号：${phone}\n梱包キット：${kitLabel}\n配送先：${deliveryStore}\n━━━━━━━━━━\n\n【郵送先】\n${storeInfo}\n━━━━━━━━━━\n\n${closingMsg}`;
+    const shippedButtonFlex = JSON.stringify({
+      type: 'bubble',
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: '16px',
+        contents: [{
+          type: 'button',
+          action: { type: 'postback', label: '発送完了', data: 'action=mail_shipped', displayText: '発送完了' },
+          style: 'primary', color: '#06C755', height: 'md',
+        }],
+      },
+    });
     try {
       const lineClient = new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN);
-      await lineClient.pushMessage(lineUserId, [{ type: 'text', text: thankMsg }]);
+      const messages: object[] = [{ type: 'text', text: thankMsg }];
+      if (!packagingKit) {
+        messages.push({ type: 'flex', altText: '発送完了ボタン', contents: JSON.parse(shippedButtonFlex) });
+      }
+      await lineClient.pushMessage(lineUserId, messages);
     } catch (pushErr) {
       console.error('mail-order push message error:', pushErr);
     }

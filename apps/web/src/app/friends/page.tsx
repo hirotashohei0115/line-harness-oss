@@ -41,6 +41,8 @@ export default function FriendsPage() {
   const [hasNextPage, setHasNextPage] = useState(false)
   const [selectedTagId, setSelectedTagId] = useState('')
   const [selectedMarkId, setSelectedMarkId] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -73,6 +75,8 @@ export default function FriendsPage() {
       if (selectedTagId) params.tagId = selectedTagId
       if (selectedMarkId) params.markId = selectedMarkId
       if (selectedAccountId) params.accountId = selectedAccountId
+      if (dateFrom) params.dateFrom = dateFrom
+      if (dateTo) params.dateTo = dateTo
 
       const res = await api.friends.list(params)
       if (res.success) {
@@ -87,7 +91,7 @@ export default function FriendsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, selectedTagId, selectedMarkId, selectedAccountId])
+  }, [page, selectedTagId, selectedMarkId, selectedAccountId, dateFrom, dateTo])
 
   useEffect(() => {
     loadTags()
@@ -99,7 +103,7 @@ export default function FriendsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [selectedTagId, selectedMarkId, selectedAccountId])
+  }, [selectedTagId, selectedMarkId, selectedAccountId, dateFrom, dateTo])
 
   useEffect(() => {
     loadFriends()
@@ -140,6 +144,22 @@ export default function FriendsPage() {
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600 font-medium whitespace-nowrap">登録日:</label>
+          <input
+            type="date"
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+          <span className="text-sm text-gray-500">〜</span>
+          <input
+            type="date"
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
         </div>
         <span className="text-sm text-gray-500">
           {loading ? '読み込み中...' : `${total.toLocaleString('ja-JP')} 件`}
