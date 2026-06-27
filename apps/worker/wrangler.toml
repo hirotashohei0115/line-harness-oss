@@ -15,10 +15,16 @@ database_id = "c3c1a77c-6d5a-49fc-81ee-78c248ad6a23"
 [triggers]
 crons = ["*/5 * * * *", "0 1 * * *"]
 
+[vars]
+SWITCH_LINE_CHANNEL_ID = "2009558609"
+
 [env.staging]
 name = "macbook-repair-worker-staging"
 account_id = "011be021c47bfc2e33d820594e78f078"
 workers_dev = true
+
+[env.staging.vars]
+SWITCH_LINE_CHANNEL_ID = "2010352434"
 
 [[env.staging.d1_databases]]
 binding = "DB"

@@ -13,8 +13,9 @@ import {
   jstNow,
 } from '@line-crm/db';
 import { LineClient } from '@line-crm/line-sdk';
-import { sendChatworkMessage, jstTimestamp } from '../lib/chatwork.js';
+import { jstTimestamp } from '../lib/chatwork.js';
 import { createCalendarEvent, STORE_CALENDAR_IDS } from '../lib/google-calendar.js';
+import { fireEvent } from '../services/event-bus.js';
 import type { Env } from '../index.js';
 
 const reservationRoutes = new Hono<Env>();
@@ -179,9 +180,11 @@ reservationRoutes.post('/api/reservations', async (c) => {
     name: string;
     phone?: string;
     notes?: string;
+    source?: string;
   }>();
 
   const { lineUserId, storeKey, date, time, name } = body;
+  const brandName = body.source === 'switch' ? 'SwitchMaster' : 'リペアマスター';
   if (!lineUserId || !storeKey || !date || !time || !name) {
     return c.json({ success: false, error: 'Missing required fields' }, 400);
   }
@@ -223,7 +226,7 @@ reservationRoutes.post('/api/reservations', async (c) => {
   const dayName = DAY_NAMES[new Date(date + 'T00:00:00Z').getUTCDay()];
 
   // LINE confirmation message
-  const confirmText = `✅ 来店予約が完了しました！\n\n📍 店舗：リペアマスター${storeName}\n📅 日時：${dateDisplay}（${dayName}）${time}〜\n👤 お名前：${name} 様${body.phone ? `\n📞 電話番号：${body.phone}` : ''}${body.notes ? `\n📝 ご要望：${body.notes}` : ''}\n\nご来店をお待ちしております！\n※ご不明な点がございましたらLINEにてお問い合わせください。`;
+  const confirmText = `✅ 来店予約が完了しました！\n\n📍 店舗：${brandName}${storeName}\n📅 日時：${dateDisplay}（${dayName}）${time}〜\n👤 お名前：${name} 様${body.phone ? `\n📞 電話番号：${body.phone}` : ''}${body.notes ? `\n📝 ご要望：${body.notes}` : ''}\n\nご来店をお待ちしております！\n※ご不明な点がございましたらLINEにてお問い合わせください。`;
   try {
     const lineToken = c.env.LINE_CHANNEL_ACCESS_TOKEN;
     if (lineToken) {
@@ -267,26 +270,20 @@ reservationRoutes.post('/api/reservations', async (c) => {
     deliveryText = `${quote.delivery_days_from}日〜`;
   }
 
-  // Chatwork notification — await to ensure delivery before response (Worker keepalive)
-  const cwToken = c.env.CHATWORK_API_TOKEN;
-  const reservationInfo = `店舗：リペアマスター${storeName}\n日時：${dateDisplay}（${dayName}）${time}〜\nお名前：${name}様\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n見積もり金額：${priceText}\n納期目安：${deliveryText}\n管理画面：https://macbook-repair-admin.vercel.app`;
-
-  // ① 管理者向け通知（既存ルームID）
-  const cwRoom = c.env.CHATWORK_ROOM_ID;
-  if (cwToken && cwRoom) {
-    const cwMsg = `[info][title]🏪 来店予約が入りました[/title]${reservationInfo}[/info]`;
-    await sendChatworkMessage(cwToken, cwRoom, cwMsg);
-  }
-
-  // ② 店舗向け通知（各店舗ルームへメンション付き）
-  const storeConfig = STORE_CHATWORK_CONFIG[storeKey];
-  if (cwToken && storeConfig) {
-    const mentions = [storeConfig.managerAccountId, storeConfig.storeAccountId]
-      .filter(Boolean)
-      .map(id => `[To:${id}]`)
-      .join('');
-    const storeCwMsg = `${mentions}\n[info][title]🏪 来店予約が入りました[/title]${reservationInfo}[/info]`;
-    await sendChatworkMessage(cwToken, storeConfig.roomId, storeCwMsg);
+  // 通知ルール経由でChatwork/LINE通知
+  const reservationInfo = `店舗：${brandName}${storeName}\n日時：${dateDisplay}（${dayName}）${time}〜\nお名前：${name}様\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n見積もり金額：${priceText}\n納期目安：${deliveryText}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app`;
+  const chatworkBody = `[info][title]🏪 来店予約が入りました[/title]${reservationInfo}[/info]`;
+  const lineText = `【来店予約】\n${reservationInfo}`;
+  if (body.source !== 'switch') {
+    await fireEvent(
+      c.env.DB,
+      'reservation_created',
+      { friendId: friend?.id ?? undefined, eventData: { storeKey, chatworkBody, lineText } },
+      c.env.LINE_CHANNEL_ACCESS_TOKEN,
+      null,
+      c.env.CHATWORK_API_TOKEN,
+      c.env.CHATWORK_ROOM_ID,
+    ).catch(err => console.error('fireEvent reservation_created error:', err));
   }
 
   // Google Calendar event
@@ -300,7 +297,7 @@ reservationRoutes.post('/api/reservations', async (c) => {
       const endDateTime = `${date}T${String(endHh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00+09:00`;
 
       await createCalendarEvent(c.env, calendarId, {
-        title: `【来店予約】${name}様 - リペアマスター${storeName}`,
+        title: `【来店予約】${name}様 - ${brandName}${storeName}`,
         startDateTime,
         endDateTime,
         description: `お名前：${name}\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n修理費用：${priceText}\n納期目安：${deliveryText}`,

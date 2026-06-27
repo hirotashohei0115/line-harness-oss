@@ -17,12 +17,14 @@ import {
   createAutomationLog,
   getActiveNotificationRulesByEvent,
   createNotification,
+  updateNotificationStatus,
   addTagToFriend,
   removeTagFromFriend,
   enrollFriendInScenario,
   jstNow,
 } from '@line-crm/db';
 import { LineClient } from '@line-crm/line-sdk';
+import { sendChatworkMessage } from '../lib/chatwork.js';
 import { sendAdConversions } from './ad-conversion.js';
 
 export interface EventPayload {
@@ -41,12 +43,14 @@ export async function fireEvent(
   payload: EventPayload,
   lineAccessToken?: string,
   lineAccountId?: string | null,
+  chatworkApiToken?: string,
+  chatworkDefaultRoomId?: string,
 ): Promise<void> {
   const jobs: Promise<unknown>[] = [
     fireOutgoingWebhooks(db, eventType, payload),
     processScoring(db, eventType, payload),
     processAutomations(db, eventType, payload, lineAccessToken, lineAccountId),
-    processNotifications(db, eventType, payload, lineAccountId),
+    processNotifications(db, eventType, payload, lineAccountId, lineAccessToken, chatworkApiToken, chatworkDefaultRoomId),
   ];
 
   // Ad conversion postback
@@ -316,6 +320,9 @@ async function processNotifications(
   eventType: string,
   payload: EventPayload,
   lineAccountId?: string | null,
+  lineAccessToken?: string,
+  chatworkApiToken?: string,
+  chatworkDefaultRoomId?: string,
 ): Promise<void> {
   try {
     const allRules = await getActiveNotificationRulesByEvent(db, eventType);
@@ -328,8 +335,37 @@ async function processNotifications(
       // Guard against double-encoded JSON strings (e.g. "\"[\\\"webhook\\\"]\"")
       if (typeof channels === 'string') channels = JSON.parse(channels);
 
+      const conditions = JSON.parse(rule.conditions || '{}') as Record<string, unknown>;
+
+      // タグ条件チェック（message_received + tagName 指定時、カンマ区切りでOR判定）
+      if (conditions.tagName && payload.friendId) {
+        const tagNames = String(conditions.tagName).split(',').map(s => s.trim()).filter(Boolean);
+        if (tagNames.length > 0) {
+          const placeholders = tagNames.map(() => '?').join(',');
+          const hasTag = await db
+            .prepare(`SELECT 1 FROM friend_tags ft JOIN tags t ON t.id = ft.tag_id WHERE ft.friend_id = ? AND t.name IN (${placeholders}) LIMIT 1`)
+            .bind(payload.friendId, ...tagNames)
+            .first();
+          if (!hasTag) continue;
+        }
+      }
+
+      // 店舗キー条件チェック（storeKey が設定されている場合）
+      if (conditions.storeKey) {
+        const ruleKey = conditions.storeKey as string;
+        const eventStoreKey = payload.eventData?.storeKey as string | undefined;
+        const eventStoreKeys = payload.eventData?.storeKeys as string[] | undefined;
+        const matches =
+          (eventStoreKey !== undefined && eventStoreKey === ruleKey) ||
+          (Array.isArray(eventStoreKeys) && eventStoreKeys.includes(ruleKey));
+        if (!matches) continue;
+      }
+
       for (const channel of channels) {
-        await createNotification(db, {
+        // message_received の自動キーワード応答はChatwork通知しない（スパム防止）
+        if (channel === 'chatwork' && eventType === 'message_received' && payload.eventData?.isAutoKeyword) continue;
+
+        const notifRecord = await createNotification(db, {
           ruleId: rule.id,
           eventType,
           title: `${rule.name}: ${eventType}`,
@@ -338,12 +374,75 @@ async function processNotifications(
           metadata: JSON.stringify(payload.eventData ?? {}),
         });
 
-        // Webhook通知チャネルの場合は即時配信
-        if (channel === 'webhook') {
-          // 送信Webhookと統合（既にfireOutgoingWebhooksで処理済み）
+        if (channel === 'chatwork') {
+          const token = (conditions.chatworkApiToken as string | undefined) || chatworkApiToken;
+          const roomId = (conditions.chatworkRoomId as string | undefined) || chatworkDefaultRoomId;
+          if (!token || !roomId) continue;
+
+          const toPrefix = conditions.chatworkToId
+            ? (conditions.chatworkToId as string).split(',').map(id => `[To:${id.trim()}]`).join('') + '\n'
+            : '';
+
+          // ルートで組み立てた本文があれば使用し、なければ汎用フォーマット
+          const prebuiltBody = payload.eventData?.chatworkBody as string | undefined;
+          let msgBody: string;
+          if (prebuiltBody) {
+            msgBody = `${toPrefix}${prebuiltBody}`;
+          } else {
+            let friendName = '';
+            if (payload.friendId) {
+              const fr = await db
+                .prepare('SELECT display_name FROM friends WHERE id = ? LIMIT 1')
+                .bind(payload.friendId)
+                .first<{ display_name: string | null }>();
+              friendName = fr?.display_name ?? '';
+            }
+            const messageText = payload.eventData?.text as string | undefined;
+            msgBody = `${toPrefix}[info][title]${rule.name}[/title]イベント: ${eventType}${friendName ? `\nユーザー: ${friendName}` : ''}${messageText ? `\n内容: ${messageText}` : ''}[/info]`;
+          }
+
+          try {
+            await sendChatworkMessage(token, roomId, msgBody);
+            await updateNotificationStatus(db, notifRecord.id, 'sent');
+          } catch (err) {
+            console.error('Chatwork通知送信エラー:', err);
+            await updateNotificationStatus(db, notifRecord.id, 'failed');
+          }
         }
-        // email チャネルの場合はSendGrid等で送信（将来実装）
-        // dashboard チャネルの場合はDB記録のみ（上記createNotificationで完了）
+
+        if (channel === 'line' && lineAccessToken && conditions.lineGroupId) {
+          try {
+            const groupId = conditions.lineGroupId as string;
+
+            // ルートで組み立てた本文があれば使用し、なければ汎用フォーマット
+            const prebuiltLineText = payload.eventData?.lineText as string | undefined;
+            let notifyText: string;
+            if (prebuiltLineText) {
+              notifyText = prebuiltLineText;
+            } else {
+              let friendName = '';
+              if (payload.friendId) {
+                const fr = await db
+                  .prepare('SELECT display_name FROM friends WHERE id = ? LIMIT 1')
+                  .bind(payload.friendId)
+                  .first<{ display_name: string | null }>();
+                friendName = fr?.display_name ?? '';
+              }
+              const messageText = payload.eventData?.text as string | undefined;
+              notifyText = [
+                `【${rule.name}】`,
+                `イベント: ${eventType}`,
+                friendName ? `ユーザー: ${friendName}` : '',
+                messageText ? `内容: ${messageText}` : '',
+              ].filter(Boolean).join('\n');
+            }
+
+            const lineClient = new LineClient(lineAccessToken);
+            await lineClient.pushMessage(groupId, [{ type: 'text', text: notifyText }]);
+          } catch (err) {
+            console.error('LINE通知送信エラー:', err);
+          }
+        }
       }
     }
   } catch (err) {

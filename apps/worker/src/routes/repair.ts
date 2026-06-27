@@ -15,6 +15,7 @@ import {
 import type { RepairQuote } from '@line-crm/db';
 import { LineClient } from '@line-crm/line-sdk';
 import { sendChatworkMessage, jstTimestamp } from '../lib/chatwork.js';
+import { fireEvent } from '../services/event-bus.js';
 import type { Env } from '../index.js';
 
 async function setContactMark(db: D1Database, friendId: string, markId: string): Promise<void> {
@@ -236,6 +237,7 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
     phone?: string;
     packagingKit?: boolean;
     deliveryStore?: string;
+    deviceType?: string;
   };
   try {
     body = await c.req.json();
@@ -244,6 +246,7 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
   }
 
   const { lineUserId, name, postalCode, address, phone, packagingKit, deliveryStore } = body;
+  const isSwitch = body.deviceType === 'switch';
   if (!lineUserId || !name || !postalCode || !address || !phone || !deliveryStore) {
     return c.json({ success: false, error: 'Missing required fields' }, 400);
   }
@@ -254,85 +257,82 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       .prepare(`SELECT id FROM friends WHERE line_user_id = ? LIMIT 1`)
       .bind(lineUserId)
       .first<{ id: string }>();
-    if (!friend) {
+    if (!friend && !isSwitch) {
       return c.json({ success: false, error: 'Friend not found' }, 404);
     }
 
     const id = crypto.randomUUID();
     const now = new Date().toISOString().replace('T', 'T').slice(0, 23);
-    await c.env.DB
-      .prepare(
-        `INSERT INTO mail_orders (id, friend_id, name, postal_code, address, phone, packaging_kit, delivery_store, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
-      )
-      .bind(id, friend.id, name, postalCode, address, phone, packagingKit ? 1 : 0, deliveryStore, now, now)
-      .run();
 
-    // フォーム内容をチャットに表示（incoming メッセージとして記録、JSTタイムスタンプ使用）
-    const formContent = `【郵送修理フォーム送信】\n━━━━━━━━━━\nお名前：${name}\n郵便番号：${postalCode}\nご住所：${address}\n電話番号：${phone}\n梱包キット：${packagingKit ? 'あり（無料）' : 'なし'}\n配送先：${deliveryStore}\n━━━━━━━━━━`;
-    await c.env.DB
-      .prepare(
-        `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
-         VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 0, ?)`,
-      )
-      .bind(crypto.randomUUID(), friend.id, formContent, jstNow())
-      .run();
-
-    // チャット一覧に表示されるよう chats エントリを更新
-    await upsertChatOnMessage(c.env.DB, friend.id);
-
-    // フォーム送信完了マーク: 梱包キット希望→mark_27、それ以外→発送待ち
-    if (packagingKit) {
-      await setContactMark(c.env.DB, friend.id, 'mark_27');
-    } else {
-      await setContactMarkByName(c.env.DB, friend.id, '発送待ち');
-    }
-
-    // repair_quotesの希望店舗を更新（チャット画面「修理情報」に反映）
-    const storeShortName = deliveryStore.includes('菖蒲') ? '菖蒲店'
-      : deliveryStore.includes('盛岡') ? '盛岡店'
-      : deliveryStore.includes('岐阜') ? '岐阜店'
-      : deliveryStore.includes('大分') ? '大分店'
-      : null;
-    if (storeShortName) {
+    if (friend) {
       await c.env.DB
-        .prepare(`UPDATE repair_quotes SET store = ? WHERE id = (SELECT id FROM repair_quotes WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1)`)
-        .bind(storeShortName, friend.id)
+        .prepare(
+          `INSERT INTO mail_orders (id, friend_id, name, postal_code, address, phone, packaging_kit, delivery_store, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+        )
+        .bind(id, friend.id, name, postalCode, address, phone, packagingKit ? 1 : 0, deliveryStore, now, now)
         .run();
+
+      const formContent = `【郵送修理フォーム送信】\n━━━━━━━━━━\nお名前：${name}\n郵便番号：${postalCode}\nご住所：${address}\n電話番号：${phone}\n梱包キット：${packagingKit ? 'あり（無料）' : 'なし'}\n配送先：${deliveryStore}\n━━━━━━━━━━`;
       await c.env.DB
-        .prepare(`UPDATE friend_attributes SET value = ?, updated_at = ? WHERE friend_id = ? AND key = 'repair_store'`)
-        .bind(storeShortName, jstNow(), friend.id)
+        .prepare(
+          `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
+           VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 0, ?)`,
+        )
+        .bind(crypto.randomUUID(), friend.id, formContent, jstNow())
+        .run();
+
+      await upsertChatOnMessage(c.env.DB, friend.id);
+
+      if (packagingKit) {
+        await setContactMark(c.env.DB, friend.id, 'mark_27');
+      } else {
+        await setContactMarkByName(c.env.DB, friend.id, '発送待ち');
+      }
+
+      const storeShortName = deliveryStore.includes('菖蒲') ? '菖蒲店'
+        : deliveryStore.includes('盛岡') ? '盛岡店'
+        : deliveryStore.includes('岐阜') ? '岐阜店'
+        : deliveryStore.includes('大分') ? '大分店'
+        : null;
+      if (storeShortName) {
+        await c.env.DB
+          .prepare(`UPDATE repair_quotes SET store = ? WHERE id = (SELECT id FROM repair_quotes WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1)`)
+          .bind(storeShortName, friend.id)
+          .run();
+        await c.env.DB
+          .prepare(`UPDATE friend_attributes SET value = ?, updated_at = ? WHERE friend_id = ? AND key = 'repair_store'`)
+          .bind(storeShortName, jstNow(), friend.id)
+          .run();
+      }
+
+      await removeTagsByNames(c.env.DB, friend.id, [packagingKit ? '梱包キット希望しない' : '梱包キット希望する']);
+      await addTagToFriend(c.env.DB, friend.id, packagingKit ? '梱包キット希望する' : '梱包キット希望しない');
+      await removeTagsByNames(c.env.DB, friend.id, ['タグなし']);
+      const ALL_POSTAL_TAGS = ['郵送依頼', '郵送（盛岡）', '郵送（菖蒲）', '郵送（岐阜）', '郵送（大分）', '店舗持込'];
+      if (deliveryStore.includes('菖蒲')) {
+        await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（菖蒲）'));
+        await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
+        await addTagToFriend(c.env.DB, friend.id, '郵送（菖蒲）');
+      } else if (deliveryStore.includes('盛岡')) {
+        await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（盛岡）'));
+        await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
+        await addTagToFriend(c.env.DB, friend.id, '郵送（盛岡）');
+      } else if (deliveryStore.includes('岐阜')) {
+        await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（岐阜）'));
+        await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
+        await addTagToFriend(c.env.DB, friend.id, '郵送（岐阜）');
+      } else if (deliveryStore.includes('大分')) {
+        await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（大分）'));
+        await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
+        await addTagToFriend(c.env.DB, friend.id, '郵送（大分）');
+      }
+
+      await c.env.DB
+        .prepare(`UPDATE friends SET display_name = ?, updated_at = ? WHERE id = ?`)
+        .bind(name, now, friend.id)
         .run();
     }
-
-    // 自動タグ付与（排他制御）
-    await removeTagsByNames(c.env.DB, friend.id, [packagingKit ? '梱包キット希望しない' : '梱包キット希望する']);
-    await addTagToFriend(c.env.DB, friend.id, packagingKit ? '梱包キット希望する' : '梱包キット希望しない');
-    await removeTagsByNames(c.env.DB, friend.id, ['タグなし']);
-    const ALL_POSTAL_TAGS = ['郵送依頼', '郵送（盛岡）', '郵送（菖蒲）', '郵送（岐阜）', '郵送（大分）', '店舗持込'];
-    if (deliveryStore.includes('菖蒲')) {
-      await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（菖蒲）'));
-      await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
-      await addTagToFriend(c.env.DB, friend.id, '郵送（菖蒲）');
-    } else if (deliveryStore.includes('盛岡')) {
-      await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（盛岡）'));
-      await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
-      await addTagToFriend(c.env.DB, friend.id, '郵送（盛岡）');
-    } else if (deliveryStore.includes('岐阜')) {
-      await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（岐阜）'));
-      await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
-      await addTagToFriend(c.env.DB, friend.id, '郵送（岐阜）');
-    } else if (deliveryStore.includes('大分')) {
-      await removeTagsByNames(c.env.DB, friend.id, ALL_POSTAL_TAGS.filter(t => t !== '郵送依頼' && t !== '郵送（大分）'));
-      await addTagToFriend(c.env.DB, friend.id, '郵送依頼');
-      await addTagToFriend(c.env.DB, friend.id, '郵送（大分）');
-    }
-
-    // フォーム入力名で display_name を更新
-    await c.env.DB
-      .prepare(`UPDATE friends SET display_name = ?, updated_at = ? WHERE id = ?`)
-      .bind(name, now, friend.id)
-      .run();
 
     // LINEでお礼メッセージを送信
     const kitLabel = packagingKit ? 'あり（無料）' : 'なし';
@@ -369,8 +369,8 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       console.error('mail-order push message error:', pushErr);
     }
 
-    // Chatwork通知: 梱包キット希望の場合（awaitで確実に送信）
-    if (packagingKit) {
+    // Chatwork通知: 梱包キット希望の場合（Switch除く）
+    if (!isSwitch && packagingKit) {
       const cwToken = c.env.CHATWORK_API_TOKEN;
       const cwRoom = c.env.CHATWORK_ROOM_ID;
       if (cwToken && cwRoom) {
@@ -379,7 +379,8 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       }
     }
 
-    // tag_added 通知ルール: 梱包キットタグ付与時
+    // tag_added 通知ルール: 梱包キットタグ付与時（Switch除く）
+    if (isSwitch) return c.json({ success: true, data: { id } }, 201);
     const kitTagName = packagingKit ? '梱包キット希望する' : '梱包キット希望しない';
     try {
       const notifRules = await getActiveNotificationRulesByEvent(c.env.DB, 'tag_added');
@@ -479,7 +480,7 @@ repairRoutes.patch('/api/repair/attributes/:friendId', async (c) => {
   const now = new Date().toISOString().slice(0, 23);
 
   // Attribute keys stored in friend_attributes
-  const attrKeys = ['repair_product_name', 'repair_model_name', 'repair_symptom_name', 'repair_year', 'repair_inch_size', 'repair_store'] as const;
+  const attrKeys = ['repair_product_name', 'repair_model_name', 'repair_symptom_name', 'repair_year', 'repair_inch_size', 'repair_store', 'call_result', 'call_result_reason'] as const;
 
   try {
     // Update friend_attributes
@@ -594,16 +595,17 @@ repairRoutes.post('/api/repair/visit-orders', async (c) => {
       console.error('visit-order push message error:', pushErr);
     }
 
-    // Chatwork通知
-    try {
-      const cwToken = c.env.CHATWORK_API_TOKEN;
-      if (cwToken) {
-        const cwMsg = `[info][title]🚗 訪問修理依頼が入りました[/title]お名前：${name}（${furigana}）\n電話番号：${phone}\n住所：${address}\n個人/法人：${customerTypeLabel}\n第1希望：${preferredDatetime1}\n第2希望：${preferredDatetime2 ?? 'なし'}\n第3希望：${preferredDatetime3 ?? 'なし'}\n訪問希望理由：${visitReason ?? 'なし'}\n依頼内容：${detail ?? 'なし'}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
-        await sendChatworkMessage(cwToken, '436188150', cwMsg);
-      }
-    } catch (cwErr) {
-      console.error('visit-order chatwork error:', cwErr);
-    }
+    // 通知ルール経由でChatwork/LINE通知
+    const cwMsg = `[info][title]🚗 訪問修理依頼が入りました[/title]お名前：${name}（${furigana}）\n電話番号：${phone}\n住所：${address}\n個人/法人：${customerTypeLabel}\n第1希望：${preferredDatetime1}\n第2希望：${preferredDatetime2 ?? 'なし'}\n第3希望：${preferredDatetime3 ?? 'なし'}\n訪問希望理由：${visitReason ?? 'なし'}\n依頼内容：${detail ?? 'なし'}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+    await fireEvent(
+      c.env.DB,
+      'visit_order_created',
+      { friendId: friend.id, eventData: { chatworkBody: cwMsg, lineText: `【訪問修理依頼】\nお名前：${name}\n電話番号：${phone}\n住所：${address}\n第1希望：${preferredDatetime1}` } },
+      c.env.LINE_CHANNEL_ACCESS_TOKEN,
+      null,
+      c.env.CHATWORK_API_TOKEN,
+      c.env.CHATWORK_ROOM_ID,
+    ).catch(err => console.error('fireEvent visit_order_created error:', err));
 
     return c.json({ success: true, data: { id } }, 201);
   } catch (err) {
@@ -660,14 +662,14 @@ repairRoutes.put('/api/repair/model-prices/:id', async (c) => {
 
 // POST /api/contact-form — お問い合わせフォーム送信（フォローイベント新フロー用）
 repairRoutes.post('/api/contact-form', async (c) => {
-  let body: { lineUserId?: string; name?: string; phone?: string; model?: string; symptom?: string };
+  let body: { lineUserId?: string; name?: string; phone?: string; model?: string; symptom?: string; preferredTime?: string };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ success: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const { lineUserId, name, phone, model, symptom } = body;
+  const { lineUserId, name, phone, model, symptom, preferredTime } = body;
   if (!lineUserId || !name || !phone || !model || !symptom) {
     return c.json({ success: false, error: 'Missing required fields' }, 400);
   }
@@ -687,12 +689,12 @@ repairRoutes.post('/api/contact-form', async (c) => {
     const accessToken = row?.channel_access_token || c.env.LINE_CHANNEL_ACCESS_TOKEN;
     const lineClient = new LineClient(accessToken);
 
-    const replyText = `【ご相談内容のご確認】\n\nお名前：${name}様\n電話番号：${phone}\n機種：${model}\n症状：${symptom}\n\n担当者より直接お電話させていただきます。\n今しばらくお待ちください🙏\n\n受付時間：10:00〜20:00`;
+    const replyText = `【ご相談内容のご確認】\n\nお名前：${name}様\n電話番号：${phone}\n機種：${model}\n症状：${symptom}${preferredTime ? `\n希望連絡時間帯：${preferredTime}` : ''}\n\n担当者より直接お電話させていただきます。\n今しばらくお待ちください🙏\n\n受付時間：10:00〜20:00`;
     await lineClient.pushMessage(lineUserId, [{ type: 'text', text: replyText }]);
 
     if (row?.id) {
       // 受信メッセージとしてチャットに記録
-      const formContent = `【お問い合わせフォーム送信】\n━━━━━━━━━━\nお名前：${name}\n電話番号：${phone}\n機種：${model}\n症状：${symptom}\n━━━━━━━━━━`;
+      const formContent = `【お問い合わせフォーム送信】\n━━━━━━━━━━\nお名前：${name}\n電話番号：${phone}\n機種：${model}\n症状：${symptom}${preferredTime ? `\n希望連絡時間帯：${preferredTime}` : ''}\n━━━━━━━━━━`;
       await c.env.DB
         .prepare(
           `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at)
@@ -774,7 +776,7 @@ repairRoutes.post('/api/contact-form', async (c) => {
         const toPrefix = conditions.chatworkToId
           ? (conditions.chatworkToId as string).split(',').map(id => `[To:${id.trim()}]`).join('') + '\n'
           : '';
-        const msgBody = `${toPrefix}[info][title]${msgTitle}[/title]お名前：${name}\n電話番号：${phone}\n機種：${model}\n症状：${symptom}[/info]`;
+        const msgBody = `${toPrefix}[info][title]${msgTitle}[/title]お名前：${name}\n電話番号：${phone}\n機種：${model}\n症状：${symptom}${preferredTime ? `\n希望連絡時間帯：${preferredTime}` : ''}[/info]`;
 
         const notifRecord = await createNotification(c.env.DB, {
           ruleId: rule.id,

@@ -16,26 +16,48 @@ declare const liff: {
   closeWindow(): void;
 };
 
+const PRODUCTION_LIFF_ID = '2007974811-LpVxs3kg';
+const STAGING_LIFF_ID = '2010356368-saZxu3fZ';
 const PRODUCTION_API_URL = 'https://macbook-repair-worker.empower-repair.workers.dev';
 const STAGING_API_URL = 'https://macbook-repair-worker-staging.nakamura-yao.workers.dev';
-const STAGING_LIFF_ID = '2010356368-saZxu3fZ';
-
-function getApiUrl(): string {
-  const liffId = detectLiffId();
-  if (liffId === STAGING_LIFF_ID) return STAGING_API_URL;
-  return PRODUCTION_API_URL;
-}
 
 function detectLiffId(): string {
   const params = new URLSearchParams(window.location.search);
-  return params.get('liffId') || STAGING_LIFF_ID;
+  const direct = params.get('liffId');
+  if (direct) return direct;
+  // LINE encodes query params into liff.state before init
+  const liffState = params.get('liff.state');
+  if (liffState) {
+    const stateParams = new URLSearchParams(decodeURIComponent(liffState).replace(/^\?/, ''));
+    const fromState = stateParams.get('liffId');
+    if (fromState) return fromState;
+  }
+  // hostname で環境判定してデフォルトを返す
+  const h = window.location.hostname;
+  if (h === 'localhost' || h.includes('staging') || h.includes('127.0.0.1')) {
+    return STAGING_LIFF_ID;
+  }
+  return PRODUCTION_LIFF_ID;
 }
 
 const LIFF_ID = detectLiffId();
 
+function getApiUrl(): string {
+  const h = window.location.hostname;
+  if (h === 'localhost' || h.includes('staging') || h.includes('127.0.0.1')) {
+    return STAGING_API_URL;
+  }
+  return PRODUCTION_API_URL;
+}
+
 const AIR_MODELS = ['A2941', 'A2681', 'A2337', 'A2179', 'A1932', 'A1466', 'A1369'];
 const PRO_MODELS = ['A2338', 'A2141', 'A1990', 'A1989', 'A1708', 'A1707', 'A1502'];
 const YEARS = [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017];
+const TIME_SLOTS = [
+  '10:00〜11:00', '11:00〜12:00', '12:00〜13:00', '13:00〜14:00',
+  '14:00〜15:00', '15:00〜16:00', '16:00〜17:00', '17:00〜18:00',
+  '18:00〜19:00', '19:00〜20:00', 'いつでも',
+];
 const INCH_SIZES = ['13インチ', '14インチ', '15インチ', '16インチ'];
 const SYMPTOMS = [
   '画面割れ・液晶不良',
@@ -204,6 +226,14 @@ function renderForm(displayName: string): void {
           </select>
         </div>
 
+        <div class="cf-field">
+          <label class="cf-label" for="cf-time">希望連絡時間帯<span class="cf-required">*</span></label>
+          <select class="cf-select" id="cf-time" required>
+            <option value="">選択してください</option>
+            ${TIME_SLOTS.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
+          </select>
+        </div>
+
         <div id="cf-form-error"></div>
         <button type="submit" class="cf-submit" id="cf-submit-btn">送信する</button>
       </form>
@@ -341,12 +371,14 @@ async function handleSubmit(lineUserId: string, btn: HTMLButtonElement): Promise
   const name = (document.getElementById('cf-name') as HTMLInputElement)?.value.trim();
   const phone = (document.getElementById('cf-phone') as HTMLInputElement)?.value.trim();
   const symptom = (document.getElementById('cf-symptom') as HTMLSelectElement)?.value;
+  const preferredTime = (document.getElementById('cf-time') as HTMLSelectElement)?.value;
   const model = buildModelString();
 
   if (!name) { showFormError('お名前を入力してください'); return; }
   if (!phone) { showFormError('電話番号を入力してください'); return; }
   if (!model) { showFormError('機種を選択してください'); return; }
   if (!symptom) { showFormError('症状を選択してください'); return; }
+  if (!preferredTime) { showFormError('希望連絡時間帯を選択してください'); return; }
 
   btn.disabled = true;
   btn.textContent = '送信中...';
@@ -355,7 +387,7 @@ async function handleSubmit(lineUserId: string, btn: HTMLButtonElement): Promise
     const res = await fetch(`${getApiUrl()}/api/contact-form`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lineUserId, name, phone, model, symptom }),
+      body: JSON.stringify({ lineUserId, name, phone, model, symptom, preferredTime }),
     });
 
     if (!res.ok) {

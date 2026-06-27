@@ -19,6 +19,8 @@ import { initContactForm } from './contact-form.js';
 import { initForm } from './form.js';
 import { initMailRepair } from './mail-repair.js';
 import { initReservation } from './reservation.js';
+import { initSwitchMailRepair } from './switch-mail-repair.js';
+import { initSwitchReservation } from './switch-reservation.js';
 import { initVisitRepair } from './visit-repair.js';
 
 declare const liff: {
@@ -38,7 +40,7 @@ function detectLiffId(): string {
   const params = new URLSearchParams(window.location.search);
   const fromParam = params.get('liffId');
   if (fromParam) return fromParam;
-  return '2010126656-iMP2b4Jw';
+  return '2007974811-LpVxs3kg';
 }
 const LIFF_ID = detectLiffId();
 const API_URL = import.meta.env?.VITE_API_URL || 'http://localhost:8787';
@@ -270,6 +272,16 @@ async function main() {
     // contact-form manages its own liff.init (uses a different LIFF ID for staging)
     if (page === 'contact-form') {
       await initContactForm();
+      return;
+    }
+
+    // Switch forms manage their own liff.init (different LIFF ID / LINE channel)
+    if (page === 'switch-mail-repair') {
+      await initSwitchMailRepair();
+      return;
+    }
+    if (page === 'switch-reservation') {
+      await initSwitchReservation();
       return;
     }
 
