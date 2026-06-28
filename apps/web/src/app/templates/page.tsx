@@ -5,6 +5,7 @@ import { api, fetchApi } from '@/lib/api'
 import Header from '@/components/layout/header'
 import CcPromptButton from '@/components/cc-prompt-button'
 import FlexPreviewComponent from '@/components/flex-preview'
+import { useAccount } from '@/contexts/account-context'
 import {
   DndContext,
   closestCenter,
@@ -667,6 +668,7 @@ const ccPrompts = [
 ]
 
 export default function TemplatesPage() {
+  const { selectedAccountId } = useAccount()
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -736,9 +738,10 @@ export default function TemplatesPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await api.templates.list(
-        selectedCategory !== 'all' ? selectedCategory : undefined
-      )
+      const res = await api.templates.list({
+        category: selectedCategory !== 'all' ? selectedCategory : undefined,
+        accountId: selectedAccountId || undefined,
+      })
       if (res.success) {
         setTemplates(res.data)
         const newCats = res.data.map(t => t.category).filter(Boolean) as string[]
@@ -751,7 +754,7 @@ export default function TemplatesPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedCategory])
+  }, [selectedCategory, selectedAccountId])
 
   useEffect(() => {
     load()
@@ -824,6 +827,7 @@ export default function TemplatesPage() {
         category: form.category,
         messageType: saveType,
         messageContent: saveContent,
+        lineAccountId: selectedAccountId || null,
       })
       if (res.success) {
         setShowCreate(false)

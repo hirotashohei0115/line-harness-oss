@@ -50,7 +50,7 @@ templates.get('/api/templates/:id', async (c) => {
 
 templates.post('/api/templates', async (c) => {
   try {
-    const body = await c.req.json<{ name: string; category?: string; messageType: string; messageContent: string }>();
+    const body = await c.req.json<{ name: string; category?: string; messageType: string; messageContent: string; lineAccountId?: string | null }>();
     if (!body.name || !body.messageType || !body.messageContent) {
       return c.json({ success: false, error: 'name, messageType, messageContent are required' }, 400);
     }

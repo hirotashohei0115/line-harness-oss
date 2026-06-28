@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import type { FunnelWithSteps, ContactMark } from '@/lib/api'
 import type { Tag } from '@line-crm/shared'
+import { useAccount } from '@/contexts/account-context'
 
 type ConditionType = 'tag' | 'contact_mark' | 'action'
 
@@ -47,6 +48,7 @@ interface FunnelFormProps {
 
 export default function FunnelForm({ initial }: FunnelFormProps) {
   const router = useRouter()
+  const { selectedAccountId } = useAccount()
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [steps, setSteps] = useState<StepDraft[]>(
@@ -121,6 +123,7 @@ export default function FunnelForm({ initial }: FunnelFormProps) {
       const payload = {
         name: name.trim(),
         description: description.trim() || undefined,
+        lineAccountId: selectedAccountId || null,
         steps: steps.map((s, i) => ({
           name: s.name, step_order: i + 1,
           condition_type: s.conditionType,

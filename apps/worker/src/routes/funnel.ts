@@ -37,7 +37,13 @@ function serializeStep(row: FunnelStepRow) {
 // GET /api/funnels
 funnelRoutes.get('/api/funnels', async (c) => {
   try {
-    const result = await c.env.DB.prepare('SELECT * FROM funnel_definitions ORDER BY created_at DESC').all<FunnelRow>();
+    const lineAccountId = c.req.query('lineAccountId');
+    let result: { results: FunnelRow[] };
+    if (lineAccountId) {
+      result = await c.env.DB.prepare('SELECT * FROM funnel_definitions WHERE line_account_id = ? OR line_account_id IS NULL ORDER BY created_at DESC').bind(lineAccountId).all<FunnelRow>();
+    } else {
+      result = await c.env.DB.prepare('SELECT * FROM funnel_definitions ORDER BY created_at DESC').all<FunnelRow>();
+    }
     return c.json({ success: true, data: result.results.map(serializeFunnel) });
   } catch (err) {
     console.error('GET /api/funnels error:', err);
@@ -49,14 +55,14 @@ funnelRoutes.get('/api/funnels', async (c) => {
 funnelRoutes.post('/api/funnels', async (c) => {
   try {
     const body = await c.req.json<{
-      name: string; description?: string;
+      name: string; description?: string; lineAccountId?: string | null;
       steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark' | 'action'; condition_ids: string[] }[];
     }>();
     if (!body.name) return c.json({ success: false, error: 'name is required' }, 400);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    await c.env.DB.prepare('INSERT INTO funnel_definitions (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-      .bind(id, body.name, body.description ?? null, now, now).run();
+    await c.env.DB.prepare('INSERT INTO funnel_definitions (id, name, description, line_account_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(id, body.name, body.description ?? null, body.lineAccountId ?? null, now, now).run();
     for (const step of body.steps ?? []) {
       await c.env.DB.prepare('INSERT INTO funnel_steps (id, funnel_id, name, step_order, condition_type, condition_ids, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .bind(crypto.randomUUID(), id, step.name, step.step_order, step.condition_type, JSON.stringify(step.condition_ids), now).run();

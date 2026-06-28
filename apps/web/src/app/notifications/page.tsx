@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '@/lib/api'
 import Header from '@/components/layout/header'
 import CcPromptButton from '@/components/cc-prompt-button'
+import { useAccount } from '@/contexts/account-context'
 
 interface NotificationRule {
   id: string
@@ -28,21 +29,33 @@ interface Notification {
   createdAt: string
 }
 
-const STORE_LIST = [
-  '青森店','盛岡店','宇都宮店','菖蒲店','成田店','幕張店',
-  '錦糸町店','五反田店','長岡店','岐阜店','木津川店','大分店',
-  '郵送修理センター盛岡店','郵送修理センター菖蒲店','郵送修理センター岐阜店','郵送修理センター大分店',
+const STORE_KEY_LIST = [
+  { key: 'aomori',     label: '青森店' },
+  { key: 'morioka',    label: '盛岡店' },
+  { key: 'utsunomiya', label: '宇都宮店' },
+  { key: 'shobu',      label: '菖蒲店' },
+  { key: 'narita',     label: '成田店' },
+  { key: 'makuhari',   label: '幕張店' },
+  { key: 'kinshicho',  label: '錦糸町店' },
+  { key: 'gotanda',    label: '五反田店' },
+  { key: 'nagaoka',    label: '長岡店' },
+  { key: 'gifu',       label: '岐阜店' },
+  { key: 'kizugawa',   label: '木津川店' },
+  { key: 'oita',       label: '大分店' },
 ]
 
 interface CreateFormState {
   name: string
   eventType: string
   channels: string
+  folder: string
   store: string
+  storeKey: string
   tagName: string
   chatworkApiToken: string
   chatworkRoomId: string
   chatworkToId: string
+  lineGroupId: string
 }
 
 interface Tag {
@@ -95,18 +108,33 @@ const ccPrompts = [
   },
 ]
 
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  message_received: 'メッセージ受信',
+  reservation_created: '来店予約',
+  visit_order_created: '訪問修理依頼',
+  order_received: '受注',
+  friend_add: '友だち追加',
+  tag_added: 'タグ付与',
+  contact_form_submitted: 'お問い合わせフォーム送信',
+}
+
 const EMPTY_FORM: CreateFormState = {
   name: '',
   eventType: '',
   channels: '',
+  folder: '',
   store: '',
+  storeKey: '',
   tagName: '',
   chatworkApiToken: '',
   chatworkRoomId: '',
   chatworkToId: '',
+  lineGroupId: '',
 }
 
 export default function NotificationsPage() {
+  const { selectedAccountId } = useAccount()
+  const formRef = useRef<HTMLDivElement>(null)
   const [rules, setRules] = useState<NotificationRule[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
@@ -118,10 +146,11 @@ export default function NotificationsPage() {
   const [formError, setFormError] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [allTags, setAllTags] = useState<Tag[]>([])
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   const loadRules = useCallback(async () => {
     try {
-      const res = await api.notifications.rules.list()
+      const res = await api.notifications.rules.list(selectedAccountId ? { accountId: selectedAccountId } : undefined)
       if (res.success) {
         // channels may be a JSON string or already parsed array
         setRules((res.data as unknown as NotificationRule[]).map((r: NotificationRule) => ({
@@ -134,19 +163,20 @@ export default function NotificationsPage() {
     } catch {
       setError('通知ルールの読み込みに失敗しました。もう一度お試しください。')
     }
-  }, [])
+  }, [selectedAccountId])
 
   const loadNotifications = useCallback(async (status?: string) => {
     try {
-      const params: { status?: string; limit?: string } = { limit: '50' }
+      const params: { status?: string; limit?: string; accountId?: string } = { limit: '50' }
       if (status) params.status = status
+      if (selectedAccountId) params.accountId = selectedAccountId
       const res = await api.notifications.list(params)
       if (res.success) setNotifications(res.data)
       else setError(res.error)
     } catch {
       setError('通知履歴の読み込みに失敗しました。もう一度お試しください。')
     }
-  }, [])
+  }, [selectedAccountId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -166,11 +196,18 @@ export default function NotificationsPage() {
     }).catch(() => {})
   }, [])
 
+  const scrollToForm = () => {
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }
+
   const openCreate = () => {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setFormError('')
     setShowForm(true)
+    scrollToForm()
   }
 
   const openEdit = (rule: NotificationRule) => {
@@ -179,14 +216,18 @@ export default function NotificationsPage() {
       name: rule.name,
       eventType: rule.eventType,
       channels: rule.channels.join(', '),
+      folder: String(rule.conditions?.folder ?? ''),
       store: String(rule.conditions?.store ?? ''),
+      storeKey: String(rule.conditions?.storeKey ?? ''),
       tagName: String(rule.conditions?.tagName ?? ''),
       chatworkApiToken: String(rule.conditions?.chatworkApiToken ?? ''),
       chatworkRoomId: String(rule.conditions?.chatworkRoomId ?? ''),
       chatworkToId: String(rule.conditions?.chatworkToId ?? ''),
+      lineGroupId: String(rule.conditions?.lineGroupId ?? ''),
     })
     setFormError('')
     setShowForm(true)
+    scrollToForm()
   }
 
   const closeForm = () => {
@@ -206,8 +247,14 @@ export default function NotificationsPage() {
     }
 
     const conditions: Record<string, unknown> = {}
+    if (form.folder.trim()) {
+      conditions.folder = form.folder.trim()
+    }
     if (form.store) {
       conditions.store = form.store
+    }
+    if (form.storeKey) {
+      conditions.storeKey = form.storeKey
     }
     if (form.tagName) {
       conditions.tagName = form.tagName
@@ -220,6 +267,9 @@ export default function NotificationsPage() {
     }
     if (form.chatworkToId.trim()) {
       conditions.chatworkToId = form.chatworkToId.trim()
+    }
+    if (form.lineGroupId.trim()) {
+      conditions.lineGroupId = form.lineGroupId.trim()
     }
 
     const channels = form.channels
@@ -244,6 +294,7 @@ export default function NotificationsPage() {
           eventType: form.eventType,
           conditions,
           channels,
+          lineAccountId: selectedAccountId,
         })
       }
       if (res.success) {
@@ -307,7 +358,7 @@ export default function NotificationsPage() {
 
       {/* Create / Edit form */}
       {showForm && (
-        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div ref={formRef} className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-sm font-semibold text-gray-800 mb-4">{editingId ? 'ルールを編集' : '新規ルールを作成'}</h2>
           <div className="space-y-4 max-w-lg">
             <div>
@@ -320,6 +371,58 @@ export default function NotificationsPage() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </div>
+            {(() => {
+              // カスタムフォルダ（イベント種別キーでないもの）
+              const customFolders = Array.from(new Set(
+                rules.map(r => String(r.conditions?.folder ?? '')).filter(f => f && !(f in EVENT_TYPE_LABELS))
+              ))
+              // 現在ルールに存在するイベント種別
+              const usedEventTypes = Array.from(new Set(rules.map(r => r.eventType))).filter(t => t in EVENT_TYPE_LABELS)
+              const folderIsExisting = customFolders.includes(form.folder) || (form.folder in EVENT_TYPE_LABELS)
+              const selectVal = form.folder === '' ? '' : folderIsExisting ? form.folder : '__new__'
+              return (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">フォルダ</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                    value={selectVal}
+                    onChange={(e) => {
+                      if (e.target.value === '__new__') {
+                        setForm({ ...form, folder: folderIsExisting ? '' : form.folder })
+                      } else {
+                        setForm({ ...form, folder: e.target.value })
+                      }
+                    }}
+                  >
+                    <option value="">フォルダなし（イベント種別でグループ化）</option>
+                    {customFolders.length > 0 && (
+                      <optgroup label="カスタムフォルダ">
+                        {customFolders.map(f => (
+                          <option key={f} value={f}>{f}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="イベント種別グループ">
+                      {usedEventTypes.map(t => (
+                        <option key={t} value={t}>{EVENT_TYPE_LABELS[t]}</option>
+                      ))}
+                    </optgroup>
+                    <option value="__new__">＋ 新しいフォルダを作成...</option>
+                  </select>
+                  {selectVal === '__new__' && (
+                    <input
+                      type="text"
+                      autoFocus
+                      className="mt-2 w-full border border-green-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="新しいフォルダ名を入力"
+                      value={form.folder}
+                      onChange={(e) => setForm({ ...form, folder: e.target.value })}
+                    />
+                  )}
+                  <p className="text-xs text-gray-400 mt-1">同じフォルダのルールはまとめて表示されます</p>
+                </div>
+              )
+            })()}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">イベントタイプ <span className="text-red-500">*</span></label>
               <select
@@ -330,6 +433,8 @@ export default function NotificationsPage() {
                 <option value="">選択してください</option>
                 <option value="contact_form_submitted">contact_form_submitted（お問い合わせフォーム送信）</option>
                 <option value="order_received">order_received（受注）</option>
+                <option value="reservation_created">reservation_created（来店予約）</option>
+                <option value="visit_order_created">visit_order_created（訪問修理依頼）</option>
                 <option value="friend_add">friend_add（友だち追加）</option>
                 <option value="message_received">message_received（メッセージ受信）</option>
                 <option value="tag_added">tag_added（タグ付与）</option>
@@ -344,11 +449,34 @@ export default function NotificationsPage() {
                   onChange={(e) => setForm({ ...form, store: e.target.value })}
                 >
                   <option value="">すべての店舗（店舗未指定）</option>
-                  {STORE_LIST.map(s => (
-                    <option key={s} value={s}>{s}</option>
+                  {STORE_KEY_LIST.map(s => (
+                    <option key={s.key} value={s.label}>{s.label}</option>
                   ))}
                 </select>
                 <p className="text-xs text-gray-400 mt-1">選択した店舗で受注したときのみ通知されます</p>
+              </div>
+            )}
+            {(form.eventType === 'reservation_created' || form.eventType === 'visit_order_created' || form.eventType === 'message_received') && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  対象店舗
+                  {form.eventType === 'message_received' && <span className="font-normal text-gray-400">（ユーザーの関連店舗）</span>}
+                </label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                  value={form.storeKey}
+                  onChange={(e) => setForm({ ...form, storeKey: e.target.value })}
+                >
+                  <option value="">すべての店舗（店舗未指定）</option>
+                  {STORE_KEY_LIST.map(s => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  {form.eventType === 'message_received'
+                    ? '選択した店舗に関連するユーザーからのメッセージのみ通知されます'
+                    : '選択した店舗のイベントのみ通知されます'}
+                </p>
               </div>
             )}
             {form.eventType === 'tag_added' && (
@@ -365,6 +493,42 @@ export default function NotificationsPage() {
                   ))}
                 </select>
                 <p className="text-xs text-gray-400 mt-1">選択したタグが付与されたときのみ通知されます</p>
+              </div>
+            )}
+            {form.eventType === 'message_received' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">対象タグ（複数選択可）</label>
+                {allTags.length === 0 ? (
+                  <p className="text-xs text-gray-400">タグがありません</p>
+                ) : (
+                  <div className="border border-gray-200 rounded-lg p-2 max-h-44 overflow-y-auto space-y-1">
+                    {allTags.map(t => {
+                      const selected = form.tagName.split(',').map(s => s.trim()).filter(Boolean)
+                      const checked = selected.includes(t.name)
+                      return (
+                        <label key={t.id} className="flex items-center gap-2 px-1 py-0.5 hover:bg-gray-50 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = checked
+                                ? selected.filter(s => s !== t.name)
+                                : [...selected, t.name]
+                              setForm({ ...form, tagName: next.join(',') })
+                            }}
+                            className="accent-green-500 w-3.5 h-3.5"
+                          />
+                          <span className="text-sm text-gray-700">{t.name}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+                <p className="text-xs text-gray-400 mt-1">
+                  {form.tagName
+                    ? 'いずれかのタグが付いているユーザーからのメッセージのみ通知されます'
+                    : '未選択の場合はすべてのユーザーのメッセージが通知されます'}
+                </p>
               </div>
             )}
             <div>
@@ -395,38 +559,66 @@ export default function NotificationsPage() {
                 })}
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Chatwork APIトークン</label>
-              <input
-                type="password"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="Chatwork の APIトークン"
-                value={form.chatworkApiToken}
-                onChange={(e) => setForm({ ...form, chatworkApiToken: e.target.value })}
-              />
-              <p className="text-xs text-gray-400 mt-1">空欄の場合は環境変数のデフォルトトークンを使用します</p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Chatwork ルームID</label>
-              <input
-                type="text"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="例: 123456789"
-                value={form.chatworkRoomId}
-                onChange={(e) => setForm({ ...form, chatworkRoomId: e.target.value })}
-              />
-              <p className="text-xs text-gray-400 mt-1">空欄の場合は環境変数のデフォルトルームに送信されます</p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Chatwork TO（アカウントID）</label>
-              <input
-                type="text"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="例: 12345678,87654321（カンマ区切りで複数指定可）"
-                value={form.chatworkToId}
-                onChange={(e) => setForm({ ...form, chatworkToId: e.target.value })}
-              />
-            </div>
+            {(() => {
+              const selected = form.channels.split(',').map(c => c.trim()).filter(Boolean)
+              return (
+                <>
+                  {selected.includes('chatwork') && (
+                    <div className="space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Chatwork 設定</p>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">APIトークン</label>
+                        <input
+                          type="password"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          placeholder="Chatwork の APIトークン"
+                          value={form.chatworkApiToken}
+                          onChange={(e) => setForm({ ...form, chatworkApiToken: e.target.value })}
+                        />
+                        <p className="text-xs text-gray-400 mt-1">空欄の場合は環境変数のデフォルトトークンを使用します</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">ルームID</label>
+                        <input
+                          type="text"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          placeholder="例: 123456789"
+                          value={form.chatworkRoomId}
+                          onChange={(e) => setForm({ ...form, chatworkRoomId: e.target.value })}
+                        />
+                        <p className="text-xs text-gray-400 mt-1">空欄の場合は環境変数のデフォルトルームに送信されます</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">TO（アカウントID）</label>
+                        <input
+                          type="text"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          placeholder="例: 12345678,87654321（カンマ区切りで複数指定可）"
+                          value={form.chatworkToId}
+                          onChange={(e) => setForm({ ...form, chatworkToId: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {selected.includes('line') && (
+                    <div className="space-y-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                      <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">LINE 設定</p>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">通知先グループID / ユーザーID <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                          placeholder="例: Cxxxxxxxxxx（グループ）/ Uxxxxxxxxxx（ユーザー）"
+                          value={form.lineGroupId}
+                          onChange={(e) => setForm({ ...form, lineGroupId: e.target.value })}
+                        />
+                        <p className="text-xs text-gray-400 mt-1">通知を送信するLINEグループまたはユーザーのIDを入力してください</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
 
             {formError && <p className="text-xs text-red-600">{formError}</p>}
 
@@ -455,15 +647,10 @@ export default function NotificationsPage() {
         <h2 className="text-sm font-semibold text-gray-800 mb-3">通知ルール</h2>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="space-y-3">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-white rounded-lg border border-gray-200 p-5 animate-pulse space-y-3">
-                <div className="h-4 bg-gray-200 rounded w-3/4" />
-                <div className="h-3 bg-gray-100 rounded w-full" />
-                <div className="flex gap-4">
-                  <div className="h-3 bg-gray-100 rounded w-24" />
-                  <div className="h-3 bg-gray-100 rounded w-16" />
-                </div>
+              <div key={i} className="bg-white rounded-lg border border-gray-200 p-4 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-48" />
               </div>
             ))}
           </div>
@@ -472,83 +659,141 @@ export default function NotificationsPage() {
             <p className="text-gray-500">通知ルールがありません。「新規ルール」から作成してください。</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {rules.map((rule) => (
-              <div
-                key={rule.id}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 flex flex-col gap-3"
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{rule.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{rule.eventType}</p>
-                  </div>
-                  <button
-                    onClick={() => handleToggleActive(rule.id, rule.isActive)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                      rule.isActive ? 'bg-green-500' : 'bg-gray-300'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-                        rule.isActive ? 'translate-x-4' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* Channels */}
-                <div className="flex flex-wrap gap-1">
-                  {rule.channels.map((ch) => (
-                    <span
-                      key={ch}
-                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700"
-                    >
-                      {ch}
-                    </span>
-                  ))}
-                </div>
-
-                {/* 対象店舗 */}
-                {Boolean(rule.conditions?.store) && (
-                  <p className="text-xs text-gray-500">
-                    対象店舗: <span className="font-medium text-gray-700">{String(rule.conditions.store)}</span>
-                  </p>
-                )}
-                {/* 対象タグ */}
-                {Boolean(rule.conditions?.tagName) && (
-                  <p className="text-xs text-gray-500">
-                    対象タグ: <span className="font-medium text-gray-700">{String(rule.conditions.tagName)}</span>
-                  </p>
-                )}
-                {/* Chatwork Room ID */}
-                {Boolean(rule.conditions?.chatworkRoomId) && (
-                  <p className="text-xs text-gray-500">
-                    Chatwork Room: <span className="font-mono">{String(rule.conditions.chatworkRoomId)}</span>
-                  </p>
-                )}
-
-                {/* Footer */}
-                <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100">
-                  <span className="text-xs text-gray-400">{formatDatetime(rule.createdAt)}</span>
-                  <div className="flex gap-2">
+          <div className="space-y-3">
+            {(() => {
+              // フォルダ名 > イベント種別でグループ化（出現順を維持）
+              const grouped = rules.reduce<Record<string, { key: string; label: string; sub?: string; rules: NotificationRule[] }>>((acc, rule) => {
+                const folder = String(rule.conditions?.folder ?? '').trim()
+                let groupKey: string
+                let label: string
+                let sub: string | undefined
+                if (!folder) {
+                  // フォルダなし → イベント種別でグループ化
+                  groupKey = `__type__${rule.eventType}`
+                  label = EVENT_TYPE_LABELS[rule.eventType] ?? rule.eventType
+                  sub = rule.eventType
+                } else if (folder in EVENT_TYPE_LABELS) {
+                  // フォルダがイベント種別キー → そのイベント種別グループに統合
+                  groupKey = `__type__${folder}`
+                  label = EVENT_TYPE_LABELS[folder]
+                  sub = folder
+                } else {
+                  // カスタムフォルダ
+                  groupKey = `__folder__${folder}`
+                  label = folder
+                }
+                if (!acc[groupKey]) acc[groupKey] = { key: groupKey, label, sub, rules: [] }
+                acc[groupKey].rules.push(rule)
+                return acc
+              }, {})
+              const toggleGroup = (key: string) => {
+                setCollapsedGroups(prev => {
+                  const next = new Set(prev)
+                  if (next.has(key)) next.delete(key)
+                  else next.add(key)
+                  return next
+                })
+              }
+              return Object.values(grouped).map(({ key: groupKey, label, sub, rules: groupRules }) => {
+                const isCollapsed = collapsedGroups.has(groupKey)
+                const activeCount = groupRules.filter(r => r.isActive).length
+                return (
+                  <div key={groupKey} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    {/* グループヘッダー */}
                     <button
-                      onClick={() => openEdit(rule)}
-                      className="px-3 py-1 text-xs font-medium text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                      onClick={() => toggleGroup(groupKey)}
+                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
                     >
-                      編集
+                      <div className="flex items-center gap-3">
+                        <span className={`transition-transform duration-200 text-gray-400 text-xs ${isCollapsed ? '' : 'rotate-90'}`}>▶</span>
+                        <span className="text-sm font-semibold text-gray-800">{label}</span>
+                        {sub && <span className="text-xs text-gray-400">{sub}</span>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">{activeCount}/{groupRules.length} 有効</span>
+                      </div>
                     </button>
-                    <button
-                      onClick={() => handleDelete(rule.id)}
-                      className="px-3 py-1 text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                    >
-                      削除
-                    </button>
+
+                    {/* グループ内ルール一覧 */}
+                    {!isCollapsed && (
+                      <div className="border-t border-gray-100">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 p-3">
+                          {groupRules.map((rule: NotificationRule) => (
+                            <div
+                              key={rule.id}
+                              className="bg-gray-50 rounded-lg border border-gray-200 p-4 flex flex-col gap-2"
+                            >
+                              {/* Header */}
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-sm font-medium text-gray-900 leading-snug">{rule.name}</p>
+                                <button
+                                  onClick={() => handleToggleActive(rule.id, rule.isActive)}
+                                  className={`relative flex-shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                                    rule.isActive ? 'bg-green-500' : 'bg-gray-300'
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                                      rule.isActive ? 'translate-x-4' : 'translate-x-1'
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+
+                              {/* Channels */}
+                              <div className="flex flex-wrap gap-1">
+                                {rule.channels.map((ch) => (
+                                  <span
+                                    key={ch}
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700"
+                                  >
+                                    {ch}
+                                  </span>
+                                ))}
+                              </div>
+
+                              {/* 条件サマリー */}
+                              <div className="space-y-0.5">
+                                {Boolean(rule.conditions?.store) && (
+                                  <p className="text-xs text-gray-500">店舗: <span className="font-medium text-gray-700">{String(rule.conditions.store)}</span></p>
+                                )}
+                                {Boolean(rule.conditions?.storeKey) && (
+                                  <p className="text-xs text-gray-500">店舗: <span className="font-medium text-gray-700">
+                                    {STORE_KEY_LIST.find(s => s.key === rule.conditions.storeKey)?.label ?? String(rule.conditions.storeKey)}
+                                  </span></p>
+                                )}
+                                {Boolean(rule.conditions?.tagName) && (
+                                  <p className="text-xs text-gray-500">タグ: <span className="font-medium text-gray-700">{String(rule.conditions.tagName)}</span></p>
+                                )}
+                                {Boolean(rule.conditions?.chatworkRoomId) && (
+                                  <p className="text-xs text-gray-500">Room: <span className="font-mono text-gray-700">{String(rule.conditions.chatworkRoomId)}</span></p>
+                                )}
+                              </div>
+
+                              {/* Footer */}
+                              <div className="flex gap-2 mt-auto pt-2 border-t border-gray-200">
+                                <button
+                                  onClick={() => openEdit(rule)}
+                                  className="flex-1 py-1 text-xs font-medium text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                                >
+                                  編集
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(rule.id)}
+                                  className="flex-1 py-1 text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                                >
+                                  削除
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
-            ))}
+                )
+              })
+            })()}
           </div>
         )}
       </div>

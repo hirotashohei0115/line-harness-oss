@@ -372,6 +372,7 @@ async function processNotifications(
           body: JSON.stringify(payload),
           channel,
           metadata: JSON.stringify(payload.eventData ?? {}),
+          lineAccountId: rule.line_account_id,
         });
 
         if (channel === 'chatwork') {

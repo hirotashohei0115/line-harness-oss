@@ -24,7 +24,11 @@ export interface OutgoingWebhookRow {
 
 // --- 受信Webhook ---
 
-export async function getIncomingWebhooks(db: D1Database): Promise<IncomingWebhookRow[]> {
+export async function getIncomingWebhooks(db: D1Database, accountId?: string): Promise<IncomingWebhookRow[]> {
+  if (accountId) {
+    const result = await db.prepare(`SELECT * FROM incoming_webhooks WHERE line_account_id = ? OR line_account_id IS NULL ORDER BY created_at DESC`).bind(accountId).all<IncomingWebhookRow>();
+    return result.results;
+  }
   const result = await db.prepare(`SELECT * FROM incoming_webhooks ORDER BY created_at DESC`).all<IncomingWebhookRow>();
   return result.results;
 }
@@ -35,13 +39,13 @@ export async function getIncomingWebhookById(db: D1Database, id: string): Promis
 
 export async function createIncomingWebhook(
   db: D1Database,
-  input: { name: string; sourceType?: string; secret?: string },
+  input: { name: string; sourceType?: string; secret?: string; lineAccountId?: string | null },
 ): Promise<IncomingWebhookRow> {
   const id = crypto.randomUUID();
   const now = jstNow();
   await db
-    .prepare(`INSERT INTO incoming_webhooks (id, name, source_type, secret, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
-    .bind(id, input.name, input.sourceType ?? 'custom', input.secret ?? null, now, now)
+    .prepare(`INSERT INTO incoming_webhooks (id, name, source_type, secret, line_account_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, input.name, input.sourceType ?? 'custom', input.secret ?? null, input.lineAccountId ?? null, now, now)
     .run();
   return (await getIncomingWebhookById(db, id))!;
 }
@@ -70,7 +74,11 @@ export async function deleteIncomingWebhook(db: D1Database, id: string): Promise
 
 // --- 送信Webhook ---
 
-export async function getOutgoingWebhooks(db: D1Database): Promise<OutgoingWebhookRow[]> {
+export async function getOutgoingWebhooks(db: D1Database, accountId?: string): Promise<OutgoingWebhookRow[]> {
+  if (accountId) {
+    const result = await db.prepare(`SELECT * FROM outgoing_webhooks WHERE line_account_id = ? OR line_account_id IS NULL ORDER BY created_at DESC`).bind(accountId).all<OutgoingWebhookRow>();
+    return result.results;
+  }
   const result = await db.prepare(`SELECT * FROM outgoing_webhooks ORDER BY created_at DESC`).all<OutgoingWebhookRow>();
   return result.results;
 }
@@ -81,13 +89,13 @@ export async function getOutgoingWebhookById(db: D1Database, id: string): Promis
 
 export async function createOutgoingWebhook(
   db: D1Database,
-  input: { name: string; url: string; eventTypes: string[]; secret?: string },
+  input: { name: string; url: string; eventTypes: string[]; secret?: string; lineAccountId?: string | null },
 ): Promise<OutgoingWebhookRow> {
   const id = crypto.randomUUID();
   const now = jstNow();
   await db
-    .prepare(`INSERT INTO outgoing_webhooks (id, name, url, event_types, secret, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, input.name, input.url, JSON.stringify(input.eventTypes), input.secret ?? null, now, now)
+    .prepare(`INSERT INTO outgoing_webhooks (id, name, url, event_types, secret, line_account_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, input.name, input.url, JSON.stringify(input.eventTypes), input.secret ?? null, input.lineAccountId ?? null, now, now)
     .run();
   return (await getOutgoingWebhookById(db, id))!;
 }

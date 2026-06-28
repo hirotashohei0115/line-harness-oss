@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import type { Funnel } from '@/lib/api'
 import Header from '@/components/layout/header'
+import { useAccount } from '@/contexts/account-context'
 
 export default function FunnelsPage() {
   const router = useRouter()
+  const { selectedAccountId } = useAccount()
   const [funnels, setFunnels] = useState<Funnel[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -15,11 +17,11 @@ export default function FunnelsPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await api.funnels.list()
+      const res = await api.funnels.list(selectedAccountId ? { accountId: selectedAccountId } : undefined)
       if (res.success) setFunnels(res.data)
     } catch { setError('読み込みに失敗しました') }
     finally { setLoading(false) }
-  }, [])
+  }, [selectedAccountId])
 
   useEffect(() => { load() }, [load])
 

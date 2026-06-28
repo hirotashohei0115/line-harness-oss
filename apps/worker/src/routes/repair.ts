@@ -253,12 +253,40 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
 
   try {
     // line_user_id から friend を特定
-    const friend = await c.env.DB
+    let friend = await c.env.DB
       .prepare(`SELECT id FROM friends WHERE line_user_id = ? LIMIT 1`)
       .bind(lineUserId)
       .first<{ id: string }>();
     if (!friend && !isSwitch) {
       return c.json({ success: false, error: 'Friend not found' }, 404);
+    }
+
+    // Switch: Switch LINEアカウントトークン取得 + friendをupsert
+    let lineToken = c.env.LINE_CHANNEL_ACCESS_TOKEN;
+    if (isSwitch) {
+      const switchChannelId = c.env.SWITCH_LINE_CHANNEL_ID;
+      if (switchChannelId) {
+        const switchAccount = await c.env.DB
+          .prepare('SELECT id, channel_access_token FROM line_accounts WHERE channel_id = ? LIMIT 1')
+          .bind(switchChannelId)
+          .first<{ id: string; channel_access_token: string }>();
+        if (switchAccount) lineToken = switchAccount.channel_access_token;
+        if (!friend) {
+          await c.env.DB
+            .prepare('INSERT OR IGNORE INTO friends (id, line_user_id, line_account_id, display_name, is_following, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)')
+            .bind(crypto.randomUUID(), lineUserId, switchAccount?.id ?? null, name, jstNow(), jstNow())
+            .run();
+          friend = await c.env.DB
+            .prepare('SELECT id FROM friends WHERE line_user_id = ? LIMIT 1')
+            .bind(lineUserId)
+            .first<{ id: string }>();
+        } else if (switchAccount && friend) {
+          await c.env.DB
+            .prepare('UPDATE friends SET line_account_id = ?, updated_at = ? WHERE id = ? AND (line_account_id IS NULL OR line_account_id != ?)')
+            .bind(switchAccount.id, jstNow(), friend.id, switchAccount.id)
+            .run();
+        }
+      }
     }
 
     const id = crypto.randomUUID();
@@ -336,7 +364,9 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
 
     // LINEでお礼メッセージを送信
     const kitLabel = packagingKit ? 'あり（無料）' : 'なし';
-    const storeInfo = deliveryStore.includes('盛岡')
+    const storeInfo = deliveryStore.includes('SwitchMaster') || isSwitch
+      ? `${deliveryStore}\nお問合せ：070-1271-7186`
+      : deliveryStore.includes('盛岡')
       ? `リペアマスター盛岡店\n〒020-0034\n岩手県盛岡市盛岡駅前通1-44\n盛岡フェザン 本館1階\nTEL: 019-613-8665`
       : deliveryStore.includes('岐阜')
       ? `リペアマスターモレラ岐阜店\n〒501-0497\n岐阜県本巣市三橋1100\nモレラ岐阜店 2F\nTEL: 070-3131-6181`
@@ -359,9 +389,9 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       },
     });
     try {
-      const lineClient = new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN);
+      const lineClient = new LineClient(lineToken);
       const messages: object[] = [{ type: 'text', text: thankMsg }];
-      if (!packagingKit) {
+      if (!packagingKit && !isSwitch) {
         messages.push({ type: 'flex', altText: '発送完了ボタン', contents: JSON.parse(shippedButtonFlex) });
       }
       await lineClient.pushMessage(lineUserId, messages);

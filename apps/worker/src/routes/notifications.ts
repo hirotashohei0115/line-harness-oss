@@ -69,7 +69,7 @@ notifications.get('/api/notifications/rules/:id', async (c) => {
 
 notifications.post('/api/notifications/rules', async (c) => {
   try {
-    const body = await c.req.json<{ name: string; eventType: string; conditions?: Record<string, unknown>; channels?: string[] }>();
+    const body = await c.req.json<{ name: string; eventType: string; conditions?: Record<string, unknown>; channels?: string[]; lineAccountId?: string | null }>();
     if (!body.name || !body.eventType) return c.json({ success: false, error: 'name and eventType are required' }, 400);
     const item = await createNotificationRule(c.env.DB, body);
     return c.json({

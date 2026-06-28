@@ -14,7 +14,7 @@ declare const liff: {
 };
 
 const SWITCH_LIFF_ID = '2010528268-73XYJj8u';
-const API_URL = import.meta.env.VITE_SWITCH_API_URL || 'https://macbook-repair-worker.empower-repair.workers.dev';
+const API_URL = 'https://macbook-repair-worker.empower-repair.workers.dev';
 const SWITCH_COLOR = '#E83535';
 
 interface FormData {

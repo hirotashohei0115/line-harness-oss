@@ -12,7 +12,7 @@ declare const liff: {
 };
 
 const SWITCH_LIFF_ID = '2010528268-v1QutpCq';
-const API_URL = import.meta.env.VITE_SWITCH_API_URL || 'https://macbook-repair-worker.empower-repair.workers.dev';
+const API_URL = 'https://macbook-repair-worker.empower-repair.workers.dev';
 
 const STORES = [
   { key: 'gotanda', name: '五反田店', fullName: 'SwitchMaster五反田店' },

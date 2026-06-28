@@ -37,12 +37,12 @@ export async function getTemplateById(db: D1Database, id: string): Promise<Templ
 
 export async function createTemplate(
   db: D1Database,
-  input: { name: string; category?: string; messageType: string; messageContent: string },
+  input: { name: string; category?: string; messageType: string; messageContent: string; lineAccountId?: string | null },
 ): Promise<TemplateRow> {
   const id = crypto.randomUUID();
   const now = jstNow();
-  await db.prepare(`INSERT INTO templates (id, name, category, message_type, message_content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, input.name, input.category ?? 'general', input.messageType, input.messageContent, now, now).run();
+  await db.prepare(`INSERT INTO templates (id, name, category, message_type, message_content, line_account_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, input.name, input.category ?? 'general', input.messageType, input.messageContent, input.lineAccountId ?? null, now, now).run();
   return (await getTemplateById(db, id))!;
 }
 

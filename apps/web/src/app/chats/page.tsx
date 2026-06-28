@@ -62,6 +62,46 @@ function getMarkTextColor(bgColor: string): string {
 
 const WORKER_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
 
+// 画像を JPEG に変換・リサイズ（D1 の 1MB 制限に収まるよう必ず 200KB 以下に圧縮）
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = reject
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = reject
+      img.onload = () => {
+        let { width, height } = img
+        // 長辺を 1024px に収める（縦横どちらが長くても対応）
+        const MAX_PX = 1024
+        if (width >= height && width > MAX_PX) {
+          height = Math.round(height * MAX_PX / width)
+          width = MAX_PX
+        } else if (height > width && height > MAX_PX) {
+          width = Math.round(width * MAX_PX / height)
+          height = MAX_PX
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { reject(new Error('Canvas not supported')); return }
+        ctx.drawImage(img, 0, 0, width, height)
+        // base64 文字列長が 200,000 バイト（≈150KB バイナリ）を超えたら品質を下げる
+        let quality = 0.82
+        let result = canvas.toDataURL('image/jpeg', quality)
+        while (result.length > 200_000 && quality > 0.25) {
+          quality = Math.round((quality - 0.08) * 100) / 100
+          result = canvas.toDataURL('image/jpeg', quality)
+        }
+        resolve(result)
+      }
+      img.src = reader.result as string
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 function getImageSrc(content: string): { type: 'dataurl' | 'url'; src: string } | null {
   try {
     const parsed = JSON.parse(content)
@@ -117,6 +157,89 @@ function ImageBubble({ content, onClick }: { content: string; onClick?: () => vo
   if (failed) return <span className="text-sm text-gray-400 px-3 py-2">🖼️ [画像]</span>
   if (!blobUrl) return <span className="text-xs text-gray-400 px-3 py-2">読み込み中...</span>
   return <img src={blobUrl} alt="送信された画像" className={imgClass} onClick={onClick} />
+}
+
+function getMediaSrc(content: string): string | null {
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed.messageId) return `${WORKER_API_URL}/api/messages/${parsed.messageId}/content`
+  } catch { /* not JSON */ }
+  return null
+}
+
+function VideoBubble({ content }: { content: string }) {
+  const src = getMediaSrc(content)
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (!src) { setFailed(true); return }
+    const controller = new AbortController()
+    let objectUrl: string | null = null
+    fetch(src, { signal: controller.signal })
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.blob()
+      })
+      .then(blob => {
+        objectUrl = URL.createObjectURL(blob)
+        setBlobUrl(objectUrl)
+      })
+      .catch(err => {
+        if (err instanceof Error && err.name === 'AbortError') return
+        setFailed(true)
+      })
+    return () => {
+      controller.abort()
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [src])
+
+  if (failed) return <span className="text-sm text-gray-400 px-3 py-2">🎥 [動画]</span>
+  if (!blobUrl) return <span className="text-xs text-gray-400 px-3 py-2">読み込み中...</span>
+  return (
+    <video
+      src={blobUrl}
+      controls
+      className="block max-w-[280px] rounded-lg"
+      style={{ maxHeight: 200 }}
+    />
+  )
+}
+
+function AudioBubble({ content }: { content: string }) {
+  const src = getMediaSrc(content)
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (!src) { setFailed(true); return }
+    const controller = new AbortController()
+    let objectUrl: string | null = null
+    fetch(src, { signal: controller.signal })
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.blob()
+      })
+      .then(blob => {
+        objectUrl = URL.createObjectURL(blob)
+        setBlobUrl(objectUrl)
+      })
+      .catch(err => {
+        if (err instanceof Error && err.name === 'AbortError') return
+        setFailed(true)
+      })
+    return () => {
+      controller.abort()
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [src])
+
+  if (failed) return <span className="text-sm text-gray-400 px-3 py-2">🎵 [音声]</span>
+  if (!blobUrl) return <span className="text-xs text-gray-400 px-3 py-2">読み込み中...</span>
+  return <audio src={blobUrl} controls className="max-w-[280px]" />
 }
 
 function ImageZoomModal({ content, onClose }: { content: string; onClose: () => void }) {
@@ -319,6 +442,12 @@ function DirectMessagePanel({ friendId, friend, onBack, onSent }: {
     if (msg.messageType === 'image') {
       return <ImageBubble content={msg.content} onClick={() => setZoomedImageContent(msg.content)} />
     }
+    if (msg.messageType === 'video') {
+      return <VideoBubble content={msg.content} />
+    }
+    if (msg.messageType === 'audio') {
+      return <AudioBubble content={msg.content} />
+    }
     if (msg.messageType === 'sticker') {
       try {
         const { stickerId } = JSON.parse(msg.content) as { packageId: string; stickerId: string }
@@ -451,7 +580,10 @@ export default function ChatsPage() {
   const [showOrderForm, setShowOrderForm] = useState(false)
   const [orderForm, setOrderForm] = useState({ type: '来店', store: '', amount: '', dueDate: '', visitDate: '', notes: '' })
   const [showReasonForm, setShowReasonForm] = useState<string | null>(null)
-  const [reasonText, setReasonText] = useState('')
+  const [selectedReasons, setSelectedReasons] = useState<string[]>([])
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false)
+  const [followUpDate, setFollowUpDate] = useState('')
+  const [savingFollowUp, setSavingFollowUp] = useState(false)
   const [allMarks, setAllMarks] = useState<ContactMark[]>([])
   const [selectedFriendMarkId, setSelectedFriendMarkId] = useState<string | null>(null)
   const [filterTagIds, setFilterTagIds] = useState<string[]>([])
@@ -844,23 +976,33 @@ export default function ChatsPage() {
     }
   }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
+    e.target.value = ''
+
     if (file.type === 'application/pdf') {
+      const reader = new FileReader()
       reader.onload = () => {
         setPendingFile({ data: reader.result as string, name: file.name })
         setPendingImage(null)
       }
-    } else {
-      reader.onload = () => {
-        setPendingImage(reader.result as string)
-        setPendingFile(null)
-      }
+      reader.readAsDataURL(file)
+      return
     }
-    reader.readAsDataURL(file)
-    e.target.value = ''
+
+    if (!file.type.startsWith('image/')) {
+      setError('対応していないファイル形式です。JPEG・PNG・GIF・HEIC のみ送信できます。')
+      return
+    }
+
+    try {
+      const compressed = await compressImage(file)
+      setPendingImage(compressed)
+      setPendingFile(null)
+    } catch {
+      setError('画像の読み込みに失敗しました。別の画像をお試しください。')
+    }
   }
 
   const handleStatusUpdate = async (newStatus: Chat['status']) => {
@@ -999,7 +1141,8 @@ export default function ChatsPage() {
       return
     }
     if (result === '検討中' || result === '失注') {
-      setReasonText(repairAttrs.call_result_reason || '')
+      const saved = repairAttrs.call_result_reason || ''
+      setSelectedReasons(saved ? saved.split('、').map(s => s.trim()).filter(Boolean) : [])
       setShowReasonForm(showReasonForm === result ? null : result)
       setShowOrderForm(false)
       return
@@ -1009,6 +1152,7 @@ export default function ChatsPage() {
   const handleReasonSave = async () => {
     if (!chatDetail?.friendId || !showReasonForm || savingCallResult) return
     setSavingCallResult(true)
+    const reasonText = selectedReasons.join('、')
     try {
       await fetchApi(`/api/repair/attributes/${chatDetail.friendId}`, {
         method: 'PATCH',
@@ -1022,6 +1166,21 @@ export default function ChatsPage() {
       alert('保存に失敗しました')
     } finally {
       setSavingCallResult(false)
+    }
+  }
+
+  const handleFollowUpSave = async () => {
+    if (!chatDetail?.friendId || !followUpDate || savingFollowUp) return
+    setSavingFollowUp(true)
+    try {
+      await addTagByName(chatDetail.friendId, `後追い連絡済み(${followUpDate})`)
+      await removeTagByName(chatDetail.friendId, '要後追い')
+      setShowFollowUpForm(false)
+      setFollowUpDate('')
+    } catch {
+      alert('保存に失敗しました')
+    } finally {
+      setSavingFollowUp(false)
     }
   }
 
@@ -1553,6 +1712,8 @@ export default function ChatsPage() {
                     // メッセージ表示の分岐
                     const isFlex = msg.messageType === 'flex'
                     const isImage = msg.messageType === 'image'
+                    const isVideo = msg.messageType === 'video'
+                    const isAudio = msg.messageType === 'audio'
                     const isFile = msg.messageType === 'file'
                     const isSticker = msg.messageType === 'sticker'
                     let bubbleContent: React.ReactNode
@@ -1564,6 +1725,10 @@ export default function ChatsPage() {
                       )
                     } else if (isImage) {
                       bubbleContent = <ImageBubble content={msg.content} onClick={() => setZoomedImageContent(msg.content)} />
+                    } else if (isVideo) {
+                      bubbleContent = <VideoBubble content={msg.content} />
+                    } else if (isAudio) {
+                      bubbleContent = <AudioBubble content={msg.content} />
                     } else if (isSticker) {
                       try {
                         const { stickerId } = JSON.parse(msg.content) as { packageId: string; stickerId: string }
@@ -1621,15 +1786,15 @@ export default function ChatsPage() {
                           {/* メッセージバブル — 画像/flexはパディングなし */}
                           <div
                             className={`max-w-[320px] text-sm break-words whitespace-pre-wrap ${
-                              isFlex || isImage || isSticker ? '' : 'px-3 py-2'
+                              isFlex || isImage || isSticker || isVideo || isAudio ? '' : 'px-3 py-2'
                             } ${
                               isOutgoing
                                 ? 'rounded-tl-2xl rounded-tr-md rounded-bl-2xl rounded-br-2xl text-white'
                                 : 'rounded-tl-md rounded-tr-2xl rounded-bl-2xl rounded-br-2xl bg-white text-gray-900'
                             } ${
-                              (isFlex || isImage || isSticker) ? 'bg-transparent' : ''
+                              (isFlex || isImage || isSticker || isVideo || isAudio) ? 'bg-transparent' : ''
                             }`}
-                            style={isOutgoing && !isFlex && !isImage && !isSticker ? { backgroundColor: '#06C755' } : undefined}
+                            style={isOutgoing && !isFlex && !isImage && !isSticker && !isVideo && !isAudio ? { backgroundColor: '#06C755' } : undefined}
                           >
                             {bubbleContent}
                           </div>
@@ -1762,7 +1927,7 @@ export default function ChatsPage() {
                   {/* 📎 画像・PDF添付 */}
                   <label className="flex-shrink-0 px-2 py-2 text-xs text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors mt-0.5 cursor-pointer" title="画像・PDFを添付">
                     📎
-                    <input type="file" accept="image/jpeg,image/png,image/gif,application/pdf" className="hidden" onChange={handleFileSelect} />
+                    <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileSelect} />
                   </label>
                   <button
                     onClick={() => { setShowTemplates((v) => !v); setTemplateSearch('') }}
@@ -2301,14 +2466,50 @@ export default function ChatsPage() {
                   {/* 検討中/失注 理由フォーム */}
                   {showReasonForm && (
                     <div className="mx-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
-                      <p className="text-xs font-medium text-gray-600">{showReasonForm}の理由</p>
-                      <textarea
-                        value={reasonText}
-                        onChange={e => setReasonText(e.target.value)}
-                        rows={3}
-                        placeholder="理由を入力..."
-                        className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
-                      />
+                      <p className="text-xs font-medium text-gray-600">{showReasonForm}の理由（複数選択可）</p>
+                      <div className="space-y-1.5">
+                        {[
+                          '価格が高い', '納期が長い', '即日修理希望', '店舗が近くにない',
+                          '郵送がめんどくさい', '送料', '取りに来て欲しい', '持込がめんどくさい',
+                          '検討します（理由言わず）', '家族と相談', 'その他',
+                        ].map(reason => (
+                          <label key={reason} className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedReasons.includes(reason) || (reason === 'その他' && selectedReasons.some(r => r.startsWith('その他：')))}
+                              onChange={() => {
+                                if (reason === 'その他') {
+                                  const hasOther = selectedReasons.some(r => r.startsWith('その他：') || r === 'その他')
+                                  setSelectedReasons(prev =>
+                                    hasOther ? prev.filter(r => !r.startsWith('その他：') && r !== 'その他') : [...prev, 'その他']
+                                  )
+                                } else {
+                                  setSelectedReasons(prev =>
+                                    prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason]
+                                  )
+                                }
+                              }}
+                              className="accent-blue-500 w-3.5 h-3.5 flex-shrink-0"
+                            />
+                            <span className="text-xs text-gray-700">{reason}</span>
+                          </label>
+                        ))}
+                        {selectedReasons.some(r => r.startsWith('その他：') || r === 'その他') && (
+                          <input
+                            type="text"
+                            placeholder="その他の内容を入力..."
+                            value={selectedReasons.find(r => r.startsWith('その他：'))?.slice(4) ?? ''}
+                            onChange={e => {
+                              const text = e.target.value
+                              setSelectedReasons(prev => [
+                                ...prev.filter(r => !r.startsWith('その他：') && r !== 'その他'),
+                                text ? `その他：${text}` : 'その他',
+                              ])
+                            }}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 mt-0.5"
+                          />
+                        )}
+                      </div>
                       <div className="flex gap-2 pt-1">
                         <button
                           onClick={() => void handleReasonSave()}
@@ -2333,6 +2534,48 @@ export default function ChatsPage() {
                       <p>理由：{repairAttrs.call_result_reason}</p>
                     </div>
                   )}
+
+                  {/* 後追い連絡済みボタン */}
+                  <div className="px-3 pb-3">
+                    <button
+                      onClick={() => {
+                        setShowFollowUpForm(v => !v)
+                        if (!followUpDate) {
+                          const today = new Date()
+                          setFollowUpDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`)
+                        }
+                      }}
+                      className="w-full py-1.5 rounded text-xs font-semibold text-white bg-purple-500 hover:bg-purple-600 transition-colors"
+                    >
+                      後追い連絡済み
+                    </button>
+                    {showFollowUpForm && (
+                      <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
+                        <p className="text-[11px] font-medium text-gray-600">連絡した日付</p>
+                        <input
+                          type="date"
+                          value={followUpDate}
+                          onChange={e => setFollowUpDate(e.target.value)}
+                          className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"
+                        />
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={() => void handleFollowUpSave()}
+                            disabled={savingFollowUp || !followUpDate}
+                            className="flex-1 py-1.5 rounded text-xs font-semibold text-white disabled:opacity-50 bg-purple-500 hover:bg-purple-600 transition-colors"
+                          >
+                            {savingFollowUp ? '保存中...' : '保存'}
+                          </button>
+                          <button
+                            onClick={() => setShowFollowUpForm(false)}
+                            className="flex-1 py-1.5 rounded text-xs font-semibold text-gray-600 bg-gray-200 hover:bg-gray-300 transition-colors"
+                          >
+                            キャンセル
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 </>
                 )}

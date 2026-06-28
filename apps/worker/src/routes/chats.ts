@@ -409,8 +409,10 @@ chats.post('/api/chats/:id/send', async (c) => {
     const lineClient = new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN);
     const messageType = body.messageType ?? 'text';
 
-    // メッセージIDを先に確定（base64画像はURLに埋め込むため）
+    // メッセージIDを先に確定
     const logId = crypto.randomUUID();
+    const sendingStaff = c.get('staff');
+    const workerOrigin = c.env.WORKER_URL || new URL(c.req.url).origin;
 
     if (messageType === 'text') {
       await lineClient.pushTextMessage(friend.line_user_id, body.content);
@@ -420,8 +422,12 @@ chats.post('/api/chats/:id/send', async (c) => {
     } else if (messageType === 'image') {
       const isBase64 = body.content.startsWith('data:image/');
       if (isBase64) {
-        // Worker経由で画像を配信するURLを生成してLINEに送信
-        const workerOrigin = c.env.WORKER_URL || new URL(c.req.url).origin;
+        // base64画像: LINEがURLを取得する前に messages_log へ保存（競合状態を防ぐ）
+        // ※フロント側で Canvas 圧縮済み（最大1920px/JPEG）なので D1 サイズ上限には収まる
+        await c.env.DB
+          .prepare(`INSERT INTO messages_log (id, friend_id, direction, message_type, content, sent_by_staff_id, sent_by_staff_name, created_at) VALUES (?, ?, 'outgoing', ?, ?, ?, ?, ?)`)
+          .bind(logId, friend.id, messageType, body.content, sendingStaff?.id ?? null, sendingStaff?.name ?? null, jstNow())
+          .run();
         const imageUrl = `${workerOrigin}/api/images/${logId}`;
         await lineClient.pushMessage(friend.line_user_id, [{
           type: 'image',
@@ -437,7 +443,6 @@ chats.post('/api/chats/:id/send', async (c) => {
         }]);
       }
     } else if (messageType === 'file') {
-      const workerOrigin = c.env.WORKER_URL || new URL(c.req.url).origin;
       const fileUrl = `${workerOrigin}/api/files/${logId}`;
       const textMsg = `📄 PDFファイルが送信されました。\n下記URLよりご確認ください。\n${fileUrl}`;
       await lineClient.pushTextMessage(friend.line_user_id, textMsg);
@@ -445,12 +450,13 @@ chats.post('/api/chats/:id/send', async (c) => {
       await lineClient.pushTextMessage(friend.line_user_id, body.content);
     }
 
-    // メッセージログに記録
-    const sendingStaff = c.get('staff');
-    await c.env.DB
-      .prepare(`INSERT INTO messages_log (id, friend_id, direction, message_type, content, sent_by_staff_id, sent_by_staff_name, created_at) VALUES (?, ?, 'outgoing', ?, ?, ?, ?, ?)`)
-      .bind(logId, friend.id, messageType, body.content, sendingStaff?.id ?? null, sendingStaff?.name ?? null, jstNow())
-      .run();
+    // メッセージログに記録（base64画像は送信前に保存済みのためスキップ）
+    if (!(messageType === 'image' && body.content.startsWith('data:image/'))) {
+      await c.env.DB
+        .prepare(`INSERT INTO messages_log (id, friend_id, direction, message_type, content, sent_by_staff_id, sent_by_staff_name, created_at) VALUES (?, ?, 'outgoing', ?, ?, ?, ?, ?)`)
+        .bind(logId, friend.id, messageType, body.content, sendingStaff?.id ?? null, sendingStaff?.name ?? null, jstNow())
+        .run();
+    }
 
     // チャットの最終メッセージ日時を更新
     await updateChat(c.env.DB, chatId, { status: 'in_progress', lastMessageAt: jstNow() });
@@ -496,50 +502,63 @@ chats.post('/api/images/upload', async (c) => {
   }
 });
 
-// GET /api/images/:messageId — public, serves base64 image as binary (messages_log or uploaded_images)
+// GET /api/images/:messageId — public, serves base64 image as binary
 chats.get('/api/images/:messageId', async (c) => {
-  const messageId = c.req.param('messageId');
+  try {
+    const messageId = c.req.param('messageId');
 
-  // Check messages_log first
-  const row = await c.env.DB
-    .prepare('SELECT content, message_type FROM messages_log WHERE id = ? LIMIT 1')
-    .bind(messageId)
-    .first<{ content: string; message_type: string }>();
+    // D1 のレプリカ遅延を考慮し、最大2回リトライ
+    let base64Content: string | null = null;
+    for (let attempt = 0; attempt < 3 && !base64Content; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 800));
 
-  let base64Content: string | null = null;
-  if (row && row.message_type === 'image' && row.content.startsWith('data:image/')) {
-    base64Content = row.content;
-  } else {
-    // Fallback: check uploaded_images
-    const uploaded = await c.env.DB
-      .prepare('SELECT content FROM uploaded_images WHERE id = ? LIMIT 1')
-      .bind(messageId)
-      .first<{ content: string }>();
-    if (uploaded && uploaded.content.startsWith('data:image/')) {
-      base64Content = uploaded.content;
+      const row = await c.env.DB
+        .prepare('SELECT content, message_type FROM messages_log WHERE id = ? LIMIT 1')
+        .bind(messageId)
+        .first<{ content: string; message_type: string }>();
+
+      if (row && row.message_type === 'image' && row.content.startsWith('data:image/')) {
+        base64Content = row.content;
+      } else if (!row || !row.content.startsWith('data:image/')) {
+        // uploaded_images フォールバック（テーブルが存在しない環境では無視）
+        try {
+          const uploaded = await c.env.DB
+            .prepare('SELECT content FROM uploaded_images WHERE id = ? LIMIT 1')
+            .bind(messageId)
+            .first<{ content: string }>();
+          if (uploaded?.content.startsWith('data:image/')) {
+            base64Content = uploaded.content;
+          }
+        } catch {
+          // uploaded_images テーブルなし — スキップ
+        }
+      }
     }
+
+    if (!base64Content) return c.json({ error: 'Not found' }, 404);
+
+    const commaIdx = base64Content.indexOf(',');
+    const header = base64Content.slice(0, commaIdx);
+    const base64Data = base64Content.slice(commaIdx + 1);
+    const mimeType = header.split(':')[1]?.split(';')[0] ?? 'image/jpeg';
+
+    const binaryStr = atob(base64Data);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+
+    return new Response(bytes, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/images/:messageId error:', err);
+    return c.json({ error: 'Internal server error' }, 500);
   }
-
-  if (!base64Content) return c.json({ error: 'Not found' }, 404);
-
-  const commaIdx = base64Content.indexOf(',');
-  const header = base64Content.slice(0, commaIdx);
-  const base64Data = base64Content.slice(commaIdx + 1);
-  const mimeType = header.split(':')[1]?.split(';')[0] ?? 'image/jpeg';
-
-  const binaryStr = atob(base64Data);
-  const bytes = new Uint8Array(binaryStr.length);
-  for (let i = 0; i < binaryStr.length; i++) {
-    bytes[i] = binaryStr.charCodeAt(i);
-  }
-
-  return new Response(bytes, {
-    headers: {
-      'Content-Type': mimeType,
-      'Cache-Control': 'public, max-age=86400',
-      'Access-Control-Allow-Origin': '*',
-    },
-  });
 });
 
 // GET /api/files/:id — public, serves base64 PDF as binary

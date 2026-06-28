@@ -121,9 +121,18 @@ async function countUsersWithConditions(
 // GET /api/cross-analyses
 crossAnalysisRoutes.get('/api/cross-analyses', async (c) => {
   try {
-    const result = await c.env.DB
-      .prepare('SELECT * FROM cross_analysis_definitions ORDER BY created_at DESC')
-      .all<CrossAnalysisRow>();
+    const lineAccountId = c.req.query('lineAccountId');
+    let result;
+    if (lineAccountId) {
+      result = await c.env.DB
+        .prepare('SELECT * FROM cross_analysis_definitions WHERE line_account_id = ? ORDER BY created_at DESC')
+        .bind(lineAccountId)
+        .all<CrossAnalysisRow>();
+    } else {
+      result = await c.env.DB
+        .prepare('SELECT * FROM cross_analysis_definitions ORDER BY created_at DESC')
+        .all<CrossAnalysisRow>();
+    }
     return c.json({ success: true, data: result.results.map(serializeDefinition) });
   } catch (err) {
     console.error('GET /api/cross-analyses error:', err);
@@ -243,16 +252,17 @@ crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
 // POST /api/cross-analyses
 crossAnalysisRoutes.post('/api/cross-analyses', async (c) => {
   try {
-    const body = await c.req.json<{ name: string; axis1: AxisConfig; axis2: AxisConfig }>();
+    const body = await c.req.json<{ name: string; axis1: AxisConfig; axis2: AxisConfig; lineAccountId?: string | null }>();
     if (!body.name) return c.json({ success: false, error: 'name is required' }, 400);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await c.env.DB
-      .prepare('INSERT INTO cross_analysis_definitions (id, name, axis1_label, axis2_label, axis1_groups, axis2_groups, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .prepare('INSERT INTO cross_analysis_definitions (id, name, axis1_label, axis2_label, axis1_groups, axis2_groups, line_account_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(
         id, body.name,
         TYPE_LABEL[body.axis1.type], TYPE_LABEL[body.axis2.type],
         JSON.stringify(body.axis1), JSON.stringify(body.axis2),
+        body.lineAccountId ?? null,
         now, now,
       )
       .run();

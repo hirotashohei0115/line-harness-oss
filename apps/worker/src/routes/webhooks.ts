@@ -19,7 +19,8 @@ const webhooks = new Hono<Env>();
 
 webhooks.get('/api/webhooks/incoming', async (c) => {
   try {
-    const items = await getIncomingWebhooks(c.env.DB);
+    const lineAccountId = c.req.query('lineAccountId') ?? undefined;
+    const items = await getIncomingWebhooks(c.env.DB, lineAccountId);
     return c.json({
       success: true,
       data: items.map((w) => ({
@@ -40,7 +41,7 @@ webhooks.get('/api/webhooks/incoming', async (c) => {
 
 webhooks.post('/api/webhooks/incoming', async (c) => {
   try {
-    const body = await c.req.json<{ name: string; sourceType?: string; secret?: string }>();
+    const body = await c.req.json<{ name: string; sourceType?: string; secret?: string; lineAccountId?: string | null }>();
     if (!body.name) return c.json({ success: false, error: 'name is required' }, 400);
     const item = await createIncomingWebhook(c.env.DB, body);
     return c.json({ success: true, data: { id: item.id, name: item.name, sourceType: item.source_type, isActive: Boolean(item.is_active), createdAt: item.created_at } }, 201);
@@ -78,7 +79,8 @@ webhooks.delete('/api/webhooks/incoming/:id', async (c) => {
 
 webhooks.get('/api/webhooks/outgoing', async (c) => {
   try {
-    const items = await getOutgoingWebhooks(c.env.DB);
+    const lineAccountId = c.req.query('lineAccountId') ?? undefined;
+    const items = await getOutgoingWebhooks(c.env.DB, lineAccountId);
     return c.json({
       success: true,
       data: items.map((w) => ({
@@ -100,7 +102,7 @@ webhooks.get('/api/webhooks/outgoing', async (c) => {
 
 webhooks.post('/api/webhooks/outgoing', async (c) => {
   try {
-    const body = await c.req.json<{ name: string; url: string; eventTypes: string[]; secret?: string }>();
+    const body = await c.req.json<{ name: string; url: string; eventTypes: string[]; secret?: string; lineAccountId?: string | null }>();
     if (!body.name || !body.url) return c.json({ success: false, error: 'name and url are required' }, 400);
     const item = await createOutgoingWebhook(c.env.DB, { ...body, eventTypes: body.eventTypes ?? [] });
     return c.json({

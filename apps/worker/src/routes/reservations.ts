@@ -189,10 +189,50 @@ reservationRoutes.post('/api/reservations', async (c) => {
     return c.json({ success: false, error: 'Missing required fields' }, 400);
   }
 
-  const friend = await c.env.DB
+  const isSwitch = body.source === 'switch';
+  let friend = await c.env.DB
     .prepare('SELECT id FROM friends WHERE line_user_id = ? LIMIT 1')
     .bind(lineUserId)
     .first<{ id: string }>();
+
+  // Switch: Switch LINEアカウントトークン取得 + friendをupsert
+  let lineToken = c.env.LINE_CHANNEL_ACCESS_TOKEN;
+  let resolvedLineAccountId: string | null = null;
+  if (isSwitch) {
+    const switchChannelId = c.env.SWITCH_LINE_CHANNEL_ID;
+    if (switchChannelId) {
+      const switchAccount = await c.env.DB
+        .prepare('SELECT id, channel_access_token FROM line_accounts WHERE channel_id = ? LIMIT 1')
+        .bind(switchChannelId)
+        .first<{ id: string; channel_access_token: string }>();
+      if (switchAccount) {
+        lineToken = switchAccount.channel_access_token;
+        resolvedLineAccountId = switchAccount.id;
+      }
+      if (!friend) {
+        await c.env.DB
+          .prepare('INSERT OR IGNORE INTO friends (id, line_user_id, line_account_id, display_name, is_following, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)')
+          .bind(crypto.randomUUID(), lineUserId, switchAccount?.id ?? null, name, jstNow(), jstNow())
+          .run();
+        friend = await c.env.DB
+          .prepare('SELECT id FROM friends WHERE line_user_id = ? LIMIT 1')
+          .bind(lineUserId)
+          .first<{ id: string }>();
+      } else if (switchAccount && friend) {
+        await c.env.DB
+          .prepare('UPDATE friends SET line_account_id = ?, updated_at = ? WHERE id = ? AND (line_account_id IS NULL OR line_account_id != ?)')
+          .bind(switchAccount.id, jstNow(), friend.id, switchAccount.id)
+          .run();
+      }
+    }
+  } else {
+    // MacBook: デフォルトアカウントのIDを解決（通知ルールのアカウントフィルタに使用）
+    const defaultAccount = await c.env.DB
+      .prepare('SELECT id FROM line_accounts WHERE channel_access_token = ? AND is_active = 1 LIMIT 1')
+      .bind(c.env.LINE_CHANNEL_ACCESS_TOKEN)
+      .first<{ id: string }>();
+    resolvedLineAccountId = defaultAccount?.id ?? null;
+  }
 
   const reservation = await createStoreReservation(c.env.DB, {
     friendId: friend?.id ?? null,
@@ -228,7 +268,6 @@ reservationRoutes.post('/api/reservations', async (c) => {
   // LINE confirmation message
   const confirmText = `✅ 来店予約が完了しました！\n\n📍 店舗：${brandName}${storeName}\n📅 日時：${dateDisplay}（${dayName}）${time}〜\n👤 お名前：${name} 様${body.phone ? `\n📞 電話番号：${body.phone}` : ''}${body.notes ? `\n📝 ご要望：${body.notes}` : ''}\n\nご来店をお待ちしております！\n※ご不明な点がございましたらLINEにてお問い合わせください。`;
   try {
-    const lineToken = c.env.LINE_CHANNEL_ACCESS_TOKEN;
     if (lineToken) {
       const lineClient = new LineClient(lineToken);
       await lineClient.pushMessage(lineUserId, [{ type: 'text', text: confirmText }]);
@@ -274,17 +313,15 @@ reservationRoutes.post('/api/reservations', async (c) => {
   const reservationInfo = `店舗：${brandName}${storeName}\n日時：${dateDisplay}（${dayName}）${time}〜\nお名前：${name}様\n電話番号：${body.phone || '未入力'}\n機種/症状：${body.notes || '未入力'}\n見積もり金額：${priceText}\n納期目安：${deliveryText}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app`;
   const chatworkBody = `[info][title]🏪 来店予約が入りました[/title]${reservationInfo}[/info]`;
   const lineText = `【来店予約】\n${reservationInfo}`;
-  if (body.source !== 'switch') {
-    await fireEvent(
-      c.env.DB,
-      'reservation_created',
-      { friendId: friend?.id ?? undefined, eventData: { storeKey, chatworkBody, lineText } },
-      c.env.LINE_CHANNEL_ACCESS_TOKEN,
-      null,
-      c.env.CHATWORK_API_TOKEN,
-      c.env.CHATWORK_ROOM_ID,
-    ).catch(err => console.error('fireEvent reservation_created error:', err));
-  }
+  await fireEvent(
+    c.env.DB,
+    'reservation_created',
+    { friendId: friend?.id ?? undefined, eventData: { storeKey, chatworkBody, lineText } },
+    lineToken,
+    resolvedLineAccountId,
+    c.env.CHATWORK_API_TOKEN,
+    c.env.CHATWORK_ROOM_ID,
+  ).catch(err => console.error('fireEvent reservation_created error:', err));
 
   // Google Calendar event
   try {

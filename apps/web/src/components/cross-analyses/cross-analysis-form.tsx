@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import type { CrossAnalysis, CrossRunResult, AxisGroup } from '@/lib/api'
 import type { Tag } from '@line-crm/shared'
 import type { ContactMark } from '@/lib/api'
+import { useAccount } from '@/contexts/account-context'
 
 interface Props {
   initial?: CrossAnalysis
@@ -186,6 +187,7 @@ function initialGroups(axisGroups: AxisGroup[] | undefined, axisItemIds: string[
 
 export default function CrossAnalysisForm({ initial }: Props) {
   const router = useRouter()
+  const { selectedAccountId } = useAccount()
   const today = new Date().toISOString().slice(0, 10)
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
@@ -284,6 +286,7 @@ export default function CrossAnalysisForm({ initial }: Props) {
           name,
           axis1: { type: axis1Type, itemIds: [], groups: axis1Groups },
           axis2: { type: axis2Type, itemIds: [], groups: axis2Groups },
+          lineAccountId: selectedAccountId,
         })
         if (res.success) { router.push('/cross-analyses'); return }
       }

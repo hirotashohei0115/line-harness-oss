@@ -226,9 +226,12 @@ export const api = {
       fetchApi<ApiResponse<null>>(`/api/marks/${id}`, { method: 'DELETE' }),
   },
   funnels: {
-    list: () => fetchApi<ApiResponse<Funnel[]>>('/api/funnels'),
+    list: (params?: { accountId?: string }) => {
+      const query = params?.accountId ? '?lineAccountId=' + params.accountId : ''
+      return fetchApi<ApiResponse<Funnel[]>>('/api/funnels' + query)
+    },
     get: (id: string) => fetchApi<ApiResponse<FunnelWithSteps>>(`/api/funnels/${id}`),
-    create: (data: { name: string; description?: string; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark' | 'action'; condition_ids: string[] }[] }) =>
+    create: (data: { name: string; description?: string; lineAccountId?: string | null; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark' | 'action'; condition_ids: string[] }[] }) =>
       fetchApi<ApiResponse<FunnelWithSteps>>('/api/funnels', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: { name?: string; description?: string | null; steps?: { name: string; step_order: number; condition_type: 'tag' | 'contact_mark' | 'action'; condition_ids: string[] }[] }) =>
       fetchApi<ApiResponse<FunnelWithSteps>>(`/api/funnels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -239,9 +242,12 @@ export const api = {
       fetchApi<ApiResponse<{ users: FunnelStepUser[] }>>(`/api/funnels/${id}/step-users?stepIndex=${stepIndex}&variant=${variant}&from=${from}&to=${to}`),
   },
   crossAnalyses: {
-    list: () => fetchApi<ApiResponse<CrossAnalysis[]>>('/api/cross-analyses'),
+    list: (params?: { accountId?: string }) => {
+      const query = params?.accountId ? '?lineAccountId=' + params.accountId : ''
+      return fetchApi<ApiResponse<CrossAnalysis[]>>('/api/cross-analyses' + query)
+    },
     get: (id: string) => fetchApi<ApiResponse<CrossAnalysis>>(`/api/cross-analyses/${id}`),
-    create: (data: { name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] } }) =>
+    create: (data: { name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; lineAccountId?: string | null }) =>
       fetchApi<ApiResponse<CrossAnalysis>>('/api/cross-analyses', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: Partial<{ name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] } }>) =>
       fetchApi<ApiResponse<CrossAnalysis>>(`/api/cross-analyses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -304,6 +310,7 @@ export const api = {
       targetTagId?: string | null
       scheduledAt?: string | null
       status?: ApiBroadcast['status']
+      lineAccountId?: string | null
     }) =>
       fetchApi<ApiResponse<ApiBroadcast>>('/api/broadcasts', {
         method: 'POST',
@@ -419,15 +426,22 @@ export const api = {
       ),
   },
   templates: {
-    list: (category?: string) =>
-      fetchApi<ApiResponse<{ id: string; name: string; category: string; messageType: string; messageContent: string; createdAt: string; updatedAt: string }[]>>(
-        '/api/templates' + (category ? '?' + new URLSearchParams({ category }) : ''),
-      ),
+    list: (params?: string | { category?: string; accountId?: string }) => {
+      const category = typeof params === 'string' ? params : params?.category
+      const accountId = typeof params === 'string' ? undefined : params?.accountId
+      const query: Record<string, string> = {}
+      if (category) query.category = category
+      if (accountId) query.accountId = accountId
+      const qs = Object.keys(query).length > 0 ? '?' + new URLSearchParams(query) : ''
+      return fetchApi<ApiResponse<{ id: string; name: string; category: string; messageType: string; messageContent: string; createdAt: string; updatedAt: string }[]>>(
+        '/api/templates' + qs,
+      )
+    },
     get: (id: string) =>
       fetchApi<ApiResponse<{ id: string; name: string; category: string; messageType: string; messageContent: string; createdAt: string; updatedAt: string }>>(
         `/api/templates/${id}`,
       ),
-    create: (data: { name: string; category: string; messageType: string; messageContent: string }) =>
+    create: (data: { name: string; category: string; messageType: string; messageContent: string; lineAccountId?: string | null }) =>
       fetchApi<ApiResponse<{ id: string; name: string; category: string; messageType: string; messageContent: string; createdAt: string; updatedAt: string }>>(
         '/api/templates',
         { method: 'POST', body: JSON.stringify(data) },
@@ -463,6 +477,7 @@ export const api = {
       description?: string | null
       conditions?: Record<string, unknown>
       priority?: number
+      lineAccountId?: string | null
     }) =>
       fetchApi<ApiResponse<Automation>>('/api/automations', {
         method: 'POST',
@@ -524,7 +539,7 @@ export const api = {
     },
     get: (id: string) =>
       fetchApi<ApiResponse<Reminder & { steps: ReminderStep[] }>>(`/api/reminders/${id}`),
-    create: (data: { name: string; description?: string | null }) =>
+    create: (data: { name: string; description?: string | null; lineAccountId?: string | null }) =>
       fetchApi<ApiResponse<Reminder>>('/api/reminders', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -547,11 +562,13 @@ export const api = {
       }),
   },
   scoring: {
-    rules: () =>
-      fetchApi<ApiResponse<ScoringRule[]>>('/api/scoring-rules'),
+    rules: (params?: { accountId?: string }) => {
+      const query = params?.accountId ? '?lineAccountId=' + params.accountId : ''
+      return fetchApi<ApiResponse<ScoringRule[]>>('/api/scoring-rules' + query)
+    },
     getRule: (id: string) =>
       fetchApi<ApiResponse<ScoringRule>>(`/api/scoring-rules/${id}`),
-    createRule: (data: { name: string; eventType: string; scoreValue: number }) =>
+    createRule: (data: { name: string; eventType: string; scoreValue: number; lineAccountId?: string | null }) =>
       fetchApi<ApiResponse<ScoringRule>>('/api/scoring-rules', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -570,9 +587,11 @@ export const api = {
   },
   webhooks: {
     incoming: {
-      list: () =>
-        fetchApi<ApiResponse<IncomingWebhook[]>>('/api/webhooks/incoming'),
-      create: (data: { name: string; sourceType?: string; secret?: string | null }) =>
+      list: (params?: { accountId?: string }) => {
+        const query = params?.accountId ? '?lineAccountId=' + params.accountId : ''
+        return fetchApi<ApiResponse<IncomingWebhook[]>>('/api/webhooks/incoming' + query)
+      },
+      create: (data: { name: string; sourceType?: string; secret?: string | null; lineAccountId?: string | null }) =>
         fetchApi<ApiResponse<IncomingWebhook>>('/api/webhooks/incoming', {
           method: 'POST',
           body: JSON.stringify(data),
@@ -586,9 +605,11 @@ export const api = {
         fetchApi<ApiResponse<null>>(`/api/webhooks/incoming/${id}`, { method: 'DELETE' }),
     },
     outgoing: {
-      list: () =>
-        fetchApi<ApiResponse<OutgoingWebhook[]>>('/api/webhooks/outgoing'),
-      create: (data: { name: string; url: string; eventTypes: string[]; secret?: string | null }) =>
+      list: (params?: { accountId?: string }) => {
+        const query = params?.accountId ? '?lineAccountId=' + params.accountId : ''
+        return fetchApi<ApiResponse<OutgoingWebhook[]>>('/api/webhooks/outgoing' + query)
+      },
+      create: (data: { name: string; url: string; eventTypes: string[]; secret?: string | null; lineAccountId?: string | null }) =>
         fetchApi<ApiResponse<OutgoingWebhook>>('/api/webhooks/outgoing', {
           method: 'POST',
           body: JSON.stringify(data),
@@ -604,11 +625,13 @@ export const api = {
   },
   notifications: {
     rules: {
-      list: () =>
-        fetchApi<ApiResponse<NotificationRule[]>>('/api/notifications/rules'),
+      list: (params?: { accountId?: string }) => {
+        const query = params?.accountId ? '?lineAccountId=' + params.accountId : ''
+        return fetchApi<ApiResponse<NotificationRule[]>>('/api/notifications/rules' + query)
+      },
       get: (id: string) =>
         fetchApi<ApiResponse<NotificationRule>>(`/api/notifications/rules/${id}`),
-      create: (data: { name: string; eventType: string; conditions?: Record<string, unknown>; channels?: string[] }) =>
+      create: (data: { name: string; eventType: string; conditions?: Record<string, unknown>; channels?: string[]; lineAccountId?: string | null }) =>
         fetchApi<ApiResponse<NotificationRule>>('/api/notifications/rules', {
           method: 'POST',
           body: JSON.stringify(data),
@@ -621,10 +644,13 @@ export const api = {
       delete: (id: string) =>
         fetchApi<ApiResponse<null>>(`/api/notifications/rules/${id}`, { method: 'DELETE' }),
     },
-    list: (params?: { status?: string; limit?: string }) =>
-      fetchApi<ApiResponse<Notification[]>>(
-        '/api/notifications?' + new URLSearchParams(params as Record<string, string>),
-      ),
+    list: (params?: { status?: string; limit?: string; accountId?: string }) => {
+      const query: Record<string, string> = {}
+      if (params?.status) query.status = params.status
+      if (params?.limit) query.limit = params.limit
+      if (params?.accountId) query.lineAccountId = params.accountId
+      return fetchApi<ApiResponse<Notification[]>>('/api/notifications?' + new URLSearchParams(query))
+    },
   },
   health: {
     accounts: () =>

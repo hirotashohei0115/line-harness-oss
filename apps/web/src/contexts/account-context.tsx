@@ -54,8 +54,16 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         const list = res.data as AccountWithStats[]
         setAccounts(list)
 
-        // If current selection is invalid (e.g. deleted), fall back to first
         setSelectedAccountIdState((prev) => {
+          // Staff always use the primary account (first without adminUrl) — ignore localStorage
+          let staffRole: string | null = null
+          try { staffRole = localStorage.getItem('lh_staff_role') } catch {}
+          if (staffRole === 'staff') {
+            const primary = list.find((a) => !a.adminUrl) ?? list[0]
+            return primary.id
+          }
+
+          // Admin/owner: maintain current selection if still valid
           if (prev && list.some((a) => a.id === prev)) return prev
           // Restore from localStorage or default to first
           let stored: string | null = null
