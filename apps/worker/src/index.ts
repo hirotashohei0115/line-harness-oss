@@ -39,6 +39,7 @@ import { funnelRoutes } from './routes/funnel.js';
 import { crossAnalysisRoutes } from './routes/cross-analysis.js';
 import { marks } from './routes/marks.js';
 import { reservationRoutes } from './routes/reservations.js';
+import { switchRepair } from './routes/switch-repair.js';
 
 export type Env = {
   Bindings: {
@@ -107,6 +108,7 @@ app.route('/', funnelRoutes);
 app.route('/', crossAnalysisRoutes);
 app.route('/', marks);
 app.route('/', reservationRoutes);
+app.route('/', switchRepair);
 
 // Short link: /r/:ref → landing page with LINE open button
 app.get('/r/:ref', (c) => {
