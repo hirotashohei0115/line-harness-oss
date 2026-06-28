@@ -1,7 +1,7 @@
 # deploy-prod.ps1
 # Deploy to production: macbook-repair-admin (Vercel) + macbook-repair-worker (Cloudflare)
 
-$TEST_PROJECT  = '{"projectId":"prj_lYUSaL4mqvWvV2AUipvAsZXMNPHc","orgId":"team_4IbCtSV2BEd1FEQ6rKLxvATJ","projectName":"line-harness-oss"}'
+$TEST_PROJECT  = '{"projectId":"prj_D08WaeGqnW2bsIFUbTqjMtjTGjUj","orgId":"team_l6rW5Y6mzIFE3vqpZaSDYCpz","projectName":"line-harness-oss"}'
 $PROJECT_FILE  = Join-Path $PSScriptRoot ".vercel\project.json"
 $VERCEL_TOKEN  = [System.Environment]::GetEnvironmentVariable("VERCEL_TOKEN", "User")
 
