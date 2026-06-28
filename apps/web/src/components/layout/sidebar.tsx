@@ -104,22 +104,6 @@ function AccountSwitcher({ staffRole }: { staffRole: string | null }) {
   if (loading || accounts.length === 0) return null
 
   const displayName = selectedAccount?.displayName || selectedAccount?.name || ''
-  const canSwitch = staffRole === 'admin' || staffRole === 'owner'
-
-  // staff以下はアカウント名のみ表示（切り替え不可）
-  if (!canSwitch) {
-    return (
-      <div className="px-3 py-3 border-b border-gray-200">
-        <div className="flex items-center gap-2.5 px-2.5 py-2">
-          {selectedAccount && <AccountAvatar account={selectedAccount} size={28} />}
-          <div className="flex-1 text-left min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{displayName}</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div ref={ref} className="px-3 py-3 border-b border-gray-200">
       <button
