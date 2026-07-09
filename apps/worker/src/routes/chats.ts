@@ -16,6 +16,13 @@ import type { Env } from '../index.js';
 
 const chats = new Hono<Env>();
 
+// 店舗/タグの絞り込みはMacBook向けの概念のため、Switchアカウント表示時は対象外とする
+async function isSwitchLineAccount(db: D1Database, switchChannelId: string | undefined, lineAccountId: string | undefined): Promise<boolean> {
+  if (!lineAccountId || !switchChannelId) return false;
+  const switchAccount = await db.prepare(`SELECT id FROM line_accounts WHERE channel_id = ?`).bind(switchChannelId).first<{ id: string }>();
+  return switchAccount?.id === lineAccountId;
+}
+
 // ========== オペレーターCRUD ==========
 
 chats.get('/api/operators', async (c) => {
@@ -89,8 +96,10 @@ chats.get('/api/chats', async (c) => {
     const assignedStores = currentStaff?.assignedStores ?? [];
     const assignedTags = currentStaff?.assignedTags ?? [];
     const assignedLineAccounts = currentStaff?.assignedLineAccounts ?? [];
+    const isSwitch = await isSwitchLineAccount(c.env.DB, c.env.SWITCH_LINE_CHANNEL_ID, lineAccountId);
     const isFiltered = (assignedStores.length > 0 || assignedTags.length > 0)
-      && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
+      && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin'
+      && !isSwitch;
     const isLineAccountRestricted = assignedLineAccounts.length > 0
       && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
 
@@ -235,8 +244,10 @@ chats.get('/api/chats/unread-count', async (c) => {
     const assignedStores2 = currentStaff?.assignedStores ?? [];
     const assignedTags2 = currentStaff?.assignedTags ?? [];
     const assignedLineAccounts2 = currentStaff?.assignedLineAccounts ?? [];
+    const isSwitch2 = await isSwitchLineAccount(c.env.DB, c.env.SWITCH_LINE_CHANNEL_ID, lineAccountId ?? undefined);
     const isFiltered2 = (assignedStores2.length > 0 || assignedTags2.length > 0)
-      && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
+      && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin'
+      && !isSwitch2;
     const isLineAccountRestricted2 = assignedLineAccounts2.length > 0
       && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
 
