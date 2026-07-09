@@ -40,6 +40,7 @@ import { crossAnalysisRoutes } from './routes/cross-analysis.js';
 import { marks } from './routes/marks.js';
 import { reservationRoutes } from './routes/reservations.js';
 import { switchRepair } from './routes/switch-repair.js';
+import { lineGroupsRoute } from './routes/line-groups.js';
 
 export type Env = {
   Bindings: {
@@ -62,7 +63,7 @@ export type Env = {
     SWITCH_LINE_CHANNEL_ID?: string;
   };
   Variables: {
-    staff: { id: string; name: string; role: 'owner' | 'admin' | 'staff'; assignedStores?: string[]; assignedTags?: string[] };
+    staff: { id: string; name: string; role: 'owner' | 'admin' | 'staff'; assignedStores?: string[]; assignedTags?: string[]; assignedLineAccounts?: string[] };
   };
 };
 
@@ -109,6 +110,7 @@ app.route('/', crossAnalysisRoutes);
 app.route('/', marks);
 app.route('/', reservationRoutes);
 app.route('/', switchRepair);
+app.route('/', lineGroupsRoute);
 
 // Short link: /r/:ref → landing page with LINE open button
 app.get('/r/:ref', (c) => {

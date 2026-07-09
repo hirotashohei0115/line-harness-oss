@@ -52,6 +52,7 @@ interface StaffAccount {
   role: 'admin' | 'staff';
   assigned_stores: string | null;
   assigned_tags: string | null;
+  assigned_line_accounts: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -120,14 +121,15 @@ staff.get('/api/staff/me', async (c) => {
 staff.get('/api/staff/accounts', requireRole('admin', 'owner'), async (c) => {
   try {
     const accounts = await c.env.DB.prepare(
-      `SELECT id, email, name, role, assigned_stores, assigned_tags, is_active, created_at FROM staff_accounts ORDER BY created_at ASC`
-    ).all<{ id: string; email: string; name: string; role: string; assigned_stores: string | null; assigned_tags: string | null; is_active: number; created_at: string }>();
+      `SELECT id, email, name, role, assigned_stores, assigned_tags, assigned_line_accounts, is_active, created_at FROM staff_accounts ORDER BY created_at ASC`
+    ).all<{ id: string; email: string; name: string; role: string; assigned_stores: string | null; assigned_tags: string | null; assigned_line_accounts: string | null; is_active: number; created_at: string }>();
     return c.json({
       success: true,
       data: accounts.results.map(a => ({
         ...a,
         assignedStores: a.assigned_stores ? JSON.parse(a.assigned_stores) : [],
         assignedTags: a.assigned_tags ? JSON.parse(a.assigned_tags) : [],
+        assignedLineAccounts: a.assigned_line_accounts ? JSON.parse(a.assigned_line_accounts) : [],
         isActive: Boolean(a.is_active),
       })),
     });
@@ -140,7 +142,7 @@ staff.get('/api/staff/accounts', requireRole('admin', 'owner'), async (c) => {
 // POST /api/staff/accounts
 staff.post('/api/staff/accounts', requireRole('admin', 'owner'), async (c) => {
   try {
-    const body = await c.req.json<{ email: string; password: string; name: string; role?: 'admin' | 'staff'; assignedStores?: string[]; assignedTags?: string[] }>();
+    const body = await c.req.json<{ email: string; password: string; name: string; role?: 'admin' | 'staff'; assignedStores?: string[]; assignedTags?: string[]; assignedLineAccounts?: string[] }>();
     if (!body.email || !body.password || !body.name) {
       return c.json({ success: false, error: 'email, password, name required' }, 400);
     }
@@ -150,10 +152,11 @@ staff.post('/api/staff/accounts', requireRole('admin', 'owner'), async (c) => {
     const id = crypto.randomUUID();
     const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(' ', 'T');
     await c.env.DB.prepare(
-      `INSERT INTO staff_accounts (id, email, password_hash, name, role, assigned_stores, assigned_tags, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+      `INSERT INTO staff_accounts (id, email, password_hash, name, role, assigned_stores, assigned_tags, assigned_line_accounts, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
     ).bind(id, body.email, passwordHash, body.name, body.role ?? 'staff',
       body.assignedStores ? JSON.stringify(body.assignedStores) : null,
       body.assignedTags ? JSON.stringify(body.assignedTags) : '[]',
+      body.assignedLineAccounts ? JSON.stringify(body.assignedLineAccounts) : '[]',
       now, now
     ).run();
     return c.json({ success: true, data: { id, email: body.email, name: body.name, role: body.role ?? 'staff' } }, 201);
@@ -169,7 +172,7 @@ staff.post('/api/staff/accounts', requireRole('admin', 'owner'), async (c) => {
 staff.patch('/api/staff/accounts/:id', requireRole('admin', 'owner'), async (c) => {
   try {
     const id = c.req.param('id');
-    const body = await c.req.json<{ name?: string; email?: string; role?: 'admin' | 'staff'; assignedStores?: string[]; assignedTags?: string[]; isActive?: boolean; password?: string }>();
+    const body = await c.req.json<{ name?: string; email?: string; role?: 'admin' | 'staff'; assignedStores?: string[]; assignedTags?: string[]; assignedLineAccounts?: string[]; isActive?: boolean; password?: string }>();
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (body.name !== undefined) { sets.push('name = ?'); vals.push(body.name); }
@@ -177,6 +180,7 @@ staff.patch('/api/staff/accounts/:id', requireRole('admin', 'owner'), async (c) 
     if (body.role !== undefined) { sets.push('role = ?'); vals.push(body.role); }
     if (body.assignedStores !== undefined) { sets.push('assigned_stores = ?'); vals.push(JSON.stringify(body.assignedStores)); }
     if (body.assignedTags !== undefined) { sets.push('assigned_tags = ?'); vals.push(JSON.stringify(body.assignedTags)); }
+    if (body.assignedLineAccounts !== undefined) { sets.push('assigned_line_accounts = ?'); vals.push(JSON.stringify(body.assignedLineAccounts)); }
     if (body.isActive !== undefined) { sets.push('is_active = ?'); vals.push(body.isActive ? 1 : 0); }
     if (body.password) {
       const data = new TextEncoder().encode(body.password);
@@ -380,6 +384,7 @@ staff.post('/api/staff/login', async (c) => {
     const secret = c.env.JWT_SECRET ?? 'fallback-secret';
     const assignedStores: string[] = account.assigned_stores ? JSON.parse(account.assigned_stores) : [];
     const assignedTags: string[] = account.assigned_tags ? JSON.parse(account.assigned_tags) : [];
+    const assignedLineAccounts: string[] = account.assigned_line_accounts ? JSON.parse(account.assigned_line_accounts) : [];
     const payload = {
       sub: account.id,
       email: account.email,
@@ -387,13 +392,14 @@ staff.post('/api/staff/login', async (c) => {
       role: account.role,
       assignedStores,
       assignedTags,
+      assignedLineAccounts,
       exp: Math.floor(Date.now() / 1000) + 86400 * 7, // 7日間
     };
     const token = await signJWT(payload, secret);
 
     return c.json({
       success: true,
-      data: { token, staff: { id: account.id, name: account.name, role: account.role, assignedStores, assignedTags } },
+      data: { token, staff: { id: account.id, name: account.name, role: account.role, assignedStores, assignedTags, assignedLineAccounts } },
     });
   } catch (err) {
     console.error('POST /api/staff/login error:', err);
@@ -408,14 +414,15 @@ staff.get('/api/staff/refresh-token', async (c) => {
     if (!staffInfo?.id) return c.json({ success: false, error: 'Unauthorized' }, 401);
 
     const account = await c.env.DB
-      .prepare(`SELECT id, email, name, role, assigned_stores, assigned_tags FROM staff_accounts WHERE id = ? AND is_active = 1`)
+      .prepare(`SELECT id, email, name, role, assigned_stores, assigned_tags, assigned_line_accounts FROM staff_accounts WHERE id = ? AND is_active = 1`)
       .bind(staffInfo.id)
-      .first<{ id: string; email: string; name: string; role: string; assigned_stores: string | null; assigned_tags: string | null }>();
+      .first<{ id: string; email: string; name: string; role: string; assigned_stores: string | null; assigned_tags: string | null; assigned_line_accounts: string | null }>();
     if (!account) return c.json({ success: false, error: 'Account not found' }, 404);
 
     const secret = c.env.JWT_SECRET ?? 'fallback-secret';
     const assignedStores: string[] = account.assigned_stores ? JSON.parse(account.assigned_stores) : [];
     const assignedTags: string[] = account.assigned_tags ? JSON.parse(account.assigned_tags) : [];
+    const assignedLineAccounts: string[] = account.assigned_line_accounts ? JSON.parse(account.assigned_line_accounts) : [];
     const payload = {
       sub: account.id,
       email: account.email,
@@ -423,6 +430,7 @@ staff.get('/api/staff/refresh-token', async (c) => {
       role: account.role,
       assignedStores,
       assignedTags,
+      assignedLineAccounts,
       exp: Math.floor(Date.now() / 1000) + 86400 * 7,
     };
     const token = await signJWT(payload, secret);

@@ -51,7 +51,14 @@ async function fetchBotProfile(accessToken: string): Promise<{ displayName?: str
 lineAccounts.get('/api/line-accounts', async (c) => {
   try {
     const db = c.env.DB;
-    const items = await getLineAccounts(db);
+    let items = await getLineAccounts(db);
+
+    // スタッフに閲覧可能なLINEアカウントの制限がある場合はフィルタ（空 = 全アカウント閲覧可）
+    const currentStaff = c.get('staff');
+    const assignedLineAccounts = currentStaff?.assignedLineAccounts ?? [];
+    if (currentStaff?.role === 'staff' && assignedLineAccounts.length > 0) {
+      items = items.filter((item) => assignedLineAccounts.includes(item.id));
+    }
 
     // Get stats for all accounts in parallel
     const results = await Promise.all(
@@ -99,6 +106,10 @@ lineAccounts.get('/api/line-accounts/:id', async (c) => {
       return c.json({ success: false, error: 'LINE account not found' }, 404);
     }
     const staff = c.get('staff');
+    const assignedLineAccounts = staff?.assignedLineAccounts ?? [];
+    if (staff?.role === 'staff' && assignedLineAccounts.length > 0 && !assignedLineAccounts.includes(account.id)) {
+      return c.json({ success: false, error: 'LINE account not found' }, 404);
+    }
     const data = staff?.role === 'staff'
       ? serializeLineAccount(account)
       : serializeLineAccountFull(account);

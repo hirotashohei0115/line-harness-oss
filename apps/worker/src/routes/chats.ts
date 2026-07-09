@@ -88,7 +88,10 @@ chats.get('/api/chats', async (c) => {
     const currentStaff = c.get('staff');
     const assignedStores = currentStaff?.assignedStores ?? [];
     const assignedTags = currentStaff?.assignedTags ?? [];
+    const assignedLineAccounts = currentStaff?.assignedLineAccounts ?? [];
     const isFiltered = (assignedStores.length > 0 || assignedTags.length > 0)
+      && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
+    const isLineAccountRestricted = assignedLineAccounts.length > 0
       && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
 
     // JOIN friends and staff_pins (per-staff pin state)
@@ -117,6 +120,11 @@ chats.get('/api/chats', async (c) => {
     if (lineAccountId) {
       conditions.push('f.line_account_id = ?');
       bindings.push(lineAccountId);
+    }
+    if (isLineAccountRestricted) {
+      const ph = assignedLineAccounts.map(() => '?').join(',');
+      conditions.push(`f.line_account_id IN (${ph})`);
+      assignedLineAccounts.forEach(id => bindings.push(id));
     }
     if (isFiltered) {
       const subQueries: string[] = [];
@@ -226,7 +234,10 @@ chats.get('/api/chats/unread-count', async (c) => {
     const currentStaff = c.get('staff');
     const assignedStores2 = currentStaff?.assignedStores ?? [];
     const assignedTags2 = currentStaff?.assignedTags ?? [];
+    const assignedLineAccounts2 = currentStaff?.assignedLineAccounts ?? [];
     const isFiltered2 = (assignedStores2.length > 0 || assignedTags2.length > 0)
+      && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
+    const isLineAccountRestricted2 = assignedLineAccounts2.length > 0
       && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
 
     // Count distinct chats with unread — same filtering as GET /api/chats
@@ -238,6 +249,11 @@ chats.get('/api/chats/unread-count', async (c) => {
     if (lineAccountId) {
       conditions.push('f.line_account_id = ?');
       bindings.push(lineAccountId);
+    }
+    if (isLineAccountRestricted2) {
+      const ph2 = assignedLineAccounts2.map(() => '?').join(',');
+      conditions.push(`f.line_account_id IN (${ph2})`);
+      assignedLineAccounts2.forEach(id => bindings.push(id));
     }
 
     if (isFiltered2) {
@@ -401,12 +417,18 @@ chats.post('/api/chats/:id/send', async (c) => {
     const friend = await c.env.DB
       .prepare(`SELECT * FROM friends WHERE id = ?`)
       .bind(chat.friend_id)
-      .first<{ id: string; line_user_id: string }>();
+      .first<{ id: string; line_user_id: string; line_account_id: string | null }>();
     if (!friend) return c.json({ success: false, error: 'Friend not found' }, 404);
 
-    // LINE APIでメッセージ送信
+    // LINE APIでメッセージ送信（友だちの line_account_id からトークンを解決 — マルチアカウント対応）
     const { LineClient } = await import('@line-crm/line-sdk');
-    const lineClient = new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN);
+    let accessToken = c.env.LINE_CHANNEL_ACCESS_TOKEN;
+    if (friend.line_account_id) {
+      const { getLineAccountById } = await import('@line-crm/db');
+      const account = await getLineAccountById(c.env.DB, friend.line_account_id);
+      if (account) accessToken = account.channel_access_token;
+    }
+    const lineClient = new LineClient(accessToken);
     const messageType = body.messageType ?? 'text';
 
     // メッセージIDを先に確定

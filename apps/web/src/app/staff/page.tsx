@@ -17,6 +17,7 @@ interface StaffAccount {
   role: 'admin' | 'staff'
   assignedStores: string[]
   assignedTags: string[]
+  assignedLineAccounts: string[]
   isActive: boolean
   created_at: string
 }
@@ -37,10 +38,11 @@ interface FormState {
   role: 'admin' | 'staff'
   assignedStores: string[]
   assignedTags: string[]
+  assignedLineAccounts: string[]
   password: string
 }
 
-const defaultForm: FormState = { email: '', name: '', role: 'staff', assignedStores: [], assignedTags: [], password: '' }
+const defaultForm: FormState = { email: '', name: '', role: 'staff', assignedStores: [], assignedTags: [], assignedLineAccounts: [], password: '' }
 
 export default function StaffPage() {
   const [accounts, setAccounts] = useState<StaffAccount[]>([])
@@ -52,6 +54,7 @@ export default function StaffPage() {
   const [saving, setSaving] = useState(false)
   const [myRole, setMyRole] = useState('')
   const [allTags, setAllTags] = useState<{ id: string; name: string }[]>([])
+  const [allLineAccounts, setAllLineAccounts] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
     setMyRole(localStorage.getItem('lh_staff_role') || '')
@@ -72,10 +75,14 @@ export default function StaffPage() {
     api.tags.list().then(r => { if (r.success) setAllTags(r.data.map(t => ({ id: t.id, name: t.name }))) }).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    api.lineAccounts.list().then(r => { if (r.success) setAllLineAccounts(r.data.map(a => ({ id: a.id, name: a.name }))) }).catch(() => {})
+  }, [])
+
   const openCreate = () => { setEditTarget(null); setForm(defaultForm); setShowForm(true) }
   const openEdit = (a: StaffAccount) => {
     setEditTarget(a)
-    setForm({ email: a.email, name: a.name, role: a.role, assignedStores: a.assignedStores, assignedTags: a.assignedTags ?? [], password: '' })
+    setForm({ email: a.email, name: a.name, role: a.role, assignedStores: a.assignedStores, assignedTags: a.assignedTags ?? [], assignedLineAccounts: a.assignedLineAccounts ?? [], password: '' })
     setShowForm(true)
   }
 
@@ -85,13 +92,13 @@ export default function StaffPage() {
     setSaving(true)
     try {
       if (editTarget) {
-        const body: Record<string, unknown> = { name: form.name, email: form.email, role: form.role, assignedStores: form.assignedStores, assignedTags: form.assignedTags }
+        const body: Record<string, unknown> = { name: form.name, email: form.email, role: form.role, assignedStores: form.assignedStores, assignedTags: form.assignedTags, assignedLineAccounts: form.assignedLineAccounts }
         if (form.password) body.password = form.password
         await fetchApi(`/api/staff/accounts/${editTarget.id}`, { method: 'PATCH', body: JSON.stringify(body) })
       } else {
         await fetchApi('/api/staff/accounts', {
           method: 'POST',
-          body: JSON.stringify({ email: form.email, name: form.name, role: form.role, assignedStores: form.assignedStores, assignedTags: form.assignedTags, password: form.password }),
+          body: JSON.stringify({ email: form.email, name: form.name, role: form.role, assignedStores: form.assignedStores, assignedTags: form.assignedTags, assignedLineAccounts: form.assignedLineAccounts, password: form.password }),
         })
       }
       setShowForm(false)
@@ -125,6 +132,15 @@ export default function StaffPage() {
       assignedTags: prev.assignedTags.includes(tagName)
         ? prev.assignedTags.filter(t => t !== tagName)
         : [...prev.assignedTags, tagName],
+    }))
+  }
+
+  const toggleLineAccount = (accountId: string) => {
+    setForm(prev => ({
+      ...prev,
+      assignedLineAccounts: prev.assignedLineAccounts.includes(accountId)
+        ? prev.assignedLineAccounts.filter(id => id !== accountId)
+        : [...prev.assignedLineAccounts, accountId],
     }))
   }
 
@@ -246,6 +262,23 @@ export default function StaffPage() {
                   </div>
                   {form.assignedTags.length > 0 && (
                     <p className="text-xs text-gray-400 mt-1">{form.assignedTags.length}件選択中</p>
+                  )}
+                </div>
+              )}
+              {form.role === 'staff' && allLineAccounts.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">閲覧可能なLINEアカウント</label>
+                  <p className="text-xs text-gray-400 mb-2">未選択の場合は全アカウントを閲覧できます（Switchなど特定アカウントのみ許可する場合はチェック）</p>
+                  <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1">
+                    {allLineAccounts.map(acc => (
+                      <label key={acc.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5">
+                        <input type="checkbox" checked={form.assignedLineAccounts.includes(acc.id)} onChange={() => toggleLineAccount(acc.id)} className="rounded" />
+                        <span className="text-sm text-gray-700">{acc.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {form.assignedLineAccounts.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">{form.assignedLineAccounts.length}件選択中</p>
                   )}
                 </div>
               )}
