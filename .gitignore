@@ -11,3 +11,5 @@ dist/
 .env.staging
 apps/web/out/
 .vercel
+.env*
+prod-export.sql
