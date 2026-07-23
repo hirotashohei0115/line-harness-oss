@@ -23,6 +23,7 @@ interface FormData {
   phone: string;
   packagingKit: boolean;
   deliveryStore: string;
+  agreedTerms?: boolean;
 }
 
 function escapeHtml(str: string): string {
@@ -257,7 +258,11 @@ function renderTerms(data: FormData, displayName: string): void {
   });
 
   confirmBtn.addEventListener('click', () => {
-    void handleSubmit(data, confirmBtn);
+    if (!checkbox.checked) {
+      showTermsError('利用規約およびプライバシーポリシーへの同意が必要です');
+      return;
+    }
+    void handleSubmit({ ...data, agreedTerms: true }, confirmBtn);
   });
 
   backBtn.addEventListener('click', () => {

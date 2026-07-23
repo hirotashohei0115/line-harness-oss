@@ -8,6 +8,7 @@ import {
   upsertChatOnMessage,
   setFriendAttribute,
   jstNow,
+  toJstString,
   getActiveNotificationRulesByEvent,
   createNotification,
   updateNotificationStatus,
@@ -238,6 +239,7 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
     packagingKit?: boolean;
     deliveryStore?: string;
     deviceType?: string;
+    agreedTerms?: boolean;
   };
   try {
     body = await c.req.json();
@@ -245,10 +247,13 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
     return c.json({ success: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const { lineUserId, name, postalCode, address, phone, packagingKit, deliveryStore } = body;
+  const { lineUserId, name, postalCode, address, phone, packagingKit, deliveryStore, agreedTerms } = body;
   const isSwitch = body.deviceType === 'switch';
   if (!lineUserId || !name || !postalCode || !address || !phone || !deliveryStore) {
     return c.json({ success: false, error: 'Missing required fields' }, 400);
+  }
+  if (agreedTerms !== true) {
+    return c.json({ success: false, error: '利用規約への同意が必要です' }, 400);
   }
 
   try {
@@ -258,6 +263,13 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       .bind(lineUserId)
       .first<{ id: string }>();
     if (!friend && !isSwitch) {
+      await c.env.DB
+        .prepare('INSERT OR IGNORE INTO friends (id, line_user_id, display_name, is_following, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)')
+        .bind(crypto.randomUUID(), lineUserId, name, jstNow(), jstNow())
+        .run();
+      friend = await c.env.DB.prepare('SELECT id FROM friends WHERE line_user_id = ? LIMIT 1').bind(lineUserId).first<{ id: string }>();
+    }
+    if (!friend) {
       return c.json({ success: false, error: 'Friend not found' }, 404);
     }
 
@@ -295,10 +307,10 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
     if (friend) {
       await c.env.DB
         .prepare(
-          `INSERT INTO mail_orders (id, friend_id, name, postal_code, address, phone, packaging_kit, delivery_store, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+          `INSERT INTO mail_orders (id, friend_id, name, postal_code, address, phone, packaging_kit, delivery_store, status, terms_agreed, terms_agreed_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?, ?)`,
         )
-        .bind(id, friend.id, name, postalCode, address, phone, packagingKit ? 1 : 0, deliveryStore, now, now)
+        .bind(id, friend.id, name, postalCode, address, phone, packagingKit ? 1 : 0, deliveryStore, now, now, now)
         .run();
 
       const formContent = `【郵送修理フォーム送信】\n━━━━━━━━━━\nお名前：${name}\n郵便番号：${postalCode}\nご住所：${address}\n電話番号：${phone}\n梱包キット：${packagingKit ? 'あり（無料）' : 'なし'}\n配送先：${deliveryStore}\n━━━━━━━━━━`;
@@ -365,7 +377,7 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
     // LINEでお礼メッセージを送信
     const kitLabel = packagingKit ? 'あり（無料）' : 'なし';
     const storeInfo = deliveryStore.includes('SwitchMaster') || isSwitch
-      ? `${deliveryStore}\nお問合せ：070-1271-7186`
+      ? `${deliveryStore}\n〒030-0845\n青森県青森市緑3丁目9-2\nサンロード青森2階\nTEL: 070-3209-7849`
       : deliveryStore.includes('盛岡')
       ? `リペアマスター盛岡店\n〒020-0034\n岩手県盛岡市盛岡駅前通1-44\n盛岡フェザン 本館1階\nTEL: 019-613-8665`
       : deliveryStore.includes('岐阜')
@@ -375,8 +387,12 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
       : `リペアマスター菖蒲店\n〒346-0106\n埼玉県久喜市菖蒲町菖蒲6005-1\nモラージュ菖蒲 1F\nTEL: 070-1271-7186`;
     const closingMsg = packagingKit
       ? `梱包キットを発送いたします📦\n今しばらくお待ちください。\n梱包キットが到着されましたら上記の郵送先へご発送お願いします。`
+      : isSwitch
+      ? `端末の発送をお待ちしております📦\n発払いにてご発送ください。\n発送が完了致しましたら、発送完了ボタンをタッチお願いします。`
       : `端末の発送をお待ちしております📦\n着払いにてご発送ください。\n発送が完了致しましたら、発送完了ボタンをタッチお願いします。`;
-    const thankMsg = `郵送修理のご依頼ありがとうございます！\n\n以下の内容で承りました。\n━━━━━━━━━━\nお名前：${name}様\n郵便番号：${postalCode}\nご住所：${address}\n電話番号：${phone}\n梱包キット：${kitLabel}\n配送先：${deliveryStore}\n━━━━━━━━━━\n\n【郵送先】\n${storeInfo}\n━━━━━━━━━━\n\n${closingMsg}`;
+    const thankMsg = isSwitch
+      ? `郵送修理のご依頼ありがとうございます！\n\n以下の内容で承りました。\n━━━━━━━━━━\nお名前：${name}様\n郵便番号：${postalCode}\nご住所：${address}\n電話番号：${phone}\n配送先：${deliveryStore}\n━━━━━━━━━━\n\n【郵送先】\n${storeInfo}\n━━━━━━━━━━\n\n${closingMsg}`
+      : `郵送修理のご依頼ありがとうございます！\n\n以下の内容で承りました。\n━━━━━━━━━━\nお名前：${name}様\n郵便番号：${postalCode}\nご住所：${address}\n電話番号：${phone}\n梱包キット：${kitLabel}\n配送先：${deliveryStore}\n━━━━━━━━━━\n\n【郵送先】\n${storeInfo}\n━━━━━━━━━━\n\n${closingMsg}`;
     const shippedButtonFlex = JSON.stringify({
       type: 'bubble',
       body: {
@@ -384,17 +400,35 @@ repairRoutes.post('/api/repair/mail-orders', async (c) => {
         contents: [{
           type: 'button',
           action: { type: 'postback', label: '発送完了', data: 'action=mail_shipped', displayText: '発送完了' },
-          style: 'primary', color: '#06C755', height: 'md',
+          style: 'primary', color: isSwitch ? '#E8003D' : '#06C755', height: 'md',
         }],
       },
     });
     try {
       const lineClient = new LineClient(lineToken);
       const messages: object[] = [{ type: 'text', text: thankMsg }];
-      if (!packagingKit && !isSwitch) {
+      if (!packagingKit) {
         messages.push({ type: 'flex', altText: '発送完了ボタン', contents: JSON.parse(shippedButtonFlex) });
       }
       await lineClient.pushMessage(lineUserId, messages);
+
+      // 実際にお客様へ送信した内容をチャットログに記録（管理画面表示を実送信内容と一致させるため）
+      if (friend) {
+        const friendId = friend.id;
+        const baseMs = Date.now();
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i] as { type: string; text?: string; contents?: unknown };
+          const logType = msg.type === 'flex' ? 'flex' : 'text';
+          const logContent = msg.type === 'flex' ? JSON.stringify(msg.contents ?? {}) : (msg.text ?? '');
+          await c.env.DB
+            .prepare(
+              `INSERT INTO messages_log (id, friend_id, direction, message_type, content, delivery_type, created_at)
+               VALUES (?, ?, 'outgoing', ?, ?, 'push', ?)`,
+            )
+            .bind(crypto.randomUUID(), friendId, logType, logContent, toJstString(new Date(baseMs + i)))
+            .run();
+        }
+      }
     } catch (pushErr) {
       console.error('mail-order push message error:', pushErr);
     }
@@ -454,7 +488,7 @@ repairRoutes.get('/api/repair/mail-orders/:friendId', async (c) => {
   try {
     const row = await c.env.DB
       .prepare(
-        `SELECT id, friend_id, name, postal_code, address, phone, packaging_kit, delivery_store, status, created_at
+        `SELECT id, friend_id, name, postal_code, address, phone, packaging_kit, delivery_store, status, terms_agreed, terms_agreed_at, created_at
          FROM mail_orders WHERE friend_id = ? ORDER BY created_at DESC LIMIT 1`,
       )
       .bind(friendId)
@@ -468,6 +502,8 @@ repairRoutes.get('/api/repair/mail-orders/:friendId', async (c) => {
         packaging_kit: number;
         delivery_store: string;
         status: string;
+        terms_agreed: number;
+        terms_agreed_at: string | null;
         created_at: string;
       }>();
 
@@ -487,6 +523,8 @@ repairRoutes.get('/api/repair/mail-orders/:friendId', async (c) => {
         packagingKit: row.packaging_kit === 1,
         deliveryStore: row.delivery_store,
         status: row.status,
+        agreedTerms: row.terms_agreed === 1,
+        agreedTermsAt: row.terms_agreed_at,
         createdAt: row.created_at,
       },
     });
@@ -585,10 +623,17 @@ repairRoutes.post('/api/repair/visit-orders', async (c) => {
   }
 
   try {
-    const friend = await c.env.DB
+    let friend = await c.env.DB
       .prepare(`SELECT id FROM friends WHERE line_user_id = ? LIMIT 1`)
       .bind(lineUserId)
       .first<{ id: string }>();
+    if (!friend) {
+      await c.env.DB
+        .prepare('INSERT OR IGNORE INTO friends (id, line_user_id, display_name, is_following, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)')
+        .bind(crypto.randomUUID(), lineUserId, name, jstNow(), jstNow())
+        .run();
+      friend = await c.env.DB.prepare('SELECT id FROM friends WHERE line_user_id = ? LIMIT 1').bind(lineUserId).first<{ id: string }>();
+    }
     if (!friend) return c.json({ success: false, error: 'Friend not found' }, 404);
 
     const id = crypto.randomUUID();
@@ -602,7 +647,7 @@ repairRoutes.post('/api/repair/visit-orders', async (c) => {
 
     // フォーム内容をチャットに表示
     const customerTypeLabel = customerType === 'corporate' ? '法人' : '個人';
-    const formContent = `【訪問修理フォーム送信】\n━━━━━━━━━━\nお名前：${name}（${furigana}）\n${customerTypeLabel}\n電話番号：${phone}\n住所：${address}\n第1希望：${preferredDatetime1}${preferredDatetime2 ? `\n第2希望：${preferredDatetime2}` : ''}${preferredDatetime3 ? `\n第3希望：${preferredDatetime3}` : ''}${visitReason ? `\n訪問理由：${visitReason}` : ''}${detail ? `\n依頼内容：${detail}` : ''}\n━━━━━━━━━━`;
+    const formContent = `【出張修理フォーム送信】\n━━━━━━━━━━\nお名前：${name}（${furigana}）\n${customerTypeLabel}\n電話番号：${phone}\n住所：${address}\n第1希望：${preferredDatetime1}${preferredDatetime2 ? `\n第2希望：${preferredDatetime2}` : ''}${preferredDatetime3 ? `\n第3希望：${preferredDatetime3}` : ''}${visitReason ? `\n出張理由：${visitReason}` : ''}${detail ? `\n依頼内容：${detail}` : ''}\n━━━━━━━━━━`;
     await c.env.DB
       .prepare(`INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, scenario_step_id, is_read, created_at) VALUES (?, ?, 'incoming', 'text', ?, NULL, NULL, 0, ?)`)
       .bind(crypto.randomUUID(), friend.id, formContent, jstNow())
@@ -611,26 +656,33 @@ repairRoutes.post('/api/repair/visit-orders', async (c) => {
 
     // タグ付与
     await removeTagsByNames(c.env.DB, friend.id, ['郵送依頼', '店舗持込', 'タグなし']);
-    await addTagToFriend(c.env.DB, friend.id, '訪問修理');
-    await addTagToFriend(c.env.DB, friend.id, '訪問修理フォーム回答済み');
+    await addTagToFriend(c.env.DB, friend.id, '出張修理');
+    await addTagToFriend(c.env.DB, friend.id, '出張修理フォーム回答済み');
 
     // LINE自動返信
     try {
       const lineClient = new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN);
-      await lineClient.pushMessage(lineUserId, [{
-        type: 'text',
-        text: '訪問修理のご依頼ありがとうございます！\n\n訪問可能かお調べしますので、しばらくお待ちください。\n確認でき次第、ご連絡いたします📱',
-      }]);
+      const replyText = '出張修理のご依頼ありがとうございます！\n\n出張可能かお調べしますので、しばらくお待ちください。\n確認でき次第、ご連絡いたします📱';
+      await lineClient.pushMessage(lineUserId, [{ type: 'text', text: replyText }]);
+
+      // 実際にお客様へ送信した内容をチャットログに記録（管理画面表示を実送信内容と一致させるため）
+      await c.env.DB
+        .prepare(
+          `INSERT INTO messages_log (id, friend_id, direction, message_type, content, delivery_type, created_at)
+           VALUES (?, ?, 'outgoing', 'text', ?, 'push', ?)`,
+        )
+        .bind(crypto.randomUUID(), friend.id, replyText, jstNow())
+        .run();
     } catch (pushErr) {
       console.error('visit-order push message error:', pushErr);
     }
 
     // 通知ルール経由でChatwork/LINE通知
-    const cwMsg = `[info][title]🚗 訪問修理依頼が入りました[/title]お名前：${name}（${furigana}）\n電話番号：${phone}\n住所：${address}\n個人/法人：${customerTypeLabel}\n第1希望：${preferredDatetime1}\n第2希望：${preferredDatetime2 ?? 'なし'}\n第3希望：${preferredDatetime3 ?? 'なし'}\n訪問希望理由：${visitReason ?? 'なし'}\n依頼内容：${detail ?? 'なし'}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+    const cwMsg = `[info][title]🚗 出張修理依頼が入りました[/title]お名前：${name}（${furigana}）\n電話番号：${phone}\n住所：${address}\n個人/法人：${customerTypeLabel}\n第1希望：${preferredDatetime1}\n第2希望：${preferredDatetime2 ?? 'なし'}\n第3希望：${preferredDatetime3 ?? 'なし'}\n出張希望理由：${visitReason ?? 'なし'}\n依頼内容：${detail ?? 'なし'}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
     await fireEvent(
       c.env.DB,
       'visit_order_created',
-      { friendId: friend.id, eventData: { chatworkBody: cwMsg, lineText: `【訪問修理依頼】\nお名前：${name}\n電話番号：${phone}\n住所：${address}\n第1希望：${preferredDatetime1}` } },
+      { friendId: friend.id, eventData: { chatworkBody: cwMsg, lineText: `【出張修理依頼】\nお名前：${name}\n電話番号：${phone}\n住所：${address}\n第1希望：${preferredDatetime1}` } },
       c.env.LINE_CHANNEL_ACCESS_TOKEN,
       null,
       c.env.CHATWORK_API_TOKEN,
