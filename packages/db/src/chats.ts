@@ -137,6 +137,17 @@ export async function upsertChatOnMessage(db: D1Database, friendId: string): Pro
   return createChat(db, { friendId });
 }
 
+/** ボタンタップ（postback）受信時にチャットを作成/更新 — 常に既読扱いのためstatusは変更しない */
+export async function upsertChatOnPostback(db: D1Database, friendId: string): Promise<void> {
+  const existing = await getChatByFriendId(db, friendId);
+  const now = jstNow();
+  if (existing) {
+    await updateChat(db, existing.id, { lastMessageAt: now });
+  } else {
+    await createChat(db, { friendId });
+  }
+}
+
 /** システム送信（シナリオ・リマインダー）時にチャットを作成/更新 — statusは変更しない */
 export async function upsertChatOnOutgoingMessage(db: D1Database, friendId: string): Promise<void> {
   const existing = await getChatByFriendId(db, friendId);

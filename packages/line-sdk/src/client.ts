@@ -117,6 +117,23 @@ export class LineClient {
     );
   }
 
+  async getDefaultRichMenuId(): Promise<string | null> {
+    try {
+      const res = await this.request<{ richMenuId: string }>(
+        '/user/all/richmenu',
+        {},
+        'GET',
+      );
+      return res.richMenuId ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async cancelDefaultRichMenu(): Promise<void> {
+    await this.request('/user/all/richmenu', {}, 'DELETE');
+  }
+
   async linkRichMenuToUser(userId: string, richMenuId: string): Promise<void> {
     await this.request(
       `/user/${encodeURIComponent(userId)}/richmenu/${encodeURIComponent(richMenuId)}`,
