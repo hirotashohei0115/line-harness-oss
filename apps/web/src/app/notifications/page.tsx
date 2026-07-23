@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { api } from '@/lib/api'
+import { api, fetchApi } from '@/lib/api'
 import Header from '@/components/layout/header'
 import CcPromptButton from '@/components/cc-prompt-button'
 import { useAccount } from '@/contexts/account-context'
@@ -43,6 +43,15 @@ const STORE_KEY_LIST = [
   { key: 'kizugawa',   label: '木津川店' },
   { key: 'oita',       label: '大分店' },
 ]
+
+interface LineGroup {
+  id: string
+  group_id: string
+  channel_id: string | null
+  joined_at: string
+  last_seen_at: string | null
+  is_active: number
+}
 
 interface CreateFormState {
   name: string
@@ -111,11 +120,12 @@ const ccPrompts = [
 const EVENT_TYPE_LABELS: Record<string, string> = {
   message_received: 'メッセージ受信',
   reservation_created: '来店予約',
-  visit_order_created: '訪問修理依頼',
+  visit_order_created: '出張修理依頼',
   order_received: '受注',
   friend_add: '友だち追加',
   tag_added: 'タグ付与',
   contact_form_submitted: 'お問い合わせフォーム送信',
+  mail_shipped: '発送完了',
 }
 
 const EMPTY_FORM: CreateFormState = {
@@ -147,6 +157,8 @@ export default function NotificationsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [lineGroups, setLineGroups] = useState<LineGroup[]>([])
+  const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null)
 
   const loadRules = useCallback(async () => {
     try {
@@ -194,6 +206,12 @@ export default function NotificationsPage() {
     api.tags.list().then((res) => {
       if (res.success) setAllTags(res.data as Tag[])
     }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetchApi<{ success: boolean; data: LineGroup[] }>('/api/line-groups')
+      .then(r => { if (r.success) setLineGroups(r.data.filter(g => g.is_active)) })
+      .catch(() => {})
   }, [])
 
   const scrollToForm = () => {
@@ -434,10 +452,11 @@ export default function NotificationsPage() {
                 <option value="contact_form_submitted">contact_form_submitted（お問い合わせフォーム送信）</option>
                 <option value="order_received">order_received（受注）</option>
                 <option value="reservation_created">reservation_created（来店予約）</option>
-                <option value="visit_order_created">visit_order_created（訪問修理依頼）</option>
+                <option value="visit_order_created">visit_order_created（出張修理依頼）</option>
                 <option value="friend_add">friend_add（友だち追加）</option>
                 <option value="message_received">message_received（メッセージ受信）</option>
                 <option value="tag_added">tag_added（タグ付与）</option>
+                <option value="mail_shipped">mail_shipped（発送完了）</option>
               </select>
             </div>
             {form.eventType === 'order_received' && (
@@ -614,6 +633,24 @@ export default function NotificationsPage() {
                         />
                         <p className="text-xs text-gray-400 mt-1">通知を送信するLINEグループまたはユーザーのIDを入力してください</p>
                       </div>
+                      {lineGroups.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-600 mb-2">検出済みグループ（クリックで入力）</p>
+                          <div className="space-y-1.5">
+                            {lineGroups.map(g => (
+                              <button
+                                key={g.group_id}
+                                type="button"
+                                onClick={() => setForm({ ...form, lineGroupId: g.group_id })}
+                                className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition-colors ${form.lineGroupId === g.group_id ? 'border-green-400 bg-green-100' : 'border-gray-200 bg-white hover:border-green-300 hover:bg-green-50'}`}
+                              >
+                                <span className="font-mono text-gray-800">{g.group_id}</span>
+                                <span className="ml-2 text-gray-400">{new Date(g.joined_at).toLocaleDateString('ja-JP')} 参加</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
@@ -884,6 +921,44 @@ export default function NotificationsPage() {
           </div>
         )}
       </div>
+      {/* LINEグループID管理 */}
+      <div className="mt-8">
+        <h2 className="text-sm font-semibold text-gray-800 mb-3">検出済みLINEグループ</h2>
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          {lineGroups.length === 0 ? (
+            <p className="text-sm text-gray-400">botをグループに招待すると自動で記録されます</p>
+          ) : (
+            <div className="space-y-2">
+              {lineGroups.map(g => (
+                <div key={g.group_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <p className="text-sm font-mono text-gray-800">{g.group_id}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      参加: {new Date(g.joined_at).toLocaleDateString('ja-JP')}
+                      {g.last_seen_at && ` ／ 最終メッセージ: ${new Date(g.last_seen_at).toLocaleDateString('ja-JP')}`}
+                      {g.channel_id && ` ／ チャンネル: ${g.channel_id}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(g.group_id)
+                      setCopiedGroupId(g.group_id)
+                      setTimeout(() => setCopiedGroupId(null), 2000)
+                    }}
+                    className="ml-4 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 shrink-0 transition-colors"
+                  >
+                    {copiedGroupId === g.group_id ? '✓ コピー済み' : 'IDをコピー'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-gray-400 mt-3">
+            ※ botをグループに招待すると参加イベントを検出して自動記録します
+          </p>
+        </div>
+      </div>
+
       <CcPromptButton prompts={ccPrompts} />
     </div>
   )
