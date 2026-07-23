@@ -194,10 +194,11 @@ function buildStoreCardJson(f: StoreCardFields): string {
 
 interface FlexPart {
   id: string
-  type: 'text' | 'image' | 'button' | 'separator' | 'spacer'
+  type: 'text' | 'image' | 'button' | 'separator' | 'spacer' | 'title'
   text?: string
   size?: string
   color?: string
+  bgColor?: string
   bold?: boolean
   align?: string
   url?: string
@@ -210,32 +211,45 @@ interface FlexPart {
 interface FlexEditorSettings { bgColor: string }
 
 const FLEX_PART_LABELS: Record<string, string> = {
-  text: 'テキスト', image: '画像', button: 'ボタン', separator: '区切り線', spacer: '余白',
+  title: 'タイトル', text: 'テキスト', image: '画像', button: 'ボタン', separator: '区切り線', spacer: '余白',
 }
 
 function parseCustomFlexJson(json: string): { parts: FlexPart[]; settings: FlexEditorSettings } {
   const fallback = { parts: [], settings: { bgColor: '#ffffff' } }
   try {
     const bubble = JSON.parse(json)
-    const contents: Record<string, unknown>[] = bubble?.body?.contents ?? []
     const bgColor = (bubble?.styles?.body?.backgroundColor as string) ?? '#ffffff'
+    const headerBgColor = (bubble?.styles?.header?.backgroundColor as string) ?? '#06C755'
     const heightToSize: Record<string, string> = { '10px': 'sm', '20px': 'md', '30px': 'lg', '40px': 'xl' }
-    const parts: FlexPart[] = contents.map((item) => {
+
+    const parseItem = (item: Record<string, unknown>, isTitleContext = false): FlexPart | null => {
       const id = crypto.randomUUID()
-      if (item.type === 'text') return { id, type: 'text' as const, text: item.text as string, size: item.size as string, color: item.color as string, bold: item.weight === 'bold', align: item.align as string }
+      if (item.type === 'text') {
+        if (isTitleContext) return { id, type: 'title' as const, text: item.text as string, size: item.size as string, color: item.color as string, bold: item.weight === 'bold', align: item.align as string, bgColor: headerBgColor }
+        return { id, type: 'text' as const, text: item.text as string, size: item.size as string, color: item.color as string, bold: item.weight === 'bold', align: item.align as string }
+      }
       if (item.type === 'image') return { id, type: 'image' as const, url: item.url as string, size: item.size as string, aspectRatio: item.aspectRatio as string, aspectMode: item.aspectMode as string }
       if (item.type === 'button') { const action = item.action as Record<string, string>; return { id, type: 'button' as const, label: action?.label, url: action?.uri, style: item.style as string, color: item.color as string } }
       if (item.type === 'separator') return { id, type: 'separator' as const }
       if (item.type === 'box') return { id, type: 'spacer' as const, size: heightToSize[item.height as string] ?? 'md' }
       return null
-    }).filter(Boolean) as FlexPart[]
-    return { parts, settings: { bgColor } }
+    }
+
+    const headerContents: Record<string, unknown>[] = bubble?.header?.contents ?? []
+    const bodyContents: Record<string, unknown>[] = bubble?.body?.contents ?? []
+    const titleParts = headerContents.map(i => parseItem(i, true)).filter(Boolean) as FlexPart[]
+    const bodyParts = bodyContents.map(i => parseItem(i, false)).filter(Boolean) as FlexPart[]
+    return { parts: [...titleParts, ...bodyParts], settings: { bgColor } }
   } catch { return fallback }
 }
 
 function buildCustomFlexJson(parts: FlexPart[], settings: FlexEditorSettings): string {
   const spacerH: Record<string, string> = { sm: '10px', md: '20px', lg: '30px', xl: '40px' }
-  const contents = parts.map(p => {
+
+  const titleParts = parts.filter(p => p.type === 'title')
+  const bodyParts = parts.filter(p => p.type !== 'title')
+
+  const toContent = (p: FlexPart) => {
     if (p.type === 'text') return { type: 'text', text: p.text || 'テキスト', size: p.size || 'md', color: p.color || '#333333', weight: p.bold ? 'bold' : 'regular', align: p.align || 'start', wrap: true }
     if (p.type === 'image') {
       const isOriginal = p.aspectRatio === 'original'
@@ -244,11 +258,36 @@ function buildCustomFlexJson(parts: FlexPart[], settings: FlexEditorSettings): s
     if (p.type === 'button') return { type: 'button', action: { type: 'uri', label: p.label || 'ボタン', uri: p.url || 'https://example.com' }, style: p.style || 'primary', ...(!p.style || p.style === 'primary' ? { color: p.color || '#06C755' } : {}) }
     if (p.type === 'separator') return { type: 'separator' }
     return { type: 'box', layout: 'vertical', height: spacerH[p.size || 'md'] || '20px', contents: [] }
-  }).filter(Boolean)
-  const bubble: Record<string, unknown> = { type: 'bubble', body: { type: 'box', layout: 'vertical', contents } }
-  if (settings.bgColor && settings.bgColor.toUpperCase() !== '#FFFFFF') {
-    bubble.styles = { body: { backgroundColor: settings.bgColor } }
   }
+
+  const bubble: Record<string, unknown> = {
+    type: 'bubble',
+    body: { type: 'box', layout: 'vertical', contents: bodyParts.map(toContent).filter(Boolean) },
+  }
+
+  const styles: Record<string, unknown> = {}
+  if (titleParts.length > 0) {
+    const firstBg = titleParts[0].bgColor || '#06C755'
+    bubble.header = {
+      type: 'box', layout: 'vertical',
+      backgroundColor: firstBg,
+      paddingAll: 'md',
+      contents: titleParts.map(p => ({
+        type: 'text', text: p.text || 'タイトル',
+        color: p.color || '#ffffff',
+        size: p.size || 'md',
+        weight: p.bold ? 'bold' : 'regular',
+        align: p.align || 'center',
+        wrap: true,
+      })),
+    }
+    styles.header = { backgroundColor: firstBg }
+  }
+  if (settings.bgColor && settings.bgColor.toUpperCase() !== '#FFFFFF') {
+    styles.body = { backgroundColor: settings.bgColor }
+  }
+  if (Object.keys(styles).length > 0) bubble.styles = styles
+
   return JSON.stringify(bubble, null, 2)
 }
 
@@ -361,6 +400,33 @@ function PartSettings({ part, onUpdate }: { part: FlexPart; onUpdate: (u: Partia
   const inp = 'w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-500'
   const sel = 'text-xs border border-gray-200 rounded px-1 py-0.5'
 
+  if (part.type === 'title') return (
+    <div className="space-y-1.5">
+      <input type="text" value={part.text || ''} onChange={e => onUpdate({ text: e.target.value })}
+        placeholder="タイトルテキスト" className={inp} />
+      <div className="flex flex-wrap gap-1.5 items-center">
+        <select value={part.size || 'md'} onChange={e => onUpdate({ size: e.target.value })} className={sel}>
+          {['sm','md','lg','xl','xxl'].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={part.align || 'center'} onChange={e => onUpdate({ align: e.target.value })} className={sel}>
+          <option value="start">左</option><option value="center">中央</option><option value="end">右</option>
+        </select>
+        <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+          <input type="checkbox" checked={!!part.bold} onChange={e => onUpdate({ bold: e.target.checked })} className="rounded" />太字
+        </label>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-gray-500">文字色</span>
+          <input type="color" value={part.color || '#ffffff'} onChange={e => onUpdate({ color: e.target.value })}
+            className="w-6 h-6 p-0 border rounded cursor-pointer" />
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-gray-500">背景色</span>
+          <input type="color" value={part.bgColor || '#06C755'} onChange={e => onUpdate({ bgColor: e.target.value })}
+            className="w-6 h-6 p-0 border rounded cursor-pointer" />
+        </div>
+      </div>
+    </div>
+  )
   if (part.type === 'text') return (
     <div className="space-y-1.5">
       <textarea rows={2} value={part.text || ''} onChange={e => onUpdate({ text: e.target.value })}
@@ -426,6 +492,7 @@ function FlexVisualEditor({ parts, setParts, settings, setSettings }: {
 
   const addPart = (type: FlexPart['type']) => {
     const defaults: Record<string, Partial<FlexPart>> = {
+      title: { text: '', size: 'md', color: '#ffffff', bold: true, align: 'center', bgColor: '#06C755' },
       text: { text: '', size: 'md', color: '#333333', bold: false, align: 'start' },
       image: { url: '', size: 'full', aspectRatio: '20:13', aspectMode: 'cover' },
       button: { label: '', url: '', style: 'primary', color: '#06C755' },
@@ -455,7 +522,7 @@ function FlexVisualEditor({ parts, setParts, settings, setSettings }: {
       {/* Left: Add buttons + global settings */}
       <div className="w-28 flex-shrink-0 space-y-1.5">
         <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">パーツ追加</p>
-        {(['text','image','button','separator','spacer'] as FlexPart['type'][]).map(type => (
+        {(['title','text','image','button','separator','spacer'] as FlexPart['type'][]).map(type => (
           <button key={type} type="button" onClick={() => addPart(type)}
             className="w-full py-1.5 text-[11px] border border-dashed border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 hover:text-green-700 transition-colors text-gray-600">
             ＋ {FLEX_PART_LABELS[type]}
