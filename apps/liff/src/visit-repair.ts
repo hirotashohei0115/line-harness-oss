@@ -1,5 +1,5 @@
 /**
- * Visit Repair Form — 訪問修理ご依頼フォーム
+ * Visit Repair Form — 出張修理ご依頼フォーム
  *
  * URL: https://liff.line.me/{LIFF_ID}?page=visit-repair
  */
@@ -25,7 +25,6 @@ interface VisitFormData {
   preferredDatetime1: string;
   preferredDatetime2: string;
   preferredDatetime3: string;
-  visitReason: string;
   detail: string;
 }
 
@@ -74,6 +73,9 @@ function injectStyles(): void {
     }
     .vr-radio-label input { display: none; }
     .vr-radio-label.selected { border-color: #FF6B35; background: #fff5f0; color: #FF6B35; }
+    .vr-datetime-row { display: flex; gap: 8px; }
+    .vr-datetime-row .vr-input { flex: 1; min-width: 0; }
+    .vr-datetime-row .vr-select { flex: 1; min-width: 0; }
     .vr-submit {
       width: 100%; padding: 15px; border: none; border-radius: 8px;
       background: #FF6B35; color: #fff; font-size: 16px; font-weight: 700;
@@ -104,6 +106,19 @@ function injectStyles(): void {
   document.head.appendChild(style);
 }
 
+const TIME_OPTIONS = [
+  { value: '午前中（9:00〜12:00）', label: '午前中（9:00〜12:00）' },
+  { value: '午後（12:00〜17:00）', label: '午後（12:00〜17:00）' },
+  { value: '夕方（17:00〜20:00）', label: '夕方（17:00〜20:00）' },
+  { value: '終日可', label: '終日可' },
+  { value: '要相談', label: '要相談' },
+];
+
+function timeOptionsHtml(): string {
+  return `<option value="">時間帯を選択</option>` +
+    TIME_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+}
+
 function renderLoading(): void {
   injectStyles();
   getApp().innerHTML = `
@@ -121,7 +136,7 @@ function renderForm(displayName: string): void {
   getApp().innerHTML = `
     <div class="vr-page">
       <div class="vr-header">
-        <h1>🚗 訪問修理ご依頼フォーム</h1>
+        <h1>🚗 出張修理ご依頼フォーム</h1>
         <p>${escapeHtml(displayName)} さん</p>
       </div>
       <form id="vr-form" class="vr-body" novalidate>
@@ -144,7 +159,7 @@ function renderForm(displayName: string): void {
         </div>
 
         <div class="vr-field">
-          <label class="vr-label" for="vr-address">訪問先住所<span class="vr-required">*</span></label>
+          <label class="vr-label" for="vr-address">出張先住所<span class="vr-required">*</span></label>
           <input class="vr-input" type="text" id="vr-address" placeholder="東京都渋谷区〇〇1-2-3" required />
         </div>
 
@@ -165,26 +180,30 @@ function renderForm(displayName: string): void {
         <p class="vr-section-title">ご希望日時</p>
 
         <div class="vr-field">
-          <label class="vr-label" for="vr-dt1">第1希望<span class="vr-required">*</span></label>
-          <input class="vr-input" type="text" id="vr-dt1" placeholder="例：6/10（月）午前中" required />
+          <label class="vr-label">第1希望<span class="vr-required">*</span></label>
+          <div class="vr-datetime-row">
+            <input class="vr-input" type="date" id="vr-date1" />
+            <select class="vr-select" id="vr-time1">${timeOptionsHtml()}</select>
+          </div>
         </div>
 
         <div class="vr-field">
-          <label class="vr-label" for="vr-dt2">第2希望<span class="vr-optional">任意</span></label>
-          <input class="vr-input" type="text" id="vr-dt2" placeholder="例：6/11（火）13〜17時" />
+          <label class="vr-label">第2希望<span class="vr-optional">任意</span></label>
+          <div class="vr-datetime-row">
+            <input class="vr-input" type="date" id="vr-date2" />
+            <select class="vr-select" id="vr-time2">${timeOptionsHtml()}</select>
+          </div>
         </div>
 
         <div class="vr-field">
-          <label class="vr-label" for="vr-dt3">第3希望<span class="vr-optional">任意</span></label>
-          <input class="vr-input" type="text" id="vr-dt3" placeholder="例：6/12（水）終日" />
+          <label class="vr-label">第3希望<span class="vr-optional">任意</span></label>
+          <div class="vr-datetime-row">
+            <input class="vr-input" type="date" id="vr-date3" />
+            <select class="vr-select" id="vr-time3">${timeOptionsHtml()}</select>
+          </div>
         </div>
 
         <p class="vr-section-title">ご依頼内容</p>
-
-        <div class="vr-field">
-          <label class="vr-label" for="vr-reason">訪問希望理由<span class="vr-optional">任意</span></label>
-          <textarea class="vr-textarea" id="vr-reason" rows="3" placeholder="例：持ち込みが難しいため、自宅での対応を希望"></textarea>
-        </div>
 
         <div class="vr-field">
           <label class="vr-label" for="vr-detail">依頼内容の詳細<span class="vr-optional">任意</span></label>
@@ -205,6 +224,10 @@ function renderForm(displayName: string): void {
       if (label) label.classList.add('selected');
     });
   });
+
+  // Set min date to today
+  const today = new Date().toISOString().split('T')[0];
+  document.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach(el => { el.min = today; });
 }
 
 function renderSuccess(): void {
@@ -214,7 +237,7 @@ function renderSuccess(): void {
       <div class="vr-success">
         <div class="icon">🚗</div>
         <h2>ご依頼を承りました！</h2>
-        <p>訪問可能かお調べしますので、<br>しばらくお待ちください。</p>
+        <p>出張可能かお調べしますので、<br>しばらくお待ちください。</p>
       </div>
     </div>
   `;
@@ -241,6 +264,13 @@ function showFormError(msg: string): void {
   if (el) el.innerHTML = `<p class="vr-error">${escapeHtml(msg)}</p>`;
 }
 
+function formatDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dow = ['日', '月', '火', '水', '木', '金', '土'][new Date(y, m - 1, d).getDay()];
+  return `${y}/${m}/${d}（${dow}）`;
+}
+
 async function handleSubmit(lineUserId: string, btn: HTMLButtonElement): Promise<void> {
   const name = (document.getElementById('vr-name') as HTMLInputElement)?.value.trim();
   const furigana = (document.getElementById('vr-furigana') as HTMLInputElement)?.value.trim();
@@ -248,17 +278,28 @@ async function handleSubmit(lineUserId: string, btn: HTMLButtonElement): Promise
   const address = (document.getElementById('vr-address') as HTMLInputElement)?.value.trim();
   const customerTypeEl = document.querySelector('input[name="customerType"]:checked') as HTMLInputElement;
   const customerType = (customerTypeEl?.value ?? 'individual') as 'individual' | 'corporate';
-  const preferredDatetime1 = (document.getElementById('vr-dt1') as HTMLInputElement)?.value.trim();
-  const preferredDatetime2 = (document.getElementById('vr-dt2') as HTMLInputElement)?.value.trim();
-  const preferredDatetime3 = (document.getElementById('vr-dt3') as HTMLInputElement)?.value.trim();
-  const visitReason = (document.getElementById('vr-reason') as HTMLTextAreaElement)?.value.trim();
+
+  const date1 = (document.getElementById('vr-date1') as HTMLInputElement)?.value;
+  const time1 = (document.getElementById('vr-time1') as HTMLSelectElement)?.value;
+  const date2 = (document.getElementById('vr-date2') as HTMLInputElement)?.value;
+  const time2 = (document.getElementById('vr-time2') as HTMLSelectElement)?.value;
+  const date3 = (document.getElementById('vr-date3') as HTMLInputElement)?.value;
+  const time3 = (document.getElementById('vr-time3') as HTMLSelectElement)?.value;
+
   const detail = (document.getElementById('vr-detail') as HTMLTextAreaElement)?.value.trim();
 
   if (!name) { showFormError('お名前を入力してください'); return; }
   if (!furigana) { showFormError('フリガナを入力してください'); return; }
   if (!phone) { showFormError('電話番号を入力してください'); return; }
-  if (!address) { showFormError('訪問先住所を入力してください'); return; }
-  if (!preferredDatetime1) { showFormError('第1希望日時を入力してください'); return; }
+  if (!address) { showFormError('出張先住所を入力してください'); return; }
+  if (!date1) { showFormError('第1希望の日付を選択してください'); return; }
+  if (!time1) { showFormError('第1希望の時間帯を選択してください'); return; }
+  if (date2 && !time2) { showFormError('第2希望の時間帯を選択してください'); return; }
+  if (date3 && !time3) { showFormError('第3希望の時間帯を選択してください'); return; }
+
+  const preferredDatetime1 = `${formatDate(date1)} ${time1}`;
+  const preferredDatetime2 = date2 ? `${formatDate(date2)} ${time2}` : '';
+  const preferredDatetime3 = date3 ? `${formatDate(date3)} ${time3}` : '';
 
   const data: VisitFormData = {
     lineUserId,
@@ -270,7 +311,6 @@ async function handleSubmit(lineUserId: string, btn: HTMLButtonElement): Promise
     preferredDatetime1,
     preferredDatetime2,
     preferredDatetime3,
-    visitReason,
     detail,
   };
 
