@@ -192,8 +192,8 @@ export default function CrossAnalysisForm({ initial }: Props) {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
   const [name, setName] = useState(initial?.name ?? '')
-  const [from, setFrom] = useState(thirtyDaysAgo)
-  const [to, setTo] = useState(today)
+  const [from, setFrom] = useState(initial?.periodFrom ?? thirtyDaysAgo)
+  const [to, setTo] = useState(initial?.periodTo ?? today)
   const [axis1Type, setAxis1Type] = useState<AxisType>(initial?.axis1Type ?? 'tag')
   const [axis1Groups, setAxis1Groups] = useState<AxisGroupState[]>(() =>
     initialGroups(initial?.axis1Groups, initial?.axis1ItemIds ?? [])
@@ -221,7 +221,7 @@ export default function CrossAnalysisForm({ initial }: Props) {
     period: { from: string; to: string }
   }
   const [modalCell, setModalCell] = useState<ModalCell | null>(null)
-  const [modalUsers, setModalUsers] = useState<{ id: string; displayName: string; pictureUrl: string | null }[]>([])
+  const [modalUsers, setModalUsers] = useState<{ id: string; displayName: string; pictureUrl: string | null; contactMarkName: string | null; contactMarkColor: string | null }[]>([])
   const [modalLoading, setModalLoading] = useState(false)
 
   useEffect(() => {
@@ -280,6 +280,7 @@ export default function CrossAnalysisForm({ initial }: Props) {
           name,
           axis1: { type: axis1Type, itemIds: [], groups: axis1Groups },
           axis2: { type: axis2Type, itemIds: [], groups: axis2Groups },
+          period: { from, to },
         })
       } else {
         const res = await api.crossAnalyses.create({
@@ -287,6 +288,7 @@ export default function CrossAnalysisForm({ initial }: Props) {
           axis1: { type: axis1Type, itemIds: [], groups: axis1Groups },
           axis2: { type: axis2Type, itemIds: [], groups: axis2Groups },
           lineAccountId: selectedAccountId,
+          period: { from, to },
         })
         if (res.success) { router.push('/cross-analyses'); return }
       }
@@ -506,6 +508,12 @@ export default function CrossAnalysisForm({ initial }: Props) {
                         </div>
                       )}
                       <span className="text-sm text-gray-800 truncate flex-1">{u.displayName || '（名前なし）'}</span>
+                      {u.contactMarkName && (
+                        <span
+                          className="text-xs font-medium px-1.5 py-0.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: u.contactMarkColor ?? '#aaa', color: '#fff' }}
+                        >{u.contactMarkName}</span>
+                      )}
                       <span className="text-xs text-blue-400 flex-shrink-0">チャット →</span>
                     </li>
                   ))}

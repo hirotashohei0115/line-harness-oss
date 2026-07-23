@@ -29,6 +29,8 @@ interface CrossAnalysisRow {
   axis2_label: string;
   axis1_groups: string; // JSON: AxisConfig
   axis2_groups: string; // JSON: AxisConfig
+  period_from: string | null;
+  period_to: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -71,6 +73,8 @@ function serializeDefinition(row: CrossAnalysisRow) {
     axis2Type: axis2.type ?? 'contact_mark',
     axis2ItemIds: axis2Groups.flatMap((g) => g.itemIds),
     axis2Groups,
+    periodFrom: row.period_from ?? null,
+    periodTo: row.period_to ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -160,9 +164,9 @@ crossAnalysisRoutes.post('/api/cross-analyses/users', async (c) => {
     if (cond2.sql !== '1=0') { conditions.push(cond2.sql); params.push(...cond2.params); }
 
     const result = await c.env.DB
-      .prepare(`SELECT DISTINCT f.id, f.display_name, f.picture_url, f.line_user_id FROM friends f WHERE ${conditions.join(' AND ')} ORDER BY f.display_name ASC`)
+      .prepare(`SELECT DISTINCT f.id, f.display_name, f.picture_url, f.line_user_id, cm.name as contact_mark_name, cm.color as contact_mark_color FROM friends f LEFT JOIN contact_marks cm ON cm.id = f.contact_mark_id WHERE ${conditions.join(' AND ')} ORDER BY f.display_name ASC`)
       .bind(...params)
-      .all<{ id: string; display_name: string; picture_url: string | null; line_user_id: string }>();
+      .all<{ id: string; display_name: string; picture_url: string | null; line_user_id: string; contact_mark_name: string | null; contact_mark_color: string | null }>();
 
     return c.json({
       success: true,
@@ -171,6 +175,8 @@ crossAnalysisRoutes.post('/api/cross-analyses/users', async (c) => {
         displayName: r.display_name,
         pictureUrl: r.picture_url,
         lineUserId: r.line_user_id,
+        contactMarkName: r.contact_mark_name,
+        contactMarkColor: r.contact_mark_color,
       })),
     });
   } catch (err) {
@@ -252,16 +258,17 @@ crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
 // POST /api/cross-analyses
 crossAnalysisRoutes.post('/api/cross-analyses', async (c) => {
   try {
-    const body = await c.req.json<{ name: string; axis1: AxisConfig; axis2: AxisConfig; lineAccountId?: string | null }>();
+    const body = await c.req.json<{ name: string; axis1: AxisConfig; axis2: AxisConfig; lineAccountId?: string | null; period?: { from?: string; to?: string } }>();
     if (!body.name) return c.json({ success: false, error: 'name is required' }, 400);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await c.env.DB
-      .prepare('INSERT INTO cross_analysis_definitions (id, name, axis1_label, axis2_label, axis1_groups, axis2_groups, line_account_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .prepare('INSERT INTO cross_analysis_definitions (id, name, axis1_label, axis2_label, axis1_groups, axis2_groups, period_from, period_to, line_account_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(
         id, body.name,
         TYPE_LABEL[body.axis1.type], TYPE_LABEL[body.axis2.type],
         JSON.stringify(body.axis1), JSON.stringify(body.axis2),
+        body.period?.from ?? null, body.period?.to ?? null,
         body.lineAccountId ?? null,
         now, now,
       )
@@ -290,7 +297,7 @@ crossAnalysisRoutes.get('/api/cross-analyses/:id', async (c) => {
 crossAnalysisRoutes.patch('/api/cross-analyses/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const body = await c.req.json<Partial<{ name: string; axis1: AxisConfig; axis2: AxisConfig }>>();
+    const body = await c.req.json<Partial<{ name: string; axis1: AxisConfig; axis2: AxisConfig; period: { from?: string; to?: string } }>>();
     const existing = await c.env.DB.prepare('SELECT * FROM cross_analysis_definitions WHERE id = ?').bind(id).first<CrossAnalysisRow>();
     if (!existing) return c.json({ success: false, error: 'Not found' }, 404);
     let existingAxis1: AxisConfig = { type: 'tag', itemIds: [] };
@@ -301,11 +308,13 @@ crossAnalysisRoutes.patch('/api/cross-analyses/:id', async (c) => {
     const newAxis1 = body.axis1 ?? existingAxis1;
     const newAxis2 = body.axis2 ?? existingAxis2;
     await c.env.DB
-      .prepare('UPDATE cross_analysis_definitions SET name=?, axis1_label=?, axis2_label=?, axis1_groups=?, axis2_groups=?, updated_at=? WHERE id=?')
+      .prepare('UPDATE cross_analysis_definitions SET name=?, axis1_label=?, axis2_label=?, axis1_groups=?, axis2_groups=?, period_from=?, period_to=?, updated_at=? WHERE id=?')
       .bind(
         body.name ?? existing.name,
         TYPE_LABEL[newAxis1.type], TYPE_LABEL[newAxis2.type],
         JSON.stringify(newAxis1), JSON.stringify(newAxis2),
+        body.period?.from ?? existing.period_from ?? null,
+        body.period?.to ?? existing.period_to ?? null,
         now, id,
       )
       .run();
