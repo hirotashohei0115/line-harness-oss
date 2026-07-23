@@ -24,7 +24,7 @@ account_id = "011be021c47bfc2e33d820594e78f078"
 workers_dev = true
 
 [env.staging.vars]
-SWITCH_LINE_CHANNEL_ID = "2010352434"
+SWITCH_LINE_CHANNEL_ID = "0000000000"
 
 [[env.staging.d1_databases]]
 binding = "DB"

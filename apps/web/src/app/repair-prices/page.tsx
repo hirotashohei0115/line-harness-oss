@@ -31,6 +31,12 @@ export default function RepairPricesPage() {
   const [tab, setTab] = useState('air')
   const [staffRole, setStaffRole] = useState<string | null>(null)
 
+  // MacBook全体設定
+  const [botSettings, setBotSettings] = useState<Record<string, string>>({})
+  const [editingBotSettings, setEditingBotSettings] = useState(false)
+  const [botSettingsDraft, setBotSettingsDraft] = useState<Record<string, string>>({})
+  const [savingBotSettings, setSavingBotSettings] = useState(false)
+
   useEffect(() => {
     setStaffRole(localStorage.getItem('lh_staff_role'))
   }, [])
@@ -38,7 +44,12 @@ export default function RepairPricesPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetchApi<{ success: boolean; data: ModelPrice[] }>('/api/repair/model-prices')
+      const [pricesRes, settingsRes] = await Promise.all([
+        fetchApi<{ success: boolean; data: ModelPrice[] }>('/api/repair/model-prices'),
+        fetchApi<{ success: boolean; data: Record<string, string> }>('/api/switch-repair/settings'),
+      ])
+      if (settingsRes.success) setBotSettings(settingsRes.data)
+      const res = pricesRes
       if (res.success) {
         setPrices(res.data)
         const map: EditMap = {}
@@ -105,6 +116,19 @@ export default function RepairPricesPage() {
     setSavingAll(false)
   }
 
+  const saveBotSettings = async () => {
+    setSavingBotSettings(true)
+    try {
+      await fetchApi('/api/switch-repair/settings', {
+        method: 'PUT',
+        body: JSON.stringify(botSettingsDraft),
+      })
+      setBotSettings(prev => ({ ...prev, ...botSettingsDraft }))
+      setEditingBotSettings(false)
+    } catch { alert('保存に失敗しました') }
+    setSavingBotSettings(false)
+  }
+
   const filtered = prices.filter(p => p.product_type === tab)
   const grouped = filtered.reduce<Record<string, ModelPrice[]>>((acc, p) => {
     const key = `${p.year}年 ${p.inch_size}インチ (${p.model_number})`
@@ -139,6 +163,43 @@ export default function RepairPricesPage() {
             {savingAll ? '保存中...' : '変更をすべて保存'}
           </button>
         )}
+      </div>
+
+      {/* MacBook全体設定 */}
+      <div className="mb-8 bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-700">全体設定（MacBook）</h3>
+          {!editingBotSettings ? (
+            <button
+              onClick={() => { setBotSettingsDraft({ macbook_welcome_text: botSettings.macbook_welcome_text ?? '' }); setEditingBotSettings(true) }}
+              className="px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100"
+            >編集</button>
+          ) : (
+            <div className="flex gap-2">
+              <button onClick={() => setEditingBotSettings(false)} className="px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100">キャンセル</button>
+              <button onClick={saveBotSettings} disabled={savingBotSettings} className="px-3 py-1 text-xs text-white rounded disabled:opacity-50" style={{ backgroundColor: '#06C755' }}>
+                {savingBotSettings ? '保存中...' : '保存'}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="p-4 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">挨拶メッセージ</label>
+            {editingBotSettings ? (
+              <textarea
+                rows={4}
+                value={botSettingsDraft.macbook_welcome_text ?? ''}
+                onChange={e => setBotSettingsDraft(prev => ({ ...prev, macbook_welcome_text: e.target.value }))}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            ) : (
+              <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded px-3 py-2">
+                {botSettings.macbook_welcome_text || '（未設定）'}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -183,6 +244,9 @@ export default function RepairPricesPage() {
                             className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                             placeholder="例: 3~7日"
                           />
+                          {(edit.deliveryDays === '0' || edit.deliveryDays === '0日') && (
+                            <span className="text-xs text-green-600 font-medium">= 即日</span>
+                          )}
                         </td>
                         <td className="px-4 py-2">
                           {dirty && (
