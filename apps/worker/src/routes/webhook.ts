@@ -1817,7 +1817,12 @@ async function handleEvent(
           if (matchedFaq.special === 'store_select') {
             await replyAndLog(db, lineClient, event.replyToken, friend.id, [buildMessage('flex', buildStoreSelectFlex(flowColor))]);
           } else if (matchedFaq.special === 'phone') {
-            await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULT_PHONE_TEXT }]);
+            let phoneText = CONSULT_PHONE_TEXT;
+            if (isSwitchFlow) {
+              const row = await db.prepare("SELECT value FROM switch_settings WHERE key = 'consult_phone_text'").first<{ value: string }>();
+              phoneText = row?.value ?? CONSULT_PHONE_TEXT;
+            }
+            await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: phoneText }]);
           } else {
             const footerContents: unknown[] = [];
             if (matchedFaq.special === 'reservation_button') footerContents.push({ type: 'button', action: { type: 'message', label: '来店予約する', text: '来店予約する' }, style: 'primary', height: 'sm', color: '#00B900' });
@@ -2374,7 +2379,9 @@ async function handleEvent(
         const faq = await db.prepare('SELECT question, answer FROM switch_consult_faqs WHERE id = ?').bind(faqId).first<{ question: string; answer: string }>();
         if (faq) {
           if (!faq.answer) {
-            await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULT_PHONE_TEXT }]);
+            const row = await db.prepare("SELECT value FROM switch_settings WHERE key = 'consult_phone_text'").first<{ value: string }>();
+            const phoneText = row?.value ?? CONSULT_PHONE_TEXT;
+            await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: phoneText }]);
           } else {
             const bubble = {
               type: 'bubble',
@@ -2476,8 +2483,13 @@ async function handleEvent(
 
     if (action === 'consult_phone') {
       try {
+        let phoneText = CONSULT_PHONE_TEXT;
+        if (isSwitchFlow) {
+          const row = await db.prepare("SELECT value FROM switch_settings WHERE key = 'consult_phone_text'").first<{ value: string }>();
+          phoneText = row?.value ?? CONSULT_PHONE_TEXT;
+        }
         await replyAndLog(db, lineClient, event.replyToken, friend.id, [
-          { type: 'text', text: CONSULT_PHONE_TEXT },
+          { type: 'text', text: phoneText },
         ]);
       } catch (err) {
         console.error('Failed to send consult phone text:', err);
@@ -2537,8 +2549,13 @@ async function handleEvent(
             buildMessage('flex', buildStoreSelectFlex(flowColor)),
           ]);
         } else if (faq.special === 'phone') {
+          let phoneText = CONSULT_PHONE_TEXT;
+          if (isSwitchFlow) {
+            const row = await db.prepare("SELECT value FROM switch_settings WHERE key = 'consult_phone_text'").first<{ value: string }>();
+            phoneText = row?.value ?? CONSULT_PHONE_TEXT;
+          }
           await replyAndLog(db, lineClient, event.replyToken, friend.id, [
-            { type: 'text', text: CONSULT_PHONE_TEXT },
+            { type: 'text', text: phoneText },
           ]);
         } else {
           const footerContents: unknown[] = [];
