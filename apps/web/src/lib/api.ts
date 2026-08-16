@@ -90,6 +90,8 @@ export type CrossAnalysis = {
   axis2Type: 'tag' | 'contact_mark'
   axis2ItemIds: string[]
   axis2Groups: AxisGroup[]
+  periodFrom: string | null
+  periodTo: string | null
   createdAt: string
   updatedAt: string
 }
@@ -247,15 +249,15 @@ export const api = {
       return fetchApi<ApiResponse<CrossAnalysis[]>>('/api/cross-analyses' + query)
     },
     get: (id: string) => fetchApi<ApiResponse<CrossAnalysis>>(`/api/cross-analyses/${id}`),
-    create: (data: { name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; lineAccountId?: string | null }) =>
+    create: (data: { name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; lineAccountId?: string | null; period?: { from: string; to: string } }) =>
       fetchApi<ApiResponse<CrossAnalysis>>('/api/cross-analyses', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: string, data: Partial<{ name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] } }>) =>
+    update: (id: string, data: Partial<{ name: string; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; period: { from: string; to: string } }>) =>
       fetchApi<ApiResponse<CrossAnalysis>>(`/api/cross-analyses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) => fetchApi<ApiResponse<null>>(`/api/cross-analyses/${id}`, { method: 'DELETE' }),
     run: (data: { name?: string; period?: { from: string; to: string }; axis1: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds?: string[]; groups?: AxisGroup[] } }) =>
       fetchApi<ApiResponse<CrossRunResult>>('/api/cross-analyses/run', { method: 'POST', body: JSON.stringify(data) }),
     users: (data: { period: { from: string; to: string }; axis1: { type: 'tag' | 'contact_mark'; itemIds: string[] }; axis2: { type: 'tag' | 'contact_mark'; itemIds: string[] } }) =>
-      fetchApi<ApiResponse<{ id: string; displayName: string; pictureUrl: string | null; lineUserId: string }[]>>('/api/cross-analyses/users', { method: 'POST', body: JSON.stringify(data) }),
+      fetchApi<ApiResponse<{ id: string; displayName: string; pictureUrl: string | null; lineUserId: string; contactMarkName: string | null; contactMarkColor: string | null }[]>>('/api/cross-analyses/users', { method: 'POST', body: JSON.stringify(data) }),
   },
   scenarios: {
     list: (params?: { accountId?: string }) => {

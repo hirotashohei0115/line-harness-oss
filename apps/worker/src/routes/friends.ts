@@ -131,6 +131,117 @@ friends.get('/api/friends', async (c) => {
   }
 });
 
+// GET /api/friends/export - CSV export of all friends matching the current filters (no pagination)
+friends.get('/api/friends/export', async (c) => {
+  try {
+    const tagId = c.req.query('tagId');
+    const lineAccountId = c.req.query('lineAccountId');
+    const markId = c.req.query('markId');
+    const tagIdsParam = c.req.query('tagIds');
+    const tagIds = tagIdsParam ? tagIdsParam.split(',').filter(Boolean) : [];
+    const dateFrom = c.req.query('dateFrom');
+    const dateTo = c.req.query('dateTo');
+
+    const db = c.env.DB;
+
+    const conditions: string[] = [];
+    const binds: unknown[] = [];
+    if (tagId) {
+      conditions.push('EXISTS (SELECT 1 FROM friend_tags ft WHERE ft.friend_id = f.id AND ft.tag_id = ?)');
+      binds.push(tagId);
+    }
+    if (lineAccountId) {
+      conditions.push('f.line_account_id = ?');
+      binds.push(lineAccountId);
+    }
+    if (markId) {
+      conditions.push('f.contact_mark_id = ?');
+      binds.push(markId);
+    }
+    if (tagIds.length > 0) {
+      const ph = tagIds.map(() => '?').join(',');
+      conditions.push(`EXISTS (SELECT 1 FROM friend_tags ft WHERE ft.friend_id = f.id AND ft.tag_id IN (${ph}))`);
+      binds.push(...tagIds);
+    }
+    if (dateFrom) {
+      conditions.push('f.created_at >= ?');
+      binds.push(`${dateFrom}T00:00:00`);
+    }
+    if (dateTo) {
+      conditions.push('f.created_at <= ?');
+      binds.push(`${dateTo}T23:59:59`);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const listStmt = db.prepare(`
+      SELECT f.*, cm.name as mark_name,
+        (SELECT GROUP_CONCAT(t.name, ';') FROM friend_tags ft JOIN tags t ON t.id = ft.tag_id WHERE ft.friend_id = f.id) as tag_names,
+        (SELECT mo.phone FROM mail_orders mo WHERE mo.friend_id = f.id ORDER BY mo.created_at DESC LIMIT 1) as mo_phone,
+        (SELECT mo.postal_code FROM mail_orders mo WHERE mo.friend_id = f.id ORDER BY mo.created_at DESC LIMIT 1) as mo_postal_code,
+        (SELECT mo.address FROM mail_orders mo WHERE mo.friend_id = f.id ORDER BY mo.created_at DESC LIMIT 1) as mo_address,
+        (SELECT value FROM friend_attributes WHERE friend_id = f.id AND key = 'phone' LIMIT 1) as attr_phone,
+        (SELECT rp.name FROM repair_quotes rq LEFT JOIN repair_products rp ON rp.id = rq.product_id WHERE rq.friend_id = f.id ORDER BY rq.created_at DESC LIMIT 1) as rq_product_name,
+        (SELECT rq.model_name FROM repair_quotes rq WHERE rq.friend_id = f.id ORDER BY rq.created_at DESC LIMIT 1) as rq_model_name,
+        (SELECT rs.name FROM repair_quotes rq LEFT JOIN repair_symptoms rs ON rs.id = rq.symptom_id WHERE rq.friend_id = f.id ORDER BY rq.created_at DESC LIMIT 1) as rq_symptom_name,
+        (SELECT rq.price_from FROM repair_quotes rq WHERE rq.friend_id = f.id ORDER BY rq.created_at DESC LIMIT 1) as rq_price_from,
+        (SELECT rq.price_to FROM repair_quotes rq WHERE rq.friend_id = f.id ORDER BY rq.created_at DESC LIMIT 1) as rq_price_to,
+        (SELECT rq.status FROM repair_quotes rq WHERE rq.friend_id = f.id ORDER BY rq.created_at DESC LIMIT 1) as rq_status
+      FROM friends f
+      LEFT JOIN contact_marks cm ON cm.id = f.contact_mark_id
+      ${where}
+      ORDER BY f.created_at DESC
+    `);
+    type ExportRow = DbFriend & {
+      mark_name: string | null; tag_names: string | null;
+      mo_phone: string | null; mo_postal_code: string | null; mo_address: string | null; attr_phone: string | null;
+      rq_product_name: string | null; rq_model_name: string | null; rq_symptom_name: string | null;
+      rq_price_from: number | null; rq_price_to: number | null; rq_status: string | null;
+    };
+    const listResult = await (binds.length > 0 ? listStmt.bind(...binds) : listStmt).all<ExportRow>();
+
+    const escapeCsv = (value: string) => (/[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
+
+    const statusLabel = (status: string | null) =>
+      status === 'quoted' ? '見積済' : status === 'ordered' ? '受注済' : status === 'cancelled' ? 'キャンセル' : '';
+
+    const priceRange = (from: number | null, to: number | null) =>
+      from == null ? '' : to ? `¥${from.toLocaleString()}〜¥${to.toLocaleString()}` : `¥${from.toLocaleString()}〜`;
+
+    const header = [
+      '表示名', 'LINEユーザーID', 'タグ', 'マーク', '友だち状態', '登録日',
+      '電話番号', '郵便番号', 'ご住所', '機種', '症状', '見積金額', '修理ステータス',
+    ];
+    const rows = listResult.results.map((friend) => [
+      friend.display_name ?? '',
+      friend.line_user_id,
+      (friend.tag_names ?? '').split(';').filter(Boolean).join(' / '),
+      friend.mark_name ?? '',
+      friend.is_following ? '友だち' : 'ブロック済み',
+      friend.created_at,
+      friend.mo_phone ?? friend.attr_phone ?? '',
+      friend.mo_postal_code ?? '',
+      friend.mo_address ?? '',
+      [friend.rq_product_name, friend.rq_model_name].filter(Boolean).join(' '),
+      friend.rq_symptom_name ?? '',
+      priceRange(friend.rq_price_from, friend.rq_price_to),
+      statusLabel(friend.rq_status),
+    ].map((v) => escapeCsv(String(v))).join(','));
+
+    const csv = [header.join(','), ...rows].join('\r\n');
+    const filename = `friends_${jstNow().slice(0, 10)}.csv`;
+
+    return new Response('﻿' + csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/friends/export error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 // GET /api/friends/count - friend count (must be before /:id)
 friends.get('/api/friends/count', async (c) => {
   try {

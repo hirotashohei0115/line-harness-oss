@@ -45,6 +45,7 @@ export default function FriendsPage() {
   const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   const loadTags = useCallback(async () => {
     try {
@@ -113,6 +114,30 @@ export default function FriendsPage() {
     setSelectedTagId(tagId)
   }
 
+  const handleExportCsv = async () => {
+    setExporting(true)
+    setError('')
+    try {
+      const blob = await api.friends.exportCsv({
+        tagId: selectedTagId || undefined,
+        markId: selectedMarkId || undefined,
+        accountId: selectedAccountId || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `friends_${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError('CSVのダウンロードに失敗しました。もう一度お試しください。')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div>
       <Header title="友だち管理" />
@@ -164,6 +189,13 @@ export default function FriendsPage() {
         <span className="text-sm text-gray-500">
           {loading ? '読み込み中...' : `${total.toLocaleString('ja-JP')} 件`}
         </span>
+        <button
+          onClick={handleExportCsv}
+          disabled={exporting || loading || total === 0}
+          className="px-3 py-2 min-h-[44px] text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap sm:ml-auto"
+        >
+          {exporting ? 'ダウンロード中...' : 'CSVダウンロード'}
+        </button>
       </div>
 
       {/* Error */}
