@@ -199,6 +199,23 @@ export const api = {
       }),
     search: (q: string) =>
       fetchApi<ApiResponse<string[]>>(`/api/friends/search?q=${encodeURIComponent(q)}`),
+    exportCsv: async (params?: FriendListParams): Promise<Blob> => {
+      const query: Record<string, string> = {}
+      if (params?.tagId) query.tagId = params.tagId
+      if (params?.tagIds) query.tagIds = params.tagIds
+      if (params?.markId) query.markId = params.markId
+      if (params?.accountId) query.lineAccountId = params.accountId
+      if (params?.dateFrom) query.dateFrom = params.dateFrom
+      if (params?.dateTo) query.dateTo = params.dateTo
+      const res = await fetch(`${API_URL}/api/friends/export?` + new URLSearchParams(query), {
+        headers: { 'Authorization': `Bearer ${getApiKey()}` },
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(body.error ?? `API error: ${res.status}`)
+      }
+      return res.blob()
+    },
   },
   tags: {
     list: () =>
