@@ -18,6 +18,7 @@ function serializeLineAccount(row: DbLineAccount) {
     channelId: row.channel_id,
     name: row.name,
     adminUrl: row.admin_url ?? null,
+    welcomeText: row.welcome_text ?? null,
     isActive: Boolean(row.is_active),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -129,6 +130,7 @@ lineAccounts.post('/api/line-accounts', requireRole('owner', 'admin'), async (c)
       channelAccessToken: string;
       channelSecret: string;
       adminUrl?: string;
+      welcomeText?: string;
     }>();
 
     if (!body.channelId || !body.name || !body.channelAccessToken || !body.channelSecret) {
@@ -138,7 +140,7 @@ lineAccounts.post('/api/line-accounts', requireRole('owner', 'admin'), async (c)
       );
     }
 
-    const account = await createLineAccount(c.env.DB, { ...body, adminUrl: body.adminUrl || undefined });
+    const account = await createLineAccount(c.env.DB, { ...body, adminUrl: body.adminUrl || undefined, welcomeText: body.welcomeText || undefined });
     return c.json({ success: true, data: serializeLineAccountFull(account) }, 201);
   } catch (err) {
     console.error('POST /api/line-accounts error:', err);
@@ -155,6 +157,7 @@ lineAccounts.put('/api/line-accounts/:id', requireRole('owner', 'admin'), async 
       channelAccessToken?: string;
       channelSecret?: string;
       adminUrl?: string | null;
+      welcomeText?: string | null;
       isActive?: boolean;
     }>();
 
@@ -163,6 +166,7 @@ lineAccounts.put('/api/line-accounts/:id', requireRole('owner', 'admin'), async 
       channel_access_token: body.channelAccessToken,
       channel_secret: body.channelSecret,
       admin_url: body.adminUrl !== undefined ? (body.adminUrl || null) : undefined,
+      welcome_text: body.welcomeText !== undefined ? (body.welcomeText || null) : undefined,
       is_active: body.isActive !== undefined ? (body.isActive ? 1 : 0) : undefined,
     });
 

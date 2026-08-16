@@ -17,6 +17,7 @@ crons = ["*/5 * * * *", "0 1 * * *"]
 
 [vars]
 SWITCH_LINE_CHANNEL_ID = "2009558609"
+MACBOOK_LINE_CHANNEL_ID = "2007974692"
 
 [env.staging]
 name = "macbook-repair-worker-staging"
@@ -25,6 +26,7 @@ workers_dev = true
 
 [env.staging.vars]
 SWITCH_LINE_CHANNEL_ID = "0000000000"
+MACBOOK_LINE_CHANNEL_ID = "2010352434"
 
 [[env.staging.d1_databases]]
 binding = "DB"

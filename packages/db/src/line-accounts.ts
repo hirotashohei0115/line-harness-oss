@@ -13,6 +13,7 @@ export interface LineAccount {
   login_channel_secret: string | null;
   liff_id: string | null;
   admin_url: string | null;
+  welcome_text: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -24,6 +25,7 @@ export interface CreateLineAccountInput {
   channelAccessToken: string;
   channelSecret: string;
   adminUrl?: string;
+  welcomeText?: string;
 }
 
 export async function createLineAccount(
@@ -35,10 +37,10 @@ export async function createLineAccount(
 
   await db
     .prepare(
-      `INSERT INTO line_accounts (id, channel_id, name, channel_access_token, channel_secret, admin_url, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+      `INSERT INTO line_accounts (id, channel_id, name, channel_access_token, channel_secret, admin_url, welcome_text, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     )
-    .bind(id, input.channelId, input.name, input.channelAccessToken, input.channelSecret, input.adminUrl ?? null, now, now)
+    .bind(id, input.channelId, input.name, input.channelAccessToken, input.channelSecret, input.adminUrl ?? null, input.welcomeText ?? null, now, now)
     .run();
 
   return (await getLineAccountById(db, id))!;
@@ -72,7 +74,7 @@ export async function getLineAccountByChannelId(
 }
 
 export type UpdateLineAccountInput = Partial<
-  Pick<LineAccount, 'name' | 'channel_access_token' | 'channel_secret' | 'admin_url' | 'is_active'>
+  Pick<LineAccount, 'name' | 'channel_access_token' | 'channel_secret' | 'admin_url' | 'welcome_text' | 'is_active'>
 >;
 
 export async function updateLineAccount(
@@ -98,6 +100,10 @@ export async function updateLineAccount(
   if (updates.admin_url !== undefined) {
     fields.push('admin_url = ?');
     values.push(updates.admin_url);
+  }
+  if (updates.welcome_text !== undefined) {
+    fields.push('welcome_text = ?');
+    values.push(updates.welcome_text);
   }
   if (updates.is_active !== undefined) {
     fields.push('is_active = ?');

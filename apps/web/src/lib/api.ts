@@ -389,12 +389,12 @@ export const api = {
       fetchApi<ApiResponse<LineAccount[]>>('/api/line-accounts'),
     get: (id: string) =>
       fetchApi<ApiResponse<LineAccount>>(`/api/line-accounts/${id}`),
-    create: (data: { channelId: string; name: string; channelAccessToken: string; channelSecret: string; adminUrl?: string }) =>
+    create: (data: { channelId: string; name: string; channelAccessToken: string; channelSecret: string; adminUrl?: string; welcomeText?: string }) =>
       fetchApi<ApiResponse<LineAccount>>('/api/line-accounts', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    update: (id: string, data: Partial<Pick<LineAccount, 'name' | 'channelAccessToken' | 'channelSecret' | 'isActive'>> & { adminUrl?: string | null }) =>
+    update: (id: string, data: Partial<Pick<LineAccount, 'name' | 'channelAccessToken' | 'channelSecret' | 'isActive'>> & { adminUrl?: string | null; welcomeText?: string | null }) =>
       fetchApi<ApiResponse<LineAccount>>(`/api/line-accounts/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),

@@ -81,7 +81,7 @@ webhook.post('/webhook', async (c) => {
   const processingPromise = (async () => {
     for (const event of body.events) {
       try {
-        await handleEvent(db, lineClient, event, channelAccessToken, matchedAccountId, matchedChannelId, c.env.WORKER_URL || new URL(c.req.url).origin, c.env.LIFF_URL, c.env.CHATWORK_API_TOKEN, c.env.CHATWORK_ROOM_ID, c.env.LINE_CHANNEL_ACCESS_TOKEN, c.env.SWITCH_LINE_CHANNEL_ID);
+        await handleEvent(db, lineClient, event, channelAccessToken, matchedAccountId, matchedChannelId, c.env.WORKER_URL || new URL(c.req.url).origin, c.env.LIFF_URL, c.env.CHATWORK_API_TOKEN, c.env.CHATWORK_ROOM_ID, c.env.LINE_CHANNEL_ACCESS_TOKEN, c.env.SWITCH_LINE_CHANNEL_ID, c.env.MACBOOK_LINE_CHANNEL_ID);
       } catch (err) {
         console.error('Error handling webhook event:', err);
       }
@@ -1019,8 +1019,13 @@ async function handleEvent(
   chatworkRoomId?: string,
   mainLineAccessToken?: string,
   switchLineChannelId?: string,
+  macbookLineChannelId?: string,
 ): Promise<void> {
   const isSwitchFlow = !!switchLineChannelId && lineChannelId === switchLineChannelId;
+  // lineChannelId is null when the webhook matched via the default env-var credentials
+  // (no line_accounts row matched) — that fallback path is the MacBook default account.
+  const isMacbookFlow = !lineChannelId || (!!macbookLineChannelId && lineChannelId === macbookLineChannelId);
+  const isGenericAccount = !isSwitchFlow && !isMacbookFlow;
   const flowColor = isSwitchFlow ? SWITCH_COLOR : '#00B900';
   const source = event.source;
   if (source.type === 'group') {
@@ -1100,21 +1105,32 @@ async function handleEvent(
 
     // ウェルカムメッセージ（新規・再フォロー共通で送信）
     const MACBOOK_WELCOME_DEFAULT = 'お見積りを作成させて頂きますのでお客様の端末情報を下記選択肢よりお選び下さい💻\n\n※修理時にデータに触れる事はございません！\nデータそのままで修理可能です✨';
-    const settingsRow = await db.prepare("SELECT key, value FROM switch_settings WHERE key IN ('welcome_text','macbook_welcome_text')").all<{ key: string; value: string }>();
-    const settingsMap = Object.fromEntries(settingsRow.results.map(r => [r.key, r.value]));
-    const welcomeText = isSwitchFlow
-      ? (settingsMap.welcome_text ?? SWITCH_WELCOME_TEXT)
-      : (settingsMap.macbook_welcome_text ?? MACBOOK_WELCOME_DEFAULT);
-    const welcomeMessages: LineMessage[] = isSwitchFlow
-      ? [
-        { type: 'text', text: welcomeText },
-        buildMessage('flex', await buildSwitchProductSelectFlex(db)),
-      ]
-      : [
-        { type: 'image', originalContentUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb', previewImageUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb' },
-        { type: 'text', text: welcomeText },
-        buildMessage('flex', buildProductSelectFlex()),
-      ];
+    const GENERIC_WELCOME_DEFAULT = 'お問い合わせありがとうございます！ご質問やご相談内容をこのままご記入ください😊担当者より確認のうえご返信いたします。';
+    let welcomeText: string;
+    let welcomeMessages: LineMessage[];
+    if (isGenericAccount) {
+      const acctRow = lineAccountId
+        ? await db.prepare('SELECT welcome_text FROM line_accounts WHERE id = ?').bind(lineAccountId).first<{ welcome_text: string | null }>()
+        : null;
+      welcomeText = acctRow?.welcome_text || GENERIC_WELCOME_DEFAULT;
+      welcomeMessages = [{ type: 'text', text: welcomeText }];
+    } else {
+      const settingsRow = await db.prepare("SELECT key, value FROM switch_settings WHERE key IN ('welcome_text','macbook_welcome_text')").all<{ key: string; value: string }>();
+      const settingsMap = Object.fromEntries(settingsRow.results.map(r => [r.key, r.value]));
+      welcomeText = isSwitchFlow
+        ? (settingsMap.welcome_text ?? SWITCH_WELCOME_TEXT)
+        : (settingsMap.macbook_welcome_text ?? MACBOOK_WELCOME_DEFAULT);
+      welcomeMessages = isSwitchFlow
+        ? [
+          { type: 'text', text: welcomeText },
+          buildMessage('flex', await buildSwitchProductSelectFlex(db)),
+        ]
+        : [
+          { type: 'image', originalContentUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb', previewImageUrl: 'https://drive.google.com/uc?export=view&id=1boQgzjVoeLvP9uf-PTUQkVsqPd3wM_Zb' },
+          { type: 'text', text: welcomeText },
+          buildMessage('flex', buildProductSelectFlex()),
+        ];
+    }
     try {
       await replyAndLog(db, lineClient, event.replyToken, friend.id, welcomeMessages);
     } catch (err) {
@@ -1346,6 +1362,8 @@ async function handleEvent(
     }
 
     // ===== Repair flow: message button text matching =====
+    // Generic (no-bot-flow) accounts skip straight to the auto-reply check below.
+    if (!isGenericAccount) {
     const CONSULT_CATEGORY_MAP: Record<string, string> = { '郵送修理に関する質問':'mail','店頭修理に関する質問':'store','修理端末に関する質問':'device','その他の質問':'other' };
 
     // リッチメニュー: 見積もりを始める
@@ -1839,6 +1857,7 @@ async function handleEvent(
         return;
       }
     }
+    } // end !isGenericAccount
     // ===== End repair flow =====
 
     // 自動返信チェック（このアカウントのルール + グローバルルールのみ）

@@ -13,6 +13,7 @@ interface LineAccountListItem {
   pictureUrl: string | null
   basicId: string | null
   adminUrl: string | null
+  welcomeText: string | null
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -47,9 +48,11 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ channelId: '', name: '', channelAccessToken: '', channelSecret: '', adminUrl: '' })
+  const [form, setForm] = useState({ channelId: '', name: '', channelAccessToken: '', channelSecret: '', adminUrl: '', welcomeText: '' })
   const [editingAdminUrl, setEditingAdminUrl] = useState<string | null>(null)
   const [adminUrlDraft, setAdminUrlDraft] = useState('')
+  const [editingWelcomeText, setEditingWelcomeText] = useState<string | null>(null)
+  const [welcomeTextDraft, setWelcomeTextDraft] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -77,8 +80,8 @@ export default function AccountsPage() {
     }
     setError('')
     try {
-      await api.lineAccounts.create({ ...form, adminUrl: form.adminUrl || undefined })
-      setForm({ channelId: '', name: '', channelAccessToken: '', channelSecret: '', adminUrl: '' })
+      await api.lineAccounts.create({ ...form, adminUrl: form.adminUrl || undefined, welcomeText: form.welcomeText || undefined })
+      setForm({ channelId: '', name: '', channelAccessToken: '', channelSecret: '', adminUrl: '', welcomeText: '' })
       setShowCreate(false)
       load()
     } catch {
@@ -100,6 +103,12 @@ export default function AccountsPage() {
   const handleSaveAdminUrl = async (id: string) => {
     await api.lineAccounts.update(id, { adminUrl: adminUrlDraft || null })
     setEditingAdminUrl(null)
+    load()
+  }
+
+  const handleSaveWelcomeText = async (id: string) => {
+    await api.lineAccounts.update(id, { welcomeText: welcomeTextDraft || null })
+    setEditingWelcomeText(null)
     load()
   }
 
@@ -178,6 +187,18 @@ export default function AccountsPage() {
                 onChange={(e) => setForm({ ...form, adminUrl: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                 placeholder="https://staging-admin.example.com または http://localhost:3001"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                ウェルカムメッセージ <span className="text-gray-400 font-normal">（任意）自動Botフローを持たないアカウントで、友だち追加時にそのまま送信されます。空欄の場合は既定文を使用</span>
+              </label>
+              <textarea
+                value={form.welcomeText}
+                onChange={(e) => setForm({ ...form, welcomeText: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                rows={4}
+                placeholder="お問い合わせありがとうございます！..."
               />
             </div>
           </div>
@@ -280,6 +301,47 @@ export default function AccountsPage() {
                     </p>
                     <button
                       onClick={() => { setEditingAdminUrl(account.id); setAdminUrlDraft(account.adminUrl || '') }}
+                      className="text-xs text-blue-500 hover:text-blue-700 shrink-0"
+                    >
+                      編集
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="mb-3">
+                <p className="text-xs font-medium text-gray-500 mb-1">ウェルカムメッセージ（自動Botフローなしアカウント用）</p>
+                {editingWelcomeText === account.id ? (
+                  <div className="flex flex-col gap-2">
+                    <textarea
+                      value={welcomeTextDraft}
+                      onChange={(e) => setWelcomeTextDraft(e.target.value)}
+                      placeholder="お問い合わせありがとうございます！..."
+                      className="border border-gray-300 rounded px-2 py-1 text-xs"
+                      rows={3}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSaveWelcomeText(account.id)}
+                        className="px-2 py-1 text-xs text-white rounded"
+                        style={{ backgroundColor: '#06C755' }}
+                      >
+                        保存
+                      </button>
+                      <button
+                        onClick={() => setEditingWelcomeText(null)}
+                        className="px-2 py-1 text-xs text-gray-500 border border-gray-300 rounded"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-gray-400 truncate flex-1">
+                      {account.welcomeText || '未設定（既定の文言を使用）'}
+                    </p>
+                    <button
+                      onClick={() => { setEditingWelcomeText(account.id); setWelcomeTextDraft(account.welcomeText || '') }}
                       className="text-xs text-blue-500 hover:text-blue-700 shrink-0"
                     >
                       編集

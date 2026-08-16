@@ -61,6 +61,7 @@ export type Env = {
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
     SWITCH_LINE_CHANNEL_ID?: string;
+    MACBOOK_LINE_CHANNEL_ID?: string;
   };
   Variables: {
     staff: { id: string; name: string; role: 'owner' | 'admin' | 'staff'; assignedStores?: string[]; assignedTags?: string[]; assignedLineAccounts?: string[] };
