@@ -2033,6 +2033,24 @@ async function handleEvent(
             .bind(params.get('faq_id') ?? '').first<{ question: string }>();
           return `【質問選択】${faq?.question ?? ''}`;
         },
+        rich_menu_flow: () => {
+          const id = params.get('id') ?? '';
+          const flowLabels: Record<string, string> = {
+            product_select: '修理フロー起点',
+            consult_category: 'Switch FAQ',
+            visit_repair: '出張修理',
+          };
+          return `【リッチメニュー】${flowLabels[id] ?? id}`;
+        },
+        rich_menu_tpl: async () => {
+          const tplName = await db.prepare('SELECT name FROM templates WHERE id = ? LIMIT 1')
+            .bind(params.get('id') ?? '').first<{ name: string }>();
+          return `【リッチメニュー】${tplName?.name ?? 'テンプレート'}`;
+        },
+        rich_menu_msg: () => {
+          try { return `【リッチメニュー】${decodeURIComponent(params.get('text') ?? '').slice(0, 30)}`; }
+          catch { return '【リッチメニュー】メッセージ'; }
+        },
       };
       const logContent = displayText || (await actionLabels[action ?? '']?.()) || event.postback.data;
       const now = jstNow();
