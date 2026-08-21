@@ -118,7 +118,7 @@ async function getSwitchProducts(db: D1Database): Promise<Array<{ product_id: st
 }
 
 
-const SWITCH_WELCOME_TEXT = 'Nintendo Switch修理へのお問い合わせありがとうございます！🎮\n\n画面下のメニューから「仮見積もりを見る」をタップすると、機種・症状を選ぶだけで修理費用の目安を確認できます✨\n\n【対応機種】\n・Nintendo Switch\n・Switch Lite\n・Switch 有機EL\n・Nintendo Switch 2\n\nお急ぎの場合はお電話もどうぞ📞\n📞 070-1391-9861\n（受付時間：10時〜20時）\n\nチャットでのご相談は、そのまま下記をご記入のうえご返信ください😆\n例）\n①機種：Switch 有機EL\n②症状：Joy-conのスティックが勝手に動く\n③ご要望：修理費用が知りたい';
+const SWITCH_WELCOME_TEXT = 'Nintendo Switch修理へのお問い合わせありがとうございます！🎮\n\n画面下のメニューから「仮見積もりを見る」をタップすると、機種・症状を選ぶだけで修理費用の目安を確認できます✨\n\n【対応機種】\n・Nintendo Switch\n・Switch Lite\n・Switch 有機EL\n・Nintendo Switch 2\n\nお急ぎの場合はお電話もどうぞ📞\n📞 050-3202-2843\n（受付時間：10時〜20時）\n\nチャットでのご相談は、そのまま下記をご記入のうえご返信ください😆\n例）\n①機種：Switch 有機EL\n②症状：Joy-conのスティックが勝手に動く\n③ご要望：修理費用が知りたい';
 
 const SWITCH_CONSULTATION_MESSAGE = '下記項目について教えてください。\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n①機種：\n　例、Nintendo Switch、Switch Lite\n②症状：\n　例、Joy-conドリフト、画面割れ\n③ご要望：\n　例、修理費用が知りたい\n＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝\n\nテクニカルスタッフが確認し、LINEにて折り返しご連絡させていただきます。\n（受付時間：10時〜20時）';
 
@@ -1248,7 +1248,8 @@ async function handleEvent(
       '来店予約する', '該当店舗なし', '電話/チャットで相談する', 'チャットで相談',
       '郵送修理に関する質問', '店頭修理に関する質問', '修理端末に関する質問', 'その他の質問',
       // Switch repair keywords
-      'Nintendo Switch', 'Switch Lite', 'Switch OLED', 'Nintendo Switch 2',
+      'Nintendo Switch', 'Switch Lite', 'Switch 有機EL', 'Nintendo Switch 2', 'Switch その他',
+      'Switch 症状で選ぶ', 'Switch 修理メニューで選ぶ',
     ]);
     const autoKeywords = ['料金', '機能', 'API', 'フォーム', 'ヘルプ', 'UUID', 'UUID連携について教えて', 'UUID連携を確認', '配信時間', '導入支援を希望します', 'アカウント連携を見る', '体験を完了する', 'BAN対策を見る', '連携確認'];
     const isTimeCommand = /(?:配信時間|配信|届けて|通知)[はを]?\s*\d{1,2}\s*時/.test(incomingText);
