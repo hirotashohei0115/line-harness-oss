@@ -1931,7 +1931,18 @@ async function handleEvent(
       console.error('store affiliation query error:', err);
     }
 
-    const chatworkBody = `[info][title]💬 個別メッセージが届きました[/title]ユーザー：${friend.display_name || userId}\nメッセージ：${incomingText}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
+    // 通知タイトルにどのLINEアカウント（媒体）からのメッセージか分かるよう表示
+    let accountLabel = 'MacBook';
+    if (lineAccountId) {
+      try {
+        const acct = await db.prepare('SELECT name FROM line_accounts WHERE id = ?').bind(lineAccountId).first<{ name: string }>();
+        if (acct?.name) accountLabel = acct.name;
+      } catch (err) {
+        console.error('line account name query error:', err);
+      }
+    }
+
+    const chatworkBody = `[info][title]💬 ${accountLabel}LINEで個別メッセージが届きました[/title]ユーザー：${friend.display_name || userId}\nメッセージ：${incomingText}\n時刻：${jstTimestamp()}\n管理画面：https://macbook-repair-admin.vercel.app[/info]`;
 
     await fireEvent(db, 'message_received', {
       friendId: friend.id,
