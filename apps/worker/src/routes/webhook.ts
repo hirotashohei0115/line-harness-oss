@@ -821,6 +821,9 @@ function getSymptomImageUrl(symptom: string): string {
   return 'https://drive.google.com/uc?export=view&id=1o0qKfvHDWWGoKSv2e95XX-ccPhfXBLX2';
 }
 
+// 診断結果で費用が変わるため、機種別料金でも「〜」(最低料金)表記を残す症状
+const FROM_PRICE_SYMPTOMS = new Set(['電源がつかない', '水没・飲み物こぼした', '異音がする']);
+
 function buildQuoteFlex(params: {
   productName: string;
   symptomName: string;
@@ -833,11 +836,15 @@ function buildQuoteFlex(params: {
   modelName?: string | null;
   year?: number | null;
   inchSize?: string | null;
+  /** 機種別料金表(repair_model_prices)の確定料金。true のとき「〜」を付けない */
+  exactPrice?: boolean;
 }, color = '#00B900', showVisitRepair = true): string {
   const priceStr = params.priceFrom == null || params.priceFrom === 0
     ? 'お問い合わせください'
     : params.priceTo
     ? `¥${params.priceFrom.toLocaleString()}〜¥${params.priceTo.toLocaleString()}`
+    : params.exactPrice && !FROM_PRICE_SYMPTOMS.has(params.symptomName)
+    ? `¥${params.priceFrom.toLocaleString()}`
     : `¥${params.priceFrom.toLocaleString()}〜`;
   const deliveryStr = params.deliveryDays != null
     ? params.deliveryDays
@@ -1583,6 +1590,7 @@ async function handleEvent(
         let deliveryFrom: number | null = null;
         let deliveryTo: number | null = null;
         let deliveryDays: string | null = null;
+        let exactPrice = false;
         let resolvedModelName: string | null = modelName ?? null;
 
         if (!isSwitchFlow && modelName && modelName !== 'その他・分からない') {
@@ -1595,7 +1603,7 @@ async function handleEvent(
             try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch {}
             return;
           }
-          priceFrom = row.price; deliveryDays = row.delivery_days;
+          priceFrom = row.price; deliveryDays = row.delivery_days; exactPrice = true;
         } else if (yearStr && inchSize && inchSize !== 'その他・分からない') {
           const productType = productName.toLowerCase().includes('air') ? 'air' : productName.toLowerCase().includes('pro') ? 'pro' : 'other';
           const row = await getRepairPriceByYearInch(db, productType, parseInt(yearStr, 10), parseFloat(inchSize), symptomName);
@@ -1607,7 +1615,7 @@ async function handleEvent(
             try { await replyAndLog(db, lineClient, event.replyToken, friend.id, [{ type: 'text', text: CONSULTATION_REQUEST_MESSAGE }]); } catch {}
             return;
           }
-          priceFrom = row.price; deliveryDays = row.delivery_days; resolvedModelName = row.model_number;
+          priceFrom = row.price; deliveryDays = row.delivery_days; exactPrice = true; resolvedModelName = row.model_number;
           await setFriendAttribute(db, friend.id, 'repair_model_name', row.model_number);
         } else {
           const price = await getRepairPrice(db, productId, symptomId);
@@ -1622,7 +1630,7 @@ async function handleEvent(
             const symptomImageUrl = getSymptomImageUrl(symptomName);
             quoteMessages.push({ type: 'image', originalContentUrl: symptomImageUrl, previewImageUrl: symptomImageUrl });
           }
-          quoteMessages.push(buildMessage('flex', buildQuoteFlex({ productName, symptomName, priceFrom, priceTo, deliveryFrom, deliveryTo, deliveryDays, quoteId: quote.id, modelName: resolvedModelName, year: yearStr ? parseInt(yearStr, 10) : null, inchSize }, flowColor, !isSwitchFlow)));
+          quoteMessages.push(buildMessage('flex', buildQuoteFlex({ productName, symptomName, priceFrom, priceTo, exactPrice, deliveryFrom, deliveryTo, deliveryDays, quoteId: quote.id, modelName: resolvedModelName, year: yearStr ? parseInt(yearStr, 10) : null, inchSize }, flowColor, !isSwitchFlow)));
           if (isSwitchFlow) {
             const swProducts = await getSwitchProducts(db);
             const swProduct = swProducts.find(p => p.product_id === preProductId);
@@ -2239,6 +2247,7 @@ async function handleEvent(
       let deliveryFrom: number | null = null;
       let deliveryTo: number | null = null;
       let deliveryDays: string | null = null;
+      let exactPrice = false;
       let resolvedModelName: string | null = modelName ?? null;
 
       if (!isSwitchFlow && modelName) {
@@ -2254,6 +2263,7 @@ async function handleEvent(
         }
         priceFrom = row.price;
         deliveryDays = row.delivery_days;
+        exactPrice = true;
       } else if (yearStr && inchSize) {
         // Year+inch flow: MAX price among matching models (NULLS LAST)
         const productType = productName.toLowerCase().includes('air') ? 'air'
@@ -2270,6 +2280,7 @@ async function handleEvent(
         }
         priceFrom = row.price;
         deliveryDays = row.delivery_days;
+        exactPrice = true;
         resolvedModelName = row.model_number;
       } else {
         // Fallback: use generic repair_prices table
@@ -2303,6 +2314,7 @@ async function handleEvent(
         postbackQuoteMessages.push(buildMessage('flex', buildQuoteFlex({
             productName,
             symptomName,
+            exactPrice,
             priceFrom,
             priceTo,
             deliveryFrom,
