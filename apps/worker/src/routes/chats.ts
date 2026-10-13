@@ -16,11 +16,12 @@ import type { Env } from '../index.js';
 
 const chats = new Hono<Env>();
 
-// 店舗/タグの絞り込みはMacBook向けの概念のため、Switchアカウント表示時は対象外とする
-async function isSwitchLineAccount(db: D1Database, switchChannelId: string | undefined, lineAccountId: string | undefined): Promise<boolean> {
-  if (!lineAccountId || !switchChannelId) return false;
-  const switchAccount = await db.prepare(`SELECT id FROM line_accounts WHERE channel_id = ?`).bind(switchChannelId).first<{ id: string }>();
-  return switchAccount?.id === lineAccountId;
+// 店舗/タグの絞り込みはMacBook向けの概念のため、MacBookアカウント表示時のみ適用する
+// （Switch・ロボロックなど、それ以外のLINEアカウント表示時は対象外とする）
+async function isMacbookLineAccount(db: D1Database, macbookChannelId: string | undefined, lineAccountId: string | undefined): Promise<boolean> {
+  if (!lineAccountId || !macbookChannelId) return true;
+  const macbookAccount = await db.prepare(`SELECT id FROM line_accounts WHERE channel_id = ?`).bind(macbookChannelId).first<{ id: string }>();
+  return macbookAccount?.id === lineAccountId;
 }
 
 // ========== オペレーターCRUD ==========
@@ -96,10 +97,10 @@ chats.get('/api/chats', async (c) => {
     const assignedStores = currentStaff?.assignedStores ?? [];
     const assignedTags = currentStaff?.assignedTags ?? [];
     const assignedLineAccounts = currentStaff?.assignedLineAccounts ?? [];
-    const isSwitch = await isSwitchLineAccount(c.env.DB, c.env.SWITCH_LINE_CHANNEL_ID, lineAccountId);
+    const isMacbook = await isMacbookLineAccount(c.env.DB, c.env.MACBOOK_LINE_CHANNEL_ID, lineAccountId);
     const isFiltered = (assignedStores.length > 0 || assignedTags.length > 0)
       && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin'
-      && !isSwitch;
+      && isMacbook;
     const isLineAccountRestricted = assignedLineAccounts.length > 0
       && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
 
@@ -244,10 +245,10 @@ chats.get('/api/chats/unread-count', async (c) => {
     const assignedStores2 = currentStaff?.assignedStores ?? [];
     const assignedTags2 = currentStaff?.assignedTags ?? [];
     const assignedLineAccounts2 = currentStaff?.assignedLineAccounts ?? [];
-    const isSwitch2 = await isSwitchLineAccount(c.env.DB, c.env.SWITCH_LINE_CHANNEL_ID, lineAccountId ?? undefined);
+    const isMacbook2 = await isMacbookLineAccount(c.env.DB, c.env.MACBOOK_LINE_CHANNEL_ID, lineAccountId ?? undefined);
     const isFiltered2 = (assignedStores2.length > 0 || assignedTags2.length > 0)
       && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin'
-      && !isSwitch2;
+      && isMacbook2;
     const isLineAccountRestricted2 = assignedLineAccounts2.length > 0
       && currentStaff?.role !== 'owner' && currentStaff?.role !== 'admin';
 
