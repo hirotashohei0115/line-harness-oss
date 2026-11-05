@@ -62,6 +62,8 @@ export type Env = {
     GOOGLE_CLIENT_SECRET?: string;
     SWITCH_LINE_CHANNEL_ID?: string;
     MACBOOK_LINE_CHANNEL_ID?: string;
+    SHEETS_WEBHOOK_URL?: string;     // Apps Script web app URL bound to the 収支表 spreadsheet
+    SHEETS_WEBHOOK_SECRET?: string;  // Shared secret checked by the Apps Script
   };
   Variables: {
     staff: { id: string; name: string; role: 'owner' | 'admin' | 'staff'; assignedStores?: string[]; assignedTags?: string[]; assignedLineAccounts?: string[] };

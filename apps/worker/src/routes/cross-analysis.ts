@@ -255,6 +255,103 @@ crossAnalysisRoutes.post('/api/cross-analyses/run', async (c) => {
   }
 });
 
+/** List every YYYY-MM-DD from `from` to `to` inclusive. */
+function listDates(from: string, to: string): string[] {
+  const dates: string[] = [];
+  const end = new Date(`${to}T00:00:00Z`).getTime();
+  for (let t = new Date(`${from}T00:00:00Z`).getTime(); t <= end; t += 86400000) {
+    dates.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+/** Count matching friends per registration day (JST date prefix of created_at). */
+async function countUsersPerDay(
+  db: D1Database,
+  fromTs: string,
+  toTs: string,
+  cond1: { sql: string; params: unknown[] },
+  cond2: { sql: string; params: unknown[] },
+): Promise<Map<string, number>> {
+  const result = await db
+    .prepare(
+      `SELECT substr(f.created_at, 1, 10) as d, COUNT(DISTINCT f.id) as count FROM friends f
+       WHERE f.created_at >= ? AND f.created_at <= ? AND ${cond1.sql} AND ${cond2.sql}
+       GROUP BY d`,
+    )
+    .bind(fromTs, toTs, ...cond1.params, ...cond2.params)
+    .all<{ d: string; count: number }>();
+  return new Map(result.results.map((r) => [r.d, r.count]));
+}
+
+// POST /api/cross-analyses/export-sheet — send daily cross-analysis counts to the 収支表
+// spreadsheet via an Apps Script web app (must be BEFORE /:id)
+crossAnalysisRoutes.post('/api/cross-analyses/export-sheet', async (c) => {
+  try {
+    const url = c.env.SHEETS_WEBHOOK_URL;
+    const secret = c.env.SHEETS_WEBHOOK_SECRET;
+    if (!url || !secret) {
+      return c.json({ success: false, error: 'スプレッドシート連携が未設定です（SHEETS_WEBHOOK_URL / SHEETS_WEBHOOK_SECRET）' }, 400);
+    }
+
+    const body = await c.req.json<RunRequest>();
+    const from = body.period?.from;
+    const to = body.period?.to;
+    if (!from || !to || from > to) {
+      return c.json({ success: false, error: '期間が正しくありません' }, 400);
+    }
+    const dates = listDates(from, to);
+    if (dates.length > 400) {
+      return c.json({ success: false, error: '期間は400日以内にしてください' }, 400);
+    }
+    const fromTs = `${from}T00:00:00`;
+    const toTs = `${to}T23:59:59`;
+
+    const axis1Groups = configToGroups(body.axis1);
+    const axis2Groups = configToGroups(body.axis2);
+
+    // One column per cell, plus a per-row total (same as 行合計 on screen = sum of cells)
+    const headers: string[] = [];
+    const columns: Map<string, number>[] = [];
+    for (const grp1 of axis1Groups) {
+      const cond1 = buildGroupCondition(body.axis1.type, grp1.itemIds);
+      const rowCols: Map<string, number>[] = [];
+      for (const grp2 of axis2Groups) {
+        const cond2 = buildGroupCondition(body.axis2.type, grp2.itemIds);
+        const perDay = await countUsersPerDay(c.env.DB, fromTs, toTs, cond1, cond2);
+        headers.push(`${grp1.name}×${grp2.name}`);
+        columns.push(perDay);
+        rowCols.push(perDay);
+      }
+      const total = new Map<string, number>();
+      for (const d of dates) total.set(d, rowCols.reduce((s, m) => s + (m.get(d) ?? 0), 0));
+      headers.push(`${grp1.name}（合計）`);
+      columns.push(total);
+    }
+
+    const rows = dates.map((d) => [d, ...columns.map((m) => m.get(d) ?? 0)]);
+    const sheetName = `LINE日別_${body.name || 'クロス分析'}`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret, sheetName, headers, rows }),
+    });
+    const text = await res.text();
+    let gas: { ok?: boolean; error?: string; written?: number } = {};
+    try { gas = JSON.parse(text); } catch { /* non-JSON (e.g. Google login page) */ }
+    if (!res.ok || !gas.ok) {
+      console.error('export-sheet GAS error:', res.status, text.slice(0, 500));
+      return c.json({ success: false, error: `スプレッドシートへの書き込みに失敗しました: ${gas.error ?? `HTTP ${res.status}`}` }, 502);
+    }
+
+    return c.json({ success: true, data: { sheetName, days: dates.length, columns: headers.length } });
+  } catch (err) {
+    console.error('POST /api/cross-analyses/export-sheet error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
 // POST /api/cross-analyses
 crossAnalysisRoutes.post('/api/cross-analyses', async (c) => {
   try {

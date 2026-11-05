@@ -209,6 +209,8 @@ export default function CrossAnalysisForm({ initial }: Props) {
   const [running, setRunning] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [exportMessage, setExportMessage] = useState('')
 
   type ModalCell = {
     a1Name: string
@@ -295,6 +297,26 @@ export default function CrossAnalysisForm({ initial }: Props) {
       router.push('/cross-analyses')
     } catch { setError('保存に失敗しました') }
     finally { setSaving(false) }
+  }
+
+  // Write the result period's daily counts to the 収支表 spreadsheet (LINE日別_<分析名> sheet)
+  const exportSheet = async () => {
+    if (!result) return
+    setExporting(true)
+    setExportMessage('')
+    setError('')
+    try {
+      const res = await api.crossAnalyses.exportSheet({
+        name: result.name,
+        period: result.period,
+        axis1: { type: axis1Type, itemIds: [], groups: axis1Groups },
+        axis2: { type: axis2Type, itemIds: [], groups: axis2Groups },
+      })
+      if (res.success) setExportMessage(`「${res.data.sheetName}」に${res.data.days}日分を反映しました`)
+      else setError(res.error ?? 'スプレッドシートへの反映に失敗しました')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'スプレッドシートへの反映に失敗しました')
+    } finally { setExporting(false) }
   }
 
   const exportCSV = () => {
@@ -403,11 +425,21 @@ export default function CrossAnalysisForm({ initial }: Props) {
             <h3 className="text-sm font-semibold text-gray-700">
               {result.name} — {result.period.from} 〜 {result.period.to}
             </h3>
-            <button
-              onClick={exportCSV}
-              className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-gray-600 font-medium"
-            >CSV出力</button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={exportSheet} disabled={exporting}
+                className="text-xs px-3 py-1.5 rounded text-white font-medium disabled:opacity-50"
+                style={{ backgroundColor: '#0F9D58' }}
+              >{exporting ? '反映中...' : 'スプレッドシートに反映'}</button>
+              <button
+                onClick={exportCSV}
+                className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-gray-600 font-medium"
+              >CSV出力</button>
+            </div>
           </div>
+          {exportMessage && (
+            <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded text-green-700 text-xs">{exportMessage}</div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
