@@ -306,7 +306,7 @@ reservationRoutes.post('/api/reservations', async (c) => {
   if (quote?.delivery_days_from != null && quote.delivery_days_to != null) {
     deliveryText = `${quote.delivery_days_from}〜${quote.delivery_days_to}日`;
   } else if (quote?.delivery_days_from != null) {
-    deliveryText = `${quote.delivery_days_from}日〜`;
+    deliveryText = quote.delivery_days_from === 0 ? '即日〜' : `${quote.delivery_days_from}日〜`;
   }
 
   // 通知ルール経由でChatwork/LINE通知

@@ -852,6 +852,8 @@ function buildQuoteFlex(params: {
     ? 'お問い合わせください'
     : params.deliveryTo
     ? `${params.deliveryFrom}〜${params.deliveryTo}日`
+    : params.deliveryFrom === 0
+    ? '即日〜'
     : `${params.deliveryFrom}日〜`;
 
   const modelRow = params.modelName
