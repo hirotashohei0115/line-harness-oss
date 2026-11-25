@@ -135,7 +135,7 @@ const STORES = [
     zip: '〒141-0031',
     address: '東京都品川区西五反田1丁目33-10 西五反田サインタワー9F',
     tel: '0120-025-088',
-    hours: '10:00~20:00',
+    hours: '10:00~19:00',
     reservationUrl: 'https://liff.line.me/2007974811-LpVxs3kg?page=reservation',
   },
   {
